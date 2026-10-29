@@ -58,21 +58,30 @@ impl Material {
     }
 }
 
-/// `parts` as one chord's keys, in a well recessed into the surface. `key` names the tray; its
-/// keys are `keycap0`, `keycap1`, …, so tests can find each one.
-pub fn tray(k: &Kit, key: impl Into<String>, parts: &[String]) -> El {
+/// `parts` as one chord's keys, in a well recessed into `surface`: the colour the tray is
+/// painted on, such as a row's highlight. The well is that surface sunk — darker at its top
+/// edge, a hair above it at the bottom — so it keeps its depth on any row instead of turning
+/// into a hole when the row lightens. `key` names the tray; its keys are `keycap0`,
+/// `keycap1`, …, so tests can find each one.
+pub fn tray(k: &Kit, key: impl Into<String>, parts: &[String], surface: Color) -> El {
     let c = &k.c;
+    // Opaque colours, mixed from the surface: the gradient and the fill would compound if they
+    // carried alpha, which showed as a bright lip under the keys. The mixes reproduce Hex's
+    // page tokens on the base surface, then travel with it.
+    let mix = |tint: Color, t: f32| surface.mix(tint, t);
+    // The rim stays translucent, as Hex's is: an opaque mix drew a hard light outline around
+    // the well, where Hex only lets the well's shadow and fill read.
     let (top, bottom, rim, well) = if k.dark {
         (
-            c.bg_deep,
-            c.bg_base.mix(c.layer_01, 0.7),
+            mix(c.bg_deep, 0.7),
+            mix(c.layer_01, 0.5),
             k.light(0.07),
             0.6,
         )
     } else {
         (
-            c.layer_04.mix(c.layer_03, 0.35),
-            c.layer_03.mix(c.layer_02, 0.6),
+            mix(c.layer_04, 0.77),
+            mix(c.layer_03, 0.84),
             k.dark_a(0.07),
             0.14,
         )

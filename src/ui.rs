@@ -1337,6 +1337,7 @@ fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(palette) = &s.palette else {
         return;
     };
+    let panel = if k.dark { k.c.bg_base } else { k.c.layer_02 };
     let actions = s.palette_actions();
     let field = TextInput::new(&palette.query)
         .placeholder("Type a command")
@@ -1409,10 +1410,20 @@ fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             );
         let caps = s.keybinds.keycaps(action);
         if !caps.is_empty() {
+            // The keys sit on their row, so a highlighted row's tint carries into the well.
+            // The row paints its overlay over the panel; compositing it here gives the opaque
+            // colour the tray mixes from.
+            let hover = k.c.hover;
+            let surface = if selected {
+                hover.mix(panel, 1.0 - hover.a)
+            } else {
+                panel
+            };
             row = row.child(crate::keycaps::tray(
                 k,
                 format!("keys-{}", action.id()),
                 &caps,
+                surface,
             ));
         }
         if selected {
@@ -1432,7 +1443,7 @@ fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .radius(10.0)
         // A step below the page, so the shortcuts' recessed trays read as wells rather than
         // sitting on the same brightness.
-        .fill(if k.dark { k.c.bg_base } else { k.c.layer_02 })
+        .fill(panel)
         .border(1.0, k.c.border_muted)
         .clip_rounded(10.0)
         // A modal, so Escape closes it (rather than just blurring the field) and focus stays
@@ -1701,7 +1712,12 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
                 .font(k.ty.ui_compact)
                 .color(k.c.text_faint)
         } else {
-            crate::keycaps::tray(k, format!("record-{}-keys", action.id()), &labels)
+            crate::keycaps::tray(
+                k,
+                format!("record-{}-keys", action.id()),
+                &labels,
+                k.c.bg_base,
+            )
         });
     let mut root = col()
         .key(format!("record-{}", action.id()))

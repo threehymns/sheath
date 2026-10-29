@@ -2122,6 +2122,34 @@ fn the_command_bar_rows_keep_their_padding_from_the_edges() {
 }
 
 #[test]
+fn the_command_bar_keys_follow_the_highlighted_row() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.state.open_palette();
+    rt.invalidate();
+    rt.frame(0.1);
+
+    let actions = rt.state.palette_actions();
+    let selected = rt.state.palette.as_ref().expect("the bar is open").selected;
+    let well = |action: Action| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(&format!("keys-{}", action.id())))
+            .map(|e| e.fill)
+    };
+    let lit = well(actions[selected]).expect("the selected row has a tray");
+    let dim = actions
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(index, _)| *index != selected)
+        .find_map(|(_, action)| well(action))
+        .expect("another row has a tray");
+    assert_ne!(lit, dim, "the well is mixed with the row it sits on");
+}
+
+#[test]
 fn the_command_bar_draws_shortcuts_as_keycaps() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
