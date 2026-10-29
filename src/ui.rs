@@ -1226,36 +1226,101 @@ fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>) {
         .build(k, layers);
 }
 
-/// The settings panel: a sidebar of categories with the chosen one beside it. It covers the
-/// window and gives Escape back to the browser.
+/// Hex's settings metrics: a 220 pt navigation rail, a 32 pt page gutter, cards hanging 16 pt
+/// past it so their rows' text lands on the gutter, and 48 pt rows.
+const SETTINGS_RAIL: f32 = 220.0;
+const SETTINGS_GUTTER: f32 = 32.0;
+const SETTINGS_ROW_INSET: f32 = 16.0;
+const SETTINGS_ROW_HEIGHT: f32 = 48.0;
+
+/// The settings window after Hex's: navigation on the window's background, the chosen page in a
+/// raised panel beside it, and Done beside the version at the rail's foot. It covers the window
+/// and gives Escape back to the browser.
 fn settings_layer(s: &App, k: &Kit, titlebar: f32, layers: &mut Vec<El>) {
     let Some(tab) = s.settings else {
         return;
     };
-    let mut categories = SidebarSection::new("Categories").key("settings-categories");
+    // macOS draws the traffic lights over the rail, so the navigation starts below them;
+    // elsewhere it only clears the window's edge (Hex's sidebar top).
+    let top = if titlebar > 0.0 { 40.0 } else { 12.0 };
+    let mut nav = col().key("settings-nav").w_full().gap(4.0);
     for category in SettingsTab::ALL {
-        categories = categories.row(
-            SidebarRow::new(category.label())
-                .icon(tab_icon(category))
-                .selected(category == tab)
-                .on_select(move |s: &mut App, _| s.open_tab(category))
-                .build(k)
-                .key(format!("settings-tab-{}", category.id())),
-        );
+        let selected = category == tab;
+        let mut item = row()
+            .key(format!("settings-tab-{}", category.id()))
+            .role("button")
+            .label(category.label())
+            .w_full()
+            .h(28.0)
+            .px(6.0)
+            .gap(8.0)
+            .center_y()
+            .radius(k.radius.sm)
+            .child(icon(tab_icon(category), 16.0).color(if selected {
+                k.c.icon_base
+            } else {
+                k.c.icon_muted
+            }))
+            .child(
+                text(category.label())
+                    .font(k.ty.ui)
+                    .color(if selected {
+                        k.c.text_base
+                    } else {
+                        k.c.text_muted
+                    })
+                    .grow(1.0)
+                    .truncate(),
+            )
+            .hover(k.c.hover)
+            .on_press(move |s: &mut App| s.open_tab(category));
+        if selected {
+            item = item.fill(k.c.layer_02);
+        }
+        nav = nav.child(item);
     }
-    let sidebar = Sidebar::new()
-        .inset(10.0)
-        .row_gap(1.0)
-        .section(categories)
-        .build(k);
-    let done = Button::new("Done")
-        .variant(ButtonVariant::Contrast)
-        .control_size(ControlSize::Regular)
-        .on_press(|s: &mut App| s.close_settings())
-        .build(k)
+    let done = row()
         .key("close-settings")
-        .default_button();
-    let page = match tab {
+        .role("button")
+        .label("Done")
+        .w_full()
+        .h(28.0)
+        .px(6.0)
+        .center_y()
+        .radius(k.radius.sm)
+        .hover(k.c.hover)
+        .on_press(|s: &mut App| s.close_settings())
+        .default_button()
+        .child(text("Done").font(k.ty.ui).color(k.c.text_base));
+    let version = row().h(20.0).px(6.0).center_y().child(
+        text(format!("Version {}", env!("CARGO_PKG_VERSION")))
+            .font(k.ty.small)
+            .color(k.c.text_faint),
+    );
+    let sidebar = col()
+        .key("settings-sidebar")
+        .w(SETTINGS_RAIL)
+        .h_full()
+        .pt(top)
+        .pb(12.0)
+        .pl(10.0)
+        .pr(6.0)
+        .child(nav)
+        .child(el().grow(1.0))
+        .child(done)
+        .child(version);
+    let action = match tab {
+        SettingsTab::Keybinds => Some(
+            Button::new("Restore Defaults")
+                .variant(ButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .on_press(|s: &mut App| s.reset_bindings())
+                .build(k)
+                .key("reset-keybinds"),
+        ),
+        SettingsTab::General | SettingsTab::About => None,
+    };
+    let body = match tab {
         SettingsTab::General => general_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
         SettingsTab::About => about_settings(k),
@@ -1266,62 +1331,151 @@ fn settings_layer(s: &App, k: &Kit, titlebar: f32, layers: &mut Vec<El>) {
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .fill(k.c.bg_base)
+            .fill(k.c.bg_deep)
             .modal(false, |s: &mut App| s.close_settings())
             // The panel is opaque, so it takes presses itself: none reach the browser below.
             .on_press(|_: &mut App| {})
             .child(
                 row()
-                    .key("settings-header")
-                    .w_full()
-                    .h(56.0)
-                    .pl(titlebar.max(16.0))
-                    .pr(16.0)
-                    .gap(12.0)
-                    .center_y()
-                    .child(
-                        text("Settings")
-                            .font(k.ty.ui_medium)
-                            .color(k.c.text_base)
-                            .grow(1.0),
-                    )
-                    .child(done),
-            )
-            .child(
-                el().key("settings-rule")
-                    .h(1.0)
-                    .w_full()
-                    .fill(k.c.border_muted),
-            )
-            .child(
-                row()
+                    .key("settings-body")
                     .w_full()
                     .grow(1.0)
                     .min_h(0.0)
+                    .child(sidebar)
                     .child(
                         col()
-                            .key("settings-sidebar")
-                            .w(200.0)
-                            .h_full()
-                            .fill(k.c.layer_01)
-                            .child(sidebar),
-                    )
-                    .child(
-                        el().key("settings-divider")
-                            .w(1.0)
-                            .h_full()
-                            .fill(k.c.border_muted),
-                    )
-                    .child(
-                        col()
-                            .key("settings-content")
+                            .key("settings-panel")
                             .grow(1.0)
-                            .h_full()
+                            .shrink()
                             .min_h(0.0)
-                            .child(page),
+                            .mt(8.0)
+                            .mr(8.0)
+                            .mb(8.0)
+                            .radius(k.radius.lg)
+                            .fill(k.c.bg_base)
+                            .border(0.5, k.c.border_weak)
+                            .padding(0.5)
+                            .clip_rounded(k.radius.lg)
+                            .child(settings_header(k, tab, action))
+                            .child(
+                                col()
+                                    .key("settings-scroll")
+                                    .w_full()
+                                    .grow(1.0)
+                                    .min_h(0.0)
+                                    .scroll(ScrollSpec {
+                                        stick_bottom: false,
+                                    })
+                                    .scroll_edge_fade(16.0)
+                                    .child(
+                                        col()
+                                            .key("settings-content")
+                                            .w_full()
+                                            .px(SETTINGS_GUTTER - SETTINGS_ROW_INSET)
+                                            .pt(4.0)
+                                            .pb(24.0)
+                                            .gap(24.0)
+                                            .child(body),
+                                    ),
+                            ),
                     ),
             ),
     );
+}
+
+/// The pane's title, with an action on its line (Hex's pane header).
+fn settings_header(k: &Kit, tab: SettingsTab, action: Option<El>) -> El {
+    let mut header = row()
+        .key("settings-header")
+        .w_full()
+        .h(52.0)
+        .px(SETTINGS_GUTTER)
+        .gap(8.0)
+        .center_y()
+        .child(
+            text(tab.label())
+                .key("settings-title")
+                .font(k.ty.body_medium)
+                .color(k.c.text_base)
+                .grow(1.0)
+                .truncate(),
+        );
+    if let Some(action) = action {
+        header = header.child(action);
+    }
+    header
+}
+
+/// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
+/// and the card hangs [`SETTINGS_ROW_INSET`] past it, so the rows' text lines up with it.
+fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
+    let mut card = k.elevate(
+        col()
+            .key(format!("{key}-card"))
+            .w_full()
+            .radius(k.radius.lg)
+            .fill(k.c.bg_base),
+        &k.elevation.raised,
+    );
+    for (index, row) in rows.into_iter().enumerate() {
+        if index > 0 {
+            card = card.child(settings_rule(k));
+        }
+        card = card.child(row);
+    }
+    col()
+        .key(key)
+        .w_full()
+        .gap(8.0)
+        .child(
+            text(title)
+                .key("settings-section-label")
+                .font(k.ty.ui_medium.lh(16.0))
+                .color(k.c.text_muted)
+                .mx(SETTINGS_ROW_INSET),
+        )
+        .child(card)
+}
+
+/// A hairline between two rows, inset from the card's edges.
+fn settings_rule(k: &Kit) -> El {
+    row()
+        .w_full()
+        .px(SETTINGS_ROW_INSET)
+        .child(el().h(1.0).grow(1.0).fill(k.c.border_muted))
+}
+
+/// One setting: an icon, the label and its explanation, and the control at the row's end.
+fn settings_row(
+    k: &Kit,
+    glyph: &'static Icon,
+    label: &str,
+    description: Option<&str>,
+    control: El,
+) -> El {
+    let mut labels = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(2.0)
+        .child(text(label).font(k.ty.ui).color(k.c.text_base).truncate());
+    if let Some(description) = description {
+        labels = labels.child(
+            text(description.to_owned())
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .wrap(),
+        );
+    }
+    row()
+        .w_full()
+        .min_h(SETTINGS_ROW_HEIGHT)
+        .px(SETTINGS_ROW_INSET)
+        .py(8.0)
+        .gap(12.0)
+        .center_y()
+        .child(icon(glyph, 16.0).color(k.c.icon_muted))
+        .child(labels)
+        .child(control)
 }
 
 fn tab_icon(tab: SettingsTab) -> &'static Icon {
@@ -1505,111 +1659,94 @@ fn general_settings(s: &App, k: &Kit) -> El {
     let hidden = Switch::new(s.show_hidden)
         .label("Show hidden files")
         .hide_label()
-        .control_size(ControlSize::Regular)
         .on_toggle(|s: &mut App| s.toggle_hidden())
         .build(k)
         .key("setting-hidden");
     let inspector = Switch::new(s.inspector.is_open())
         .label("Show inspector")
         .hide_label()
-        .control_size(ControlSize::Regular)
         .on_toggle(|s: &mut App| s.toggle_inspector())
         .build(k)
         .key("setting-inspector");
     let inertia = Switch::new(s.config.scroll_inertia)
         .label("Scroll inertia")
         .hide_label()
-        .control_size(ControlSize::Regular)
         .on_toggle(|s: &mut App| s.toggle_scroll_inertia())
         .build(k)
         .key("setting-inertia");
     let overscroll = Switch::new(s.config.overscroll)
         .label("Overscroll")
         .hide_label()
-        .control_size(ControlSize::Regular)
         .on_toggle(|s: &mut App| s.toggle_overscroll())
         .build(k)
         .key("setting-overscroll");
+    let browser = settings_section(
+        k,
+        "settings-browser",
+        "Browser",
+        vec![
+            settings_row(
+                k,
+                k.glyph.eye,
+                "Show hidden files",
+                Some("Also list names that start with a dot."),
+                hidden,
+            ),
+            settings_row(
+                k,
+                &icons::INSPECTOR,
+                "Show inspector",
+                Some("The details and preview pane beside the table."),
+                inspector,
+            ),
+        ],
+    );
+    let scrolling = settings_section(
+        k,
+        "settings-scrolling",
+        "Scrolling",
+        vec![
+            settings_row(
+                k,
+                &icons::ARROW_UP,
+                "Scroll inertia",
+                Some("Keep the list coasting after the wheel stops."),
+                inertia,
+            ),
+            settings_row(
+                k,
+                &icons::REFRESH,
+                "Overscroll",
+                Some("Pull the list past its first and last row, then let it spring back."),
+                overscroll,
+            ),
+        ],
+    );
     let mut page = col()
+        .key("settings-general")
         .w_full()
-        .px(24.0)
-        .py(20.0)
-        .gap(14.0)
-        .child(page_title(
-            k,
-            "General",
-            "How the browser presents a folder and scrolls its list. These are saved in config.kdl.",
-        ))
-        .child(setting_row(
-            k,
-            "Show hidden files",
-            "Also list names that start with a dot.",
-            hidden,
-        ))
-        .child(rule(k))
-        .child(setting_row(
-            k,
-            "Show inspector",
-            "The details and preview pane beside the table.",
-            inspector,
-        ))
-        .child(rule(k))
-        .child(setting_row(
-            k,
-            "Scroll inertia",
-            "Keep the list coasting after the wheel stops.",
-            inertia,
-        ))
-        .child(rule(k))
-        .child(setting_row(
-            k,
-            "Overscroll",
-            "Pull the list past its first and last row, then let it spring back.",
-            overscroll,
-        ));
+        .gap(24.0)
+        .child(browser)
+        .child(scrolling);
     if let Some(error) = &s.config.error {
         page = page.child(error_text(k, error));
     }
-    col()
-        .key("settings-general")
-        .w_full()
-        .h_full()
-        .min_h(0.0)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(page)
+    page
 }
 
 fn keybinds_settings(s: &App, k: &Kit) -> El {
-    let reset = Button::new("Restore Defaults")
-        .variant(ButtonVariant::GhostMuted)
-        .control_size(ControlSize::Small)
-        .on_press(|s: &mut App| s.reset_bindings())
-        .build(k)
-        .key("reset-keybinds");
-    let mut list = col().key("keybind-list").w_full().gap(0.0);
+    let mut rows = Vec::new();
     for action in Action::ALL {
         if !s.recorders.contains_key(&action) {
             continue;
         }
-        list = list
-            .child(
-                row()
-                    .w_full()
-                    .gap(12.0)
-                    .center_y()
-                    .py(6.0)
-                    .child(
-                        text(action.label())
-                            .font(k.ty.ui)
-                            .color(k.c.text_base)
-                            .grow(1.0)
-                            .truncate(),
-                    )
-                    .child(recorder_field(s, k, action)),
-            )
-            .child(rule(k));
+        rows.push(settings_row(
+            k,
+            action_icon(action, k),
+            action.label(),
+            None,
+            recorder_field(s, k, action),
+        ));
     }
     let saved = match Keybinds::file() {
         Some(path) => format!(
@@ -1621,42 +1758,23 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
                  Escape cancels while recording."
             .to_owned(),
     };
-    let mut header = col()
-        .key("keybind-header")
-        .w_full()
-        .px(24.0)
-        .pt(20.0)
-        .pb(12.0)
-        .gap(10.0)
-        .child(
-            row()
-                .w_full()
-                .gap(12.0)
-                .center_y()
-                .child(page_title(k, "Keybinds", &saved).grow(1.0))
-                .child(reset),
-        );
-    if let Some(error) = &s.keybinds.error {
-        header = header.child(error_text(k, error));
-    }
-    col()
+    let mut page = col()
         .key("settings-keybinds")
         .w_full()
-        .h_full()
-        .min_h(0.0)
-        .child(header)
+        .gap(24.0)
+        .child(settings_section(k, "settings-shortcuts", "Shortcuts", rows))
         .child(
-            col()
-                .key("keybind-scroll")
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .scroll_edge_fade(16.0)
-                .child(col().w_full().px(24.0).pb(20.0).child(list)),
-        )
+            text(saved)
+                .key("keybind-saved")
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .mx(SETTINGS_ROW_INSET)
+                .wrap(),
+        );
+    if let Some(error) = &s.keybinds.error {
+        page = page.child(error_text(k, error));
+    }
+    page
 }
 
 /// One action's shortcut: click to record, Escape cancels while listening, Backspace clears.
@@ -1673,17 +1791,17 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
     } else {
         "Record shortcut"
     };
-    let border = if recorder.error().is_some() {
-        k.c.danger.border
-    } else if recorder.is_recording() {
-        k.c.border_focus
+    // The keys sit straight on the card, as Hex's do; only a recording takes a surface of its
+    // own, so the well the caps sit in follows it.
+    let surface = if recorder.is_recording() {
+        k.c.layer_01
     } else {
-        k.c.border_base
+        k.c.bg_base
     };
     let error = recorder
         .error()
         .map(|error| shortcut_error_message(error, recorder.refused()));
-    let field = row()
+    let mut field = row()
         .key(format!("record-{}-field", action.id()))
         .role("button")
         .label(if labels.is_empty() {
@@ -1691,13 +1809,12 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
         } else {
             labels.join(" ")
         })
-        .w(196.0)
-        .h(32.0)
-        .px(8.0)
+        .min_w(96.0)
+        .h(28.0)
+        .px(6.0)
         .center_y()
-        .radius(k.radius.md)
-        .fill(k.c.bg_base)
-        .border(1.0, border)
+        .justify_end()
+        .radius(k.radius.sm)
         .focusable(true)
         .focus_ring(2.0, 2.0, k.c.border_focus)
         .on_press(move |s: &mut App| {
@@ -1712,126 +1829,100 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
                 .font(k.ty.ui_compact)
                 .color(k.c.text_faint)
         } else {
-            crate::keycaps::tray(
-                k,
-                format!("record-{}-keys", action.id()),
-                &labels,
-                k.c.bg_base,
-            )
+            crate::keycaps::tray(k, format!("record-{}-keys", action.id()), &labels, surface)
         });
+    if recorder.is_recording() {
+        field = field.fill(surface);
+    }
     let mut root = col()
         .key(format!("record-{}", action.id()))
         .gap(4.0)
+        .items_end()
         .child(field);
     if let Some(error) = error {
-        root = root.child(text(error).font(k.ty.small_medium).color(k.c.danger.fg));
+        root = root.child(
+            text(error)
+                .font(k.ty.small_medium)
+                .color(k.c.danger.fg)
+                .wrap(),
+        );
     }
     root
 }
 
 fn about_settings(k: &Kit) -> El {
-    let keybinds = file_path_row(k, "Keybinds", Keybinds::file(), "copy-keybinds-path");
-    let settings = file_path_row(k, "Settings", Settings::file(), "copy-settings-path");
+    let version = settings_row(
+        k,
+        &icons::HOUSE,
+        "Version",
+        None,
+        text(env!("CARGO_PKG_VERSION"))
+            .font(k.ty.caption())
+            .color(k.c.text_muted),
+    );
+    let keybinds = file_path_row(
+        k,
+        &glyphs::KEYBOARD,
+        "Keybinds",
+        Keybinds::file(),
+        "copy-keybinds-path",
+    );
+    let settings = file_path_row(
+        k,
+        &theme::icons::SETTINGS_GEAR,
+        "Settings",
+        Settings::file(),
+        "copy-settings-path",
+    );
     col()
         .key("settings-about")
         .w_full()
-        .h_full()
-        .min_h(0.0)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
+        .gap(24.0)
+        .child(settings_section(
+            k,
+            "settings-application",
+            "Application",
+            vec![version, keybinds, settings],
+        ))
         .child(
-            col()
-                .w_full()
-                .px(24.0)
-                .py(20.0)
-                .gap(14.0)
-                .child(page_title(
-                    k,
-                    "About",
-                    "Sheath is a file manager proof of concept: every pixel is drawn by Rune, from \
-                     its layout and input layers to the file table and this panel.",
-                ))
-                .child(rule(k))
-                .child(
-                    col()
-                        .key("about-info")
-                        .w_full()
-                        .gap(6.0)
-                        .child(info_row(k, "Version", env!("CARGO_PKG_VERSION").into()))
-                        .child(keybinds)
-                        .child(settings),
-                )
-                .child(
-                    text(
-                        "Keybinds and settings each live in their own file so they can be edited \
-                         by hand, and editing one never rewrites the other.",
-                    )
-                    .font(k.ty.caption())
-                    .color(k.c.text_faint)
-                    .wrap(),
-                ),
+            text(
+                "Keybinds and settings each live in their own file so they can be edited by \
+                 hand, and editing one never rewrites the other.",
+            )
+            .font(k.ty.caption())
+            .color(k.c.text_faint)
+            .mx(SETTINGS_ROW_INSET)
+            .wrap(),
         )
 }
 
-/// A file path with a button that copies it, when the file has a path.
-fn file_path_row(k: &Kit, label: &str, path: Option<PathBuf>, key: &str) -> El {
+/// A file the settings are saved in, with a button that copies its path.
+fn file_path_row(
+    k: &Kit,
+    glyph: &'static Icon,
+    label: &str,
+    path: Option<PathBuf>,
+    key: &str,
+) -> El {
     let shown = path
         .as_ref()
         .map(|path| path.display().to_string())
         .unwrap_or_else(|| "Unavailable".into());
-    let info = info_row(k, label, shown.clone());
     let Some(_) = path else {
-        return info;
+        return settings_row(k, glyph, label, Some(&shown), text("").font(k.ty.caption()));
     };
-    row()
-        .w_full()
-        .gap(8.0)
-        .center_y()
-        .child(info.grow(1.0))
-        .child(
-            Button::new("Copy Path")
-                .variant(ButtonVariant::Outline)
-                .control_size(ControlSize::Small)
-                .on_press_tx(move |_: &mut App, tx: &mut Tx| tx.copy(shown.clone()))
-                .build(k)
-                .key(key),
-        )
-}
-
-fn page_title(k: &Kit, title: &str, description: &str) -> El {
-    col()
-        .w_full()
-        .gap(4.0)
-        .child(text(title).font(k.ty.ui_medium).color(k.c.text_base))
-        .child(
-            text(description)
-                .font(k.ty.caption())
-                .color(k.c.text_muted)
-                .wrap(),
-        )
-}
-
-fn setting_row(k: &Kit, label: &str, description: &str, control: El) -> El {
-    row()
-        .w_full()
-        .gap(16.0)
-        .center_y()
-        .py(4.0)
-        .child(
-            col()
-                .gap(2.0)
-                .grow(1.0)
-                .min_w(0.0)
-                .child(text(label).font(k.ty.ui).color(k.c.text_base))
-                .child(
-                    text(description)
-                        .font(k.ty.caption())
-                        .color(k.c.text_muted)
-                        .wrap(),
-                ),
-        )
-        .child(control)
+    settings_row(
+        k,
+        glyph,
+        label,
+        Some(&format!("Saved in {shown}")),
+        Button::new("Copy Path")
+            .variant(ButtonVariant::Outline)
+            .control_size(ControlSize::Small)
+            .on_press_tx(move |_: &mut App, tx: &mut Tx| tx.copy(shown.clone()))
+            .build(k)
+            .key(key),
+    )
 }
 
 fn preview_section(s: &App, k: &'static Kit) -> El {

@@ -590,6 +590,38 @@ fn a_broken_keybinds_file_keeps_the_defaults_and_says_so() {
     );
 }
 
+/// Hex's settings: the rail sits on the window's background, and each page's rows live in a
+/// card beside it.
+#[test]
+fn the_settings_pages_group_their_rows_into_a_card_beside_the_rail() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+
+    let elements = rt.elements();
+    let find = |key: &str| {
+        elements
+            .iter()
+            .find(|e| e.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("{key} is drawn"))
+    };
+    let rail = find("settings-sidebar").rect;
+    let panel = find("settings-panel").rect;
+    assert_eq!(
+        (panel[0], panel[1]),
+        (rail[2], 8.0),
+        "the panel starts where the rail ends, inset 8 pt from the top"
+    );
+    let card = find("settings-browser-card");
+    let toggle = find("setting-hidden");
+    assert!(
+        toggle.path.starts_with(&card.path),
+        "the hidden-files switch sits in the Browser card"
+    );
+}
+
 #[test]
 fn the_settings_panel_has_a_sidebar_of_categories() {
     let dir = fixture();
