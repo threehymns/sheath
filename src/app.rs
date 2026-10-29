@@ -30,6 +30,14 @@ pub const ROW_HEIGHT: f32 = 30.0;
 /// How far the pointer travels before a press in the list becomes a selection box.
 const DRAG_START: f32 = 3.0;
 
+/// How far inside the list's top or bottom edge, in points, a dragged row has to be for the
+/// rows to scroll under it.
+const DRAG_SCROLL_EDGE: f32 = 44.0;
+
+/// How fast the rows move while a dragged row is held at the very edge, in points per second:
+/// pushing the pointer further past the edge scrolls no faster.
+const DRAG_SCROLL_MAX: f32 = 1100.0;
+
 /// How quickly the list's own scroll momentum decays, per second: the wheel's inertia.
 const SCROLL_DECAY: f32 = 3.5;
 
@@ -1091,6 +1099,15 @@ impl App {
         // Every request the last frame made has been committed and told by now.
         let current = self.scroll();
         self.scroll_at = Some(current);
+        let mut changed = false;
+        // A dragged row held against the list's top or bottom edge pulls the rows along with it.
+        let current = if dt > 0.0 {
+            let scrolled = self.drag_scroll(current, dt, tx);
+            changed |= scrolled != current;
+            scrolled
+        } else {
+            current
+        };
         // The wheel's deltas of the last frame were the fingers' speed, which the rows coast at
         // once they stop. A flick carries the fastest its fingers went, so a rising speed is
         // taken at once and only a falling one eases in.
@@ -1128,7 +1145,6 @@ impl App {
                 self.wheel_held = false;
             }
         }
-        let mut changed = false;
         if dt > 0.0 && self.scroll_overshoot != 0.0 {
             self.scroll_overshoot *= (-OVERSCROLL_RETURN * dt).exp();
             if self.scroll_overshoot.abs() < 0.5 {
@@ -1318,7 +1334,10 @@ impl App {
     }
 
     /// The folder a row drag is over, if it can take the drop: a sidebar place or a folder row.
+    /// Aims at the rows where this frame is putting them (see [`App::scroll_at`]), so a drag
+    /// scrolling the list takes the row the pointer has just been carried over.
     fn aim_drag(&self, drag: &mut FileDrag) {
+        let scroll = self.scroll_at.unwrap_or_else(|| self.scroll());
         drag.row = None;
         drag.place = None;
         drag.place_id = None;
@@ -1334,7 +1353,9 @@ impl App {
         if !inside(self.rows_view, x, y) {
             return;
         }
-        let Some(index) = self.row_at_window(y) else {
+        // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
+        let Some(index) = self.row_at(y - self.rows_view[1] + scroll - self.scroll_overshoot)
+        else {
             return;
         };
         if let Some(&entry) = self.visible.get(index) {
@@ -1343,6 +1364,47 @@ impl App {
                 drag.row = Some(index);
             }
         }
+    }
+
+    /// Scrolls the list while a dragged row is held against its top or bottom edge, faster the
+    /// further past the edge the pointer is pushed, and re-aims the drop at the row that moved
+    /// under the pointer. Returns the offset the rows are at afterwards.
+    fn drag_scroll(&mut self, offset: f32, dt: f32, tx: &mut Tx) -> f32 {
+        let Some(mut drag) = self.file_drag.take() else {
+            return offset;
+        };
+        let view = self.rows_view;
+        let (x, y) = drag.pointer;
+        // The sidebar sits left of the list: a drag over a place there scrolls nothing.
+        let depth = if !drag.dragging || x < view[0] || view[3] <= 0.0 {
+            0.0
+        } else {
+            // Up at the top edge, down at the bottom one, and past either kept at full speed.
+            let above = (view[1] + DRAG_SCROLL_EDGE - y) / DRAG_SCROLL_EDGE;
+            let below = (y - (view[1] + view[3] - DRAG_SCROLL_EDGE)) / DRAG_SCROLL_EDGE;
+            if above > 0.0 {
+                -above
+            } else if below > 0.0 {
+                below
+            } else {
+                0.0
+            }
+        };
+        let step = depth.clamp(-1.0, 1.0) * DRAG_SCROLL_MAX * dt;
+        let next = (offset + step).clamp(0.0, self.max_scroll());
+        self.scroll_at = Some(next);
+        if (next - offset).abs() > 0.01 {
+            // A drag owns the list: nothing coasts under it.
+            self.scroll_velocity = 0.0;
+            tx.scroll_to_instant("files-table", 0.0, next);
+            tx.wake_after(Duration::ZERO);
+        }
+        // The rows may have moved under a pointer that didn't, so the drop follows them.
+        if drag.dragging {
+            self.aim_drag(&mut drag);
+        }
+        self.file_drag = Some(drag);
+        next
     }
 
     /// Where a drag would drop, for the button's release.

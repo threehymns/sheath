@@ -101,7 +101,9 @@ navigate in place, and back/forward keep their history while the search field is
 - A rubber-band box: dragging in the list's empty space selects the rows it sweeps; Shift adds
   them, Cmd/Ctrl toggles them, and Cmd/Ctrl+Shift does both.
 - Drag and drop: dragging a row (or a whole selection) onto a folder row or a sidebar place
-  moves it there, with the target row highlighted and a badge following the pointer. A
+  moves it there, with the target row highlighted and a badge following the pointer. Holding a
+  drag against the list's top or bottom edge scrolls it under the pointer, faster the further
+  past the edge it is pushed, and the highlighted target follows the rows that pass. A
   collision is refused before anything moves and reported in the banner.
 - Copy, cut, paste and duplicate. A copy takes a free name ("notes copy.md", then "notes copy
   2.md"), a cut moves and is pasted once, folders are copied with their contents, and what a
@@ -203,14 +205,15 @@ as Rune's app guidance recommends. Update the `rev` in `Cargo.toml` to move to a
 cargo test
 ```
 
-The 91 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
+The 92 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
 rename/move/trash including their refusal cases, text and folder previews, copy/cut/paste and
 duplicate (files and folders, unique names, cuts pasting once), keybinds (matching, recorded
 changes, conflicts, the KDL round trip and a broken file), the saved settings files, the
 scrolling options and their momentum and bounce, plus
 headless Rune runs that select and open rows, walk rows with the keyboard, extend, toggle and
 Ctrl+Shift-click a selection, draw a box with each modifier combination, drag rows onto a
-folder row and onto a sidebar place (and refuse a collision), resize a column, jump to a name
+folder row and onto a sidebar place (and refuse a collision), scroll the list they are dragged
+against, resize a column, jump to a name
 by typing, right-click rows (in every column) to open the row menu, pick its items, run the
 command bar by key and by click, walk the settings sidebar and its categories, toggle the
 General switches, record a chord there, and build both the single-file preview and the

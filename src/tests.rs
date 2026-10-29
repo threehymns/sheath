@@ -1963,6 +1963,70 @@ fn dropping_a_row_on_a_file_or_empty_space_moves_nothing() {
 }
 
 #[test]
+fn dragging_a_row_against_an_edge_scrolls_the_rows_under_it() {
+    let dir = tempfile::tempdir().unwrap();
+    for i in 0..40 {
+        fs::create_dir(dir.path().join(format!("d{i:02}"))).unwrap();
+    }
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    let (x, y) = rt.find("f:d00").expect("the first folder");
+    let [_, top, _, height] = rt.presented("files-table").expect("the list").0;
+    let edge = top + height - 4.0;
+
+    rt.pointer_down(x, y);
+    rt.frame(0.05);
+    rt.pointer_move(x, edge);
+    rt.frame(0.05);
+    let aimed = rt
+        .state
+        .drop_row()
+        .expect("a folder row is under the pointer");
+    let before = scroll_offset(&rt);
+    for _ in 0..8 {
+        rt.frame(1.0 / 60.0);
+    }
+    let after = scroll_offset(&rt);
+    let passed = rt
+        .state
+        .drop_row()
+        .expect("a folder row is under the pointer");
+    assert!(
+        after > before + 10.0,
+        "the rows scrolled under the drag: {before} -> {after}"
+    );
+    assert!(
+        passed > aimed,
+        "the drop follows the rows that passed under the pointer: {aimed} -> {passed}"
+    );
+
+    // The top edge pulls the rows back the other way.
+    rt.pointer_move(x, top + 4.0);
+    for _ in 0..4 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        scroll_offset(&rt) < after - 10.0,
+        "the top edge scrolled back up: {after} -> {}",
+        scroll_offset(&rt)
+    );
+
+    // Let the rows settle away from the edge, then drop on the row under the pointer.
+    rt.pointer_move(x, top + 200.0);
+    rt.frame(1.0 / 60.0);
+    let [x1, y1, _, h] = rt.presented("f:d05").expect("a folder row is on screen").0;
+    let (x1, y1) = (x1 + 40.0, y1 + h * 0.5);
+    rt.pointer_move(x1, y1);
+    rt.frame(1.0 / 60.0);
+    rt.pointer_up(x1, y1);
+    rt.frame(0.1);
+    assert!(
+        dir.path().join("d05").join("d00").is_dir(),
+        "the row was dropped on the folder it ended over"
+    );
+}
+
+#[test]
 fn a_row_drag_shows_a_badge_and_no_selection_box() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
