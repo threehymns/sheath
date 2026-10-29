@@ -13,13 +13,17 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use rune::{
-    Drag, GesturePhase, Key, KeyEvent, Mods, Phase, PointerPress, ScrollPos, Shortcut,
-    ShortcutError, TextEdit, Tx, WheelEvent,
+    Drag, Key, KeyEvent, Mods, Phase, PointerPress, ScrollPos, Shortcut, ShortcutError, TextEdit,
+    Tx, WheelEvent,
 };
 use rune_kit::{PaneState, ShortcutRecorderState, SortDir};
 
 use crate::keybinds::{Action, Keybinds};
 use crate::settings::Settings;
+
+mod scroll;
+
+use scroll::{Limits, Scroll, Step};
 
 /// How much of a text file the inspector reads.
 const PREVIEW_LIMIT: u64 = 24 * 1024;
@@ -37,45 +41,6 @@ const DRAG_SCROLL_EDGE: f32 = 44.0;
 /// How fast the rows move while a dragged row is held at the very edge, in points per second:
 /// pushing the pointer further past the edge scrolls no faster.
 const DRAG_SCROLL_MAX: f32 = 1100.0;
-
-/// How quickly the list's own scroll momentum decays, per second: the wheel's inertia.
-const SCROLL_DECAY: f32 = 3.5;
-
-/// Points per second of momentum a notch of a notched wheel leaves behind, as a nudge has no
-/// speed of its own to carry.
-const SCROLL_GAIN: f32 = 0.75;
-
-/// The fastest the list coasts, in points per second. A hard flick is the one gesture that
-/// should carry a long way, as a browser's fling does.
-const SCROLL_MAX_VELOCITY: f32 = 6000.0;
-
-/// Below this the momentum has stopped, in points per second.
-const SCROLL_MIN_VELOCITY: f32 = 8.0;
-
-/// How long, in seconds, a slower wheel speed takes to pull the coast down: long enough that a
-/// flick's last light frame doesn't cut its glide short, short enough to follow the fingers.
-const SCROLL_SPEED_SMOOTH: f32 = 0.15;
-
-/// How quickly a resting gesture's speed fades, per second: several times the coast's, so a
-/// hold before lifting takes the fling away almost at once.
-const SCROLL_HOLD_DECAY: f32 = 12.0;
-
-/// How long the fingers can rest on the trackpad, in seconds, before the speed they had is
-/// gone: lifting them after that starts no glide, as a browser's fling doesn't.
-const SCROLL_HOLD_LIMIT: f32 = 0.12;
-
-/// How long a gesture can go without its end, in seconds, before the app stops believing the
-/// fingers are still down: a platform that drops the end mustn't take inertia with it.
-const SCROLL_HELD_FORGET: f32 = 1.0;
-
-/// How far the list can be pulled past its first or last row, in points.
-const MAX_OVERSCROLL: f32 = 72.0;
-
-/// How much of a wheel delta past an end becomes overscroll.
-const OVERSCROLL_GIVE: f32 = 0.45;
-
-/// How quickly overscroll springs back, per second.
-const OVERSCROLL_RETURN: f32 = 16.0;
 
 /// One row in the file table.
 pub struct Entry {
@@ -298,29 +263,8 @@ pub struct App {
     pub scroll_told: Rc<Cell<ScrollPos>>,
     /// The list viewport's rect in window points, from the last layout.
     pub rows_view: [f32; 4],
-    /// How fast the list is coasting after the wheel, in points per second: positive scrolls on
-    /// down the list, as a negative wheel delta does.
-    scroll_velocity: f32,
-    /// Points of precise wheel delta the rows moved since the last poll: the fingers' speed,
-    /// which the rows coast at once they stop.
-    wheel_push: f32,
-    /// A trackpad gesture has the fingers down: they carry the rows, and only lifting them
-    /// hands the speed they had to the coast. Platforms that report no phases never set it.
-    wheel_held: bool,
-    /// How long the fingers have rested in one place, in seconds, while down.
-    wheel_hold: f32,
-    /// How far the poll moved the rows this frame, so a wheel delta in the same frame starts
-    /// from where the frame did instead of adding the coast to the fingers' own motion.
-    coast_step: f32,
-    /// How far the rows are drawn past the first or last one, in points: positive pulls the top
-    /// down, negative the bottom up.
-    pub scroll_overshoot: f32,
-    /// The offset the app has asked the viewport for, so several wheel events in one frame add
-    /// up instead of each starting from where the frame began. The poll starts every frame from
-    /// [`App::scroll`], the offset the viewport was last told to have.
-    scroll_at: Option<f32>,
-    /// When the momentum was last stepped, for the poll's frame delta.
-    last_step: Option<f64>,
+    /// The wheel's inertia, the overscroll past the ends, and the drag that pushes the list.
+    scroll: Scroll,
     /// The sidebar places' rects in window points and their folders, from the last layout,
     /// for a dragged row to be dropped on one.
     pub places_at: BTreeMap<&'static str, ([f32; 4], PathBuf)>,
@@ -391,14 +335,7 @@ impl App {
             recorders,
             scroll_told: Rc::new(Cell::new(ScrollPos::default())),
             rows_view: [0.0; 4],
-            scroll_velocity: 0.0,
-            wheel_push: 0.0,
-            wheel_held: false,
-            wheel_hold: 0.0,
-            coast_step: 0.0,
-            scroll_overshoot: 0.0,
-            scroll_at: None,
-            last_step: None,
+            scroll: Scroll::default(),
             places_at: BTreeMap::new(),
             size_width: 92.0,
             date_width: 158.0,
@@ -408,7 +345,7 @@ impl App {
     /// Shows `path` without touching history.
     fn enter(&mut self, path: PathBuf) {
         self.cwd = path;
-        self.stop_scrolling();
+        self.scroll.stop();
         self.menu = None;
         self.marquee = None;
         self.file_drag = None;
@@ -518,7 +455,7 @@ impl App {
     /// Rebuilds the rows that pass the hidden-file and search filters.
     pub fn apply_filter(&mut self) {
         // Different rows: what the old ones were coasting toward no longer means anything.
-        self.stop_scrolling();
+        self.scroll.stop();
         let query = self.search.text.trim().to_lowercase();
         self.visible = (0..self.entries.len())
             .filter(|&i| {
@@ -568,8 +505,7 @@ impl App {
     pub fn toggle_scroll_inertia(&mut self) {
         self.config.scroll_inertia = !self.config.scroll_inertia;
         if !self.config.scroll_inertia {
-            self.scroll_velocity = 0.0;
-            self.wheel_push = 0.0;
+            self.scroll.stop_coast();
         }
         self.remember();
     }
@@ -578,7 +514,7 @@ impl App {
     pub fn toggle_overscroll(&mut self) {
         self.config.overscroll = !self.config.overscroll;
         if !self.config.overscroll {
-            self.scroll_overshoot = 0.0;
+            self.scroll.stop_bounce();
         }
         self.remember();
     }
@@ -983,7 +919,7 @@ impl App {
     }
 
     /// How far the list is scrolled, in points: what the viewport last said it holds.
-    fn scroll(&self) -> f32 {
+    fn told_offset(&self) -> f32 {
         self.scroll_told.get().offset[1].max(0.0)
     }
 
@@ -992,27 +928,27 @@ impl App {
         (self.visible.len() as f32 * ROW_HEIGHT - self.rows_view[3]).max(0.0)
     }
 
-    /// Stops the wheel's momentum and any overscroll, as a folder change does.
-    fn stop_scrolling(&mut self) {
-        self.scroll_velocity = 0.0;
-        self.wheel_push = 0.0;
-        self.wheel_held = false;
-        self.wheel_hold = 0.0;
-        self.coast_step = 0.0;
-        self.scroll_overshoot = 0.0;
-        self.scroll_at = None;
+    /// What this frame tells the scroll: how far it can go, and which of its behaviours are on.
+    fn limits(&self) -> Limits {
+        Limits {
+            max: self.max_scroll(),
+            inertia: self.config.scroll_inertia,
+            bounce: self.config.overscroll,
+        }
     }
 
-    /// Stops the coast dead, as fingers landing on the trackpad do: the step this frame already
-    /// made is taken back, so the rows stay where they were drawn.
-    fn halt_coast(&mut self, tx: &mut Tx) {
-        self.scroll_velocity = 0.0;
-        self.wheel_push = 0.0;
-        if self.coast_step != 0.0 {
-            let back = self.scroll_at.unwrap_or_else(|| self.scroll()) - self.coast_step;
-            self.scroll_at = Some(back);
-            self.coast_step = 0.0;
-            tx.scroll_to_instant("files-table", 0.0, back);
+    /// How far the rows are drawn past the list's ends, in points.
+    pub fn overshoot(&self) -> f32 {
+        self.scroll.overshoot()
+    }
+
+    /// Hands a step's effects to the runtime.
+    fn apply(&self, step: Step, tx: &mut Tx) {
+        if let Some(at) = step.scroll_to {
+            tx.scroll_to_instant("files-table", 0.0, at);
+        }
+        if step.again {
+            tx.wake_after(Duration::ZERO);
         }
     }
 
@@ -1021,168 +957,29 @@ impl App {
     /// past an end pulls the rows out of place until [`App::poll`] springs them back. False
     /// leaves the wheel to the viewport, so with both settings off the list scrolls as it did.
     pub fn list_wheel(&mut self, wheel: WheelEvent, tx: &mut Tx) -> bool {
-        if !self.config.scroll_inertia && !self.config.overscroll {
-            return false;
-        }
-        if wheel.momentum && self.config.scroll_inertia {
-            // The platform's coasting would double the list's own.
-            return true;
-        }
-        // A trackpad gesture's phases are the fingers themselves: down stops the rows where
-        // they are, even when they never moved, and lifting them hands the speed they had to
-        // the coast. Momentum has phases of its own, which aren't a hand.
-        if !wheel.momentum && wheel.phase != GesturePhase::Moved {
-            if wheel.phase == GesturePhase::Began {
-                self.wheel_held = true;
-                self.wheel_hold = 0.0;
-                self.halt_coast(tx);
-            } else {
-                self.wheel_held = false;
-                tx.wake_after(Duration::ZERO);
+        match self.scroll.wheel(&wheel, self.limits()) {
+            Some(step) => {
+                self.apply(step, tx);
+                true
             }
+            None => false,
         }
-        if wheel.dy == 0.0 || wheel.dx.abs() > wheel.dy.abs() {
-            return false;
-        }
-        let current = self.scroll_at.unwrap_or_else(|| self.scroll()) - self.coast_step;
-        self.coast_step = 0.0;
-        let max = self.max_scroll();
-        let bounce = self.config.overscroll && max > 0.0;
-        let target = current - wheel.dy;
-        let (offset, overshoot) = if target < 0.0 && bounce {
-            (
-                0.0,
-                (self.scroll_overshoot - target * OVERSCROLL_GIVE).min(MAX_OVERSCROLL),
-            )
-        } else if target > max && bounce {
-            (
-                max,
-                (self.scroll_overshoot - (target - max) * OVERSCROLL_GIVE).max(-MAX_OVERSCROLL),
-            )
-        } else {
-            (target.clamp(0.0, max), 0.0)
-        };
-        self.scroll_overshoot = overshoot;
-        self.scroll_at = Some(offset);
-        if offset != current {
-            tx.scroll_to_instant("files-table", 0.0, offset);
-        }
-        if self.config.scroll_inertia && !wheel.momentum {
-            if wheel.precise {
-                // A trackpad's deltas are the fingers' own motion, so the poll turns them into
-                // the speed the rows coast at once the fingers stop. Adding a coast to every
-                // delta would run the rows ahead of them while they are still moving.
-                self.wheel_push += wheel.dy;
-            } else {
-                // A notch is a jump with no speed behind it: it leaves a short glide.
-                self.scroll_velocity = (self.scroll_velocity - wheel.dy * SCROLL_GAIN)
-                    .clamp(-SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
-            }
-        }
-        tx.wake_after(Duration::ZERO);
-        true
     }
 
     /// Steps the list's momentum and overscroll once per frame, asking for the next frame while
     /// either still moves. True when the rows moved, so the view draws them where they are.
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
-        // How much time really passed, and how much this frame steps: a window with nothing to
-        // draw runs no frames, so a rest between the last delta and the next frame is one long
-        // step. Resting on the trackpad is measured in the real time, not the stepped time.
-        let since = match self.last_step {
-            Some(last) => (t - last).max(0.0) as f32,
-            None => 0.0,
-        };
-        let dt = since.clamp(0.0, 0.05);
-        self.last_step = Some(t);
-        self.coast_step = 0.0;
-        // Every request the last frame made has been committed and told by now.
-        let current = self.scroll();
-        self.scroll_at = Some(current);
-        let mut changed = false;
-        // A drag held against the list's top or bottom edge pulls the rows along with it.
-        let current = if dt > 0.0 {
-            let scrolled = self.edge_scroll(current, dt, tx);
-            changed |= scrolled != current;
-            scrolled
-        } else {
-            current
-        };
-        // The wheel's deltas of the last frame were the fingers' speed, which the rows coast at
-        // once they stop. A flick carries the fastest its fingers went, so a rising speed is
-        // taken at once and only a falling one eases in.
-        let pushed = std::mem::take(&mut self.wheel_push);
-        if dt > 0.0 && pushed != 0.0 {
-            let speed = (-pushed / dt).clamp(-SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
-            let rising = speed.abs() > self.scroll_velocity.abs()
-                || speed.signum() != self.scroll_velocity.signum();
-            if rising {
-                self.scroll_velocity = speed;
-            } else {
-                let blend = 1.0 - (-dt / SCROLL_SPEED_SMOOTH).exp();
-                self.scroll_velocity += (speed - self.scroll_velocity) * blend;
-            }
-        }
-        // Fingers resting on the trackpad are not a fling: once they have been in one place
-        // long enough, lifting them starts nothing.
-        if dt > 0.0 && self.wheel_held {
-            self.wheel_hold = if pushed == 0.0 {
-                self.wheel_hold + since
-            } else {
-                0.0
-            };
-            if pushed == 0.0 {
-                // Resting fingers take the speed away quickly, not at the coast's rate.
-                self.scroll_velocity *= (-SCROLL_HOLD_DECAY * since).exp();
-                if self.scroll_velocity.abs() < SCROLL_MIN_VELOCITY {
-                    self.scroll_velocity = 0.0;
-                }
-            }
-            if self.wheel_hold >= SCROLL_HOLD_LIMIT {
-                self.scroll_velocity = 0.0;
-            }
-            if self.wheel_hold >= SCROLL_HELD_FORGET {
-                self.wheel_held = false;
-            }
-        }
-        if dt > 0.0 && self.scroll_overshoot != 0.0 {
-            self.scroll_overshoot *= (-OVERSCROLL_RETURN * dt).exp();
-            if self.scroll_overshoot.abs() < 0.5 {
-                self.scroll_overshoot = 0.0;
-            }
-            changed = true;
-            tx.wake_after(Duration::ZERO);
-        }
-        // Fingers on the trackpad carry the rows themselves; the speed is only told to the
-        // coast when they lift, so holding still stops the list where it is.
-        if dt > 0.0 && !self.wheel_held && self.scroll_velocity.abs() >= SCROLL_MIN_VELOCITY {
-            let max = self.max_scroll();
-            let next = (current + self.scroll_velocity * dt).clamp(0.0, max);
-            if (next - current).abs() > 0.01 {
-                tx.scroll_to_instant("files-table", 0.0, next);
-                self.scroll_at = Some(next);
-                self.coast_step = next - current;
-                changed = true;
-            }
-            let at_end = (next <= 0.0 && self.scroll_velocity < 0.0)
-                || (next >= max && self.scroll_velocity > 0.0);
-            // While the fingers still drive the rows, their speed isn't the coast's to decay.
-            if pushed == 0.0 {
-                self.scroll_velocity *= (-SCROLL_DECAY * dt).exp();
-            }
-            if at_end || self.scroll_velocity.abs() < SCROLL_MIN_VELOCITY {
-                self.scroll_velocity = 0.0;
-            }
-            tx.wake_after(Duration::ZERO);
-        } else if dt > 0.0 && pushed == 0.0 && !self.wheel_held {
-            // No coast to run: the speed left over is the estimate, which fades while nothing
-            // moves. A held gesture's estimate fades faster, above.
-            self.scroll_velocity *= (-SCROLL_DECAY * since).exp();
-            if self.scroll_velocity.abs() < SCROLL_MIN_VELOCITY {
-                self.scroll_velocity = 0.0;
-            }
-        }
-        changed
+        let limits = self.limits();
+        self.scroll.observe(self.told_offset());
+        let dt = self.scroll.frame(t);
+        let push = self.drag_push(dt);
+        let nudged = self.scroll.nudge(push, limits.max);
+        let stepped = self.scroll.step(limits);
+        let redraw = nudged.redraw || stepped.redraw;
+        self.apply(nudged, tx);
+        self.apply(stepped, tx);
+        self.follow_drag();
+        redraw
     }
 
     /// Turns a point in the list viewport's own points into window points.
@@ -1193,7 +990,7 @@ impl App {
     /// The row under a window point inside the list.
     pub fn row_at_window(&self, y: f32) -> Option<usize> {
         // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
-        self.row_at(y - self.rows_view[1] + self.scroll() - self.scroll_overshoot)
+        self.row_at(y - self.rows_view[1] + self.told_offset() - self.overshoot())
     }
 
     /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
@@ -1354,10 +1151,10 @@ impl App {
     }
 
     /// The folder a row drag is over, if it can take the drop: a sidebar place or a folder row.
-    /// Aims at the rows where this frame is putting them (see [`App::scroll_at`]), so a drag
-    /// scrolling the list takes the row the pointer has just been carried over.
+    /// Aims at the rows where this frame is putting them, so a drag scrolling the list takes
+    /// the row the pointer has just been carried over.
     fn aim_drag(&self, drag: &mut FileDrag) {
-        let scroll = self.scroll_at.unwrap_or_else(|| self.scroll());
+        let scroll = self.scroll.current();
         drag.row = None;
         drag.place = None;
         drag.place_id = None;
@@ -1374,8 +1171,7 @@ impl App {
             return;
         }
         // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
-        let Some(index) = self.row_at(y - self.rows_view[1] + scroll - self.scroll_overshoot)
-        else {
+        let Some(index) = self.row_at(y - self.rows_view[1] + scroll - self.overshoot()) else {
             return;
         };
         if let Some(&entry) = self.visible.get(index) {
@@ -1386,10 +1182,9 @@ impl App {
         }
     }
 
-    /// Scrolls the list while a drag is held against its top or bottom edge, faster the further
-    /// past the edge the pointer is pushed, and applies the drag to the rows that moved under
-    /// it. Returns the offset the rows are at afterwards.
-    fn edge_scroll(&mut self, offset: f32, dt: f32, tx: &mut Tx) -> f32 {
+    /// How far a drag held against the list's top or bottom edge pushes the rows this frame,
+    /// faster the further past the edge the pointer is. Zero when no drag is against an edge.
+    fn drag_push(&self, dt: f32) -> f32 {
         // A row drag heads for a folder and a box sweeps rows: both follow their pointer.
         let pointer = match (&self.file_drag, &self.marquee) {
             (Some(drag), _) if drag.dragging => Some(drag.pointer),
@@ -1397,7 +1192,7 @@ impl App {
             _ => None,
         };
         let Some((x, y)) = pointer else {
-            return offset;
+            return 0.0;
         };
         let view = self.rows_view;
         // The sidebar sits left of the list: a drag over a place there scrolls nothing.
@@ -1415,17 +1210,7 @@ impl App {
                 0.0
             }
         };
-        let step = depth.clamp(-1.0, 1.0) * DRAG_SCROLL_MAX * dt;
-        let next = (offset + step).clamp(0.0, self.max_scroll());
-        self.scroll_at = Some(next);
-        if (next - offset).abs() > 0.01 {
-            // A drag owns the list: nothing coasts under it.
-            self.scroll_velocity = 0.0;
-            tx.scroll_to_instant("files-table", 0.0, next);
-            tx.wake_after(Duration::ZERO);
-        }
-        self.follow_drag();
-        next
+        depth.clamp(-1.0, 1.0) * DRAG_SCROLL_MAX * dt
     }
 
     /// Applies a dragging pointer to the rows where the frame has just put them: the folder a
@@ -1503,8 +1288,8 @@ impl App {
             return BTreeSet::new();
         }
         // The rows are where this frame is putting them, not where the last one drew them.
-        let scroll = self.scroll_at.unwrap_or_else(|| self.scroll());
-        let row = |y: f32| self.row_at(y - view[1] + scroll - self.scroll_overshoot);
+        let scroll = self.scroll.current();
+        let row = |y: f32| self.row_at(y - view[1] + scroll - self.overshoot());
         let first = row(top).unwrap_or(0);
         let last = row(bottom).unwrap_or(self.visible.len().saturating_sub(1));
         (first..=last.min(self.visible.len() - 1))

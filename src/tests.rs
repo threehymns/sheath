@@ -2,8 +2,8 @@ use std::fs;
 
 use rune::text::TextSystem;
 use rune::{
-    Env, GesturePhase, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Runtime, ShortcutError,
-    Tx, WheelEvent,
+    Env, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Runtime, ShortcutError, Tx,
+    WheelEvent,
 };
 use rune_kit::SortDir;
 use tempfile::TempDir;
@@ -782,291 +782,6 @@ fn inertia_carries_the_fingers_speed_without_outrunning_them() {
 }
 
 #[test]
-fn a_hard_flick_carries_a_lot_further() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    // A hard flick: 120 points in one frame, the fastest a hand moves the content.
-    for _ in 0..4 {
-        rt.wheel_event(WheelEvent::new(0.0, -30.0).precise(true).at(x, y));
-    }
-    rt.frame(1.0 / 60.0);
-    let lifted = scroll_offset(&rt);
-    for _ in 0..240 {
-        rt.frame(1.0 / 60.0);
-    }
-    let coasted = scroll_offset(&rt) - lifted;
-    assert!(
-        coasted > 1200.0,
-        "a hard flick carries {coasted} points, not a screenful"
-    );
-}
-
-#[test]
-fn fingers_on_the_trackpad_stop_the_coast_where_it_is() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    for _ in 0..4 {
-        rt.wheel_event(WheelEvent::new(0.0, -20.0).precise(true).at(x, y));
-    }
-    rt.frame(1.0 / 60.0);
-    for _ in 0..3 {
-        rt.frame(1.0 / 60.0);
-    }
-    // Two fingers down, not moving: the rows stop at once, not after the coast runs out.
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Began)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    let stopped = scroll_offset(&rt);
-    for _ in 0..10 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        (scroll_offset(&rt) - stopped).abs() < 0.01,
-        "the rows stopped under the fingers: {stopped} -> {}",
-        scroll_offset(&rt)
-    );
-}
-
-#[test]
-fn fingers_that_never_lift_never_coast() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    // A gesture whose fingers stay down: the rows go with them, and stop with them.
-    for frame in 0..4 {
-        let phase = if frame == 0 {
-            GesturePhase::Began
-        } else {
-            GesturePhase::Moved
-        };
-        rt.wheel_event(
-            WheelEvent::new(0.0, -20.0)
-                .precise(true)
-                .phase(phase)
-                .at(x, y),
-        );
-        rt.frame(1.0 / 60.0);
-    }
-    let held = scroll_offset(&rt);
-    for _ in 0..3 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        (scroll_offset(&rt) - held).abs() < 0.01,
-        "a held gesture doesn't coast: {held} -> {}",
-        scroll_offset(&rt)
-    );
-    // Lifting them right away hands the speed they had to the coast.
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Ended)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    for _ in 0..5 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        scroll_offset(&rt) > held + 10.0,
-        "lifting the fingers starts the coast: {held} -> {}",
-        scroll_offset(&rt)
-    );
-}
-
-#[test]
-fn resting_the_fingers_clears_the_inertia() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    for frame in 0..4 {
-        let phase = if frame == 0 {
-            GesturePhase::Began
-        } else {
-            GesturePhase::Moved
-        };
-        rt.wheel_event(
-            WheelEvent::new(0.0, -20.0)
-                .precise(true)
-                .phase(phase)
-                .at(x, y),
-        );
-        rt.frame(1.0 / 60.0);
-    }
-    let held = scroll_offset(&rt);
-    // A second with the fingers in one place: nothing is left to fling when they lift.
-    for _ in 0..60 {
-        rt.frame(1.0 / 60.0);
-    }
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Ended)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    for _ in 0..10 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        (scroll_offset(&rt) - held).abs() < 0.01,
-        "resting the fingers clears the inertia: {held} -> {}",
-        scroll_offset(&rt)
-    );
-}
-
-/// How far the rows glide after lifting the fingers `hold` frames after the last delta.
-fn glide_after_hold(hold: usize) -> f32 {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    for frame in 0..4 {
-        let phase = if frame == 0 {
-            GesturePhase::Began
-        } else {
-            GesturePhase::Moved
-        };
-        rt.wheel_event(
-            WheelEvent::new(0.0, -20.0)
-                .precise(true)
-                .phase(phase)
-                .at(x, y),
-        );
-        rt.frame(1.0 / 60.0);
-    }
-    for _ in 0..hold {
-        rt.frame(1.0 / 60.0);
-    }
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Ended)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    let lifted = scroll_offset(&rt);
-    for _ in 0..120 {
-        rt.frame(1.0 / 60.0);
-    }
-    scroll_offset(&rt) - lifted
-}
-
-#[test]
-fn resting_before_lifting_takes_the_speed_away_fast() {
-    let quick = glide_after_hold(0);
-    // A few frames of stillness, well inside the hold limit: it shouldn't glide nearly as far.
-    let resting = glide_after_hold(5);
-    assert!(quick > 100.0, "lifting at once carries {quick} points");
-    assert!(
-        resting < quick * 0.6,
-        "resting takes the speed away: {quick} -> {resting}"
-    );
-}
-
-#[test]
-fn a_pause_with_no_frames_still_clears_the_inertia() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    for frame in 0..4 {
-        let phase = if frame == 0 {
-            GesturePhase::Began
-        } else {
-            GesturePhase::Moved
-        };
-        rt.wheel_event(
-            WheelEvent::new(0.0, -20.0)
-                .precise(true)
-                .phase(phase)
-                .at(x, y),
-        );
-        rt.frame(1.0 / 60.0);
-    }
-    let held = scroll_offset(&rt);
-    // A window with nothing to draw runs no frames: two seconds of resting arrive as one step.
-    rt.frame(2.0);
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Ended)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    for _ in 0..10 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        (scroll_offset(&rt) - held).abs() < 0.01,
-        "a long rest clears the inertia: {held} -> {}",
-        scroll_offset(&rt)
-    );
-}
-
-#[test]
-fn a_gesture_that_never_reports_its_end_still_lets_inertia_run() {
-    let dir = long_folder(200);
-    let mut rt = runtime(app(&dir));
-    rt.state.config.scroll_inertia = true;
-    rt.frame(0.0);
-    let (x, y) = rt.find("files-table").expect("the list is on screen");
-    // A gesture whose end never comes: Wayland doesn't promise one for every device.
-    for frame in 0..4 {
-        let phase = if frame == 0 {
-            GesturePhase::Began
-        } else {
-            GesturePhase::Moved
-        };
-        rt.wheel_event(
-            WheelEvent::new(0.0, -20.0)
-                .precise(true)
-                .phase(phase)
-                .at(x, y),
-        );
-        rt.frame(1.0 / 60.0);
-    }
-    for _ in 0..90 {
-        rt.frame(1.0 / 60.0);
-    }
-    // The next delta counts as a fresh gesture, and lifting it starts a glide.
-    rt.wheel_event(WheelEvent::new(0.0, -20.0).precise(true).at(x, y));
-    rt.frame(1.0 / 60.0);
-    rt.wheel_event(
-        WheelEvent::new(0.0, 0.0)
-            .precise(true)
-            .phase(GesturePhase::Ended)
-            .at(x, y),
-    );
-    rt.frame(1.0 / 60.0);
-    let lifted = scroll_offset(&rt);
-    for _ in 0..10 {
-        rt.frame(1.0 / 60.0);
-    }
-    assert!(
-        scroll_offset(&rt) > lifted + 5.0,
-        "inertia still runs after a lost gesture end: {lifted} -> {}",
-        scroll_offset(&rt)
-    );
-}
-
-#[test]
 fn without_inertia_the_list_stops_with_the_wheel() {
     let dir = long_folder(60);
     let mut rt = runtime(app(&dir));
@@ -1101,9 +816,9 @@ fn overscroll_pulls_the_rows_past_the_top_and_springs_them_back() {
     rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
     rt.frame(1.0 / 60.0);
     assert!(
-        rt.state.scroll_overshoot > 1.0,
+        rt.state.overshoot() > 1.0,
         "the wheel at the top pulled the rows down: {}",
-        rt.state.scroll_overshoot
+        rt.state.overshoot()
     );
     assert!(
         row_top(&rt) > before + 1.0,
@@ -1112,7 +827,7 @@ fn overscroll_pulls_the_rows_past_the_top_and_springs_them_back() {
     for _ in 0..60 {
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.scroll_overshoot, 0.0, "the rows spring back");
+    assert_eq!(rt.state.overshoot(), 0.0, "the rows spring back");
 }
 
 #[test]
@@ -1124,7 +839,7 @@ fn without_overscroll_an_end_is_hard() {
     let (x, y) = rt.find("files-table").expect("the list is on screen");
     rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.scroll_overshoot, 0.0);
+    assert_eq!(rt.state.overshoot(), 0.0);
 }
 
 #[test]

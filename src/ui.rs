@@ -460,7 +460,7 @@ fn file_table(s: &App, k: &'static Kit) -> El {
         .on_layout(|s: &mut App, rect| s.rows_view = rect)
         .on_scroll_offset(move |at| told.set(at))
         // The bounce moves the rows without moving the viewport, so its edges stay put.
-        .child(file_rows(s, k, style).offset(0.0, s.scroll_overshoot));
+        .child(file_rows(s, k, style).offset(0.0, s.overshoot()));
     col()
         .key("file-table")
         .w_full()
