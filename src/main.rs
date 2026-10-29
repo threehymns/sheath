@@ -6,6 +6,7 @@ mod config;
 mod format;
 mod icons;
 mod keybinds;
+mod keycaps;
 mod settings;
 mod ui;
 

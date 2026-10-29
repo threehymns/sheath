@@ -2069,15 +2069,15 @@ fn the_command_bar_draws_shortcuts_as_keycaps() {
     rt.invalidate();
     rt.frame(0.1);
 
-    // The kit's keybind draws one cap per key, each with its own text.
+    // A keycap is a legend on a face, sitting in the chord's tray.
     let first = rt.state.keybinds.keycaps(Action::Rename)[0].clone();
     let drawn = rt.elements().iter().any(|e| {
         e.path.contains("/command-rename/")
-            && e.path.ends_with("/key0/#0")
+            && e.path.ends_with("/keycap0/cap/face/label")
             && e.text.as_deref() == Some(first.as_str())
     });
     assert!(
         drawn,
-        "the rename row draws its chord {first:?} as a keycap"
+        "the rename row draws its chord {first:?} on a key in a tray"
     );
 }
