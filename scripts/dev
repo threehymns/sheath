@@ -17,4 +17,13 @@ if [[ ! -f $launcher ]]; then
   exit 1
 fi
 
+# dx caches the fat-link archive by existence alone, so an interrupted build leaves a
+# 0-byte libdeps-*.a that it reuses on every later run; mold then rejects it as an
+# "unknown file type". Drop those so dx regenerates them instead of failing the link.
+rune_root=$(cd "$(dirname "$rune_manifest")/../.." && pwd)
+while IFS= read -r -d '' stale; do
+  echo "dev: removing truncated $(basename "$stale"); dx will regenerate it" >&2
+  rm -f "$stale"
+done < <(find "$rune_root/target/live-edit-build" -type f -name 'libdeps-*.a' -empty -print0 2>/dev/null)
+
 exec bash "$launcher" --manifest Cargo.toml "$@"
