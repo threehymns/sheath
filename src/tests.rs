@@ -1,7 +1,10 @@
 use std::fs;
 
 use rune::text::TextSystem;
-use rune::{Env, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Runtime, ShortcutError, Tx};
+use rune::{
+    Env, GesturePhase, Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Runtime, ShortcutError,
+    Tx, WheelEvent,
+};
 use rune_kit::SortDir;
 use tempfile::TempDir;
 
@@ -12,12 +15,25 @@ use crate::ui;
 
 fn fixture() -> TempDir {
     let dir = tempfile::tempdir().unwrap();
+    populate(&dir);
+    dir
+}
+
+/// A folder with `count` files, so its list is taller than the window and scrolls.
+fn long_folder(count: usize) -> TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    for i in 0..count {
+        fs::write(dir.path().join(format!("file{i:02}.txt")), "x").unwrap();
+    }
+    dir
+}
+
+fn populate(dir: &TempDir) {
     fs::create_dir(dir.path().join("alpha")).unwrap();
     fs::create_dir(dir.path().join(".secret")).unwrap();
     fs::write(dir.path().join("file2.txt"), "two").unwrap();
     fs::write(dir.path().join("file10.txt"), "ten!").unwrap();
     fs::write(dir.path().join("notes.md"), "# Notes\n\nHello preview.\n").unwrap();
-    dir
 }
 
 fn app(dir: &TempDir) -> App {
@@ -144,6 +160,7 @@ fn runtime(app: App) -> Runtime<App> {
     let text = TextSystem::new(rune_theme_opencode::FONTS, rune_theme_opencode::FAMILIES);
     let mut rt = Runtime::with_text(app, ui::view, (1180.0, 760.0), Env::new(true, 2.0), text);
     rt.on_key = Some(crate::app::on_key);
+    rt.poll = Some(crate::app::poll);
     rt
 }
 
@@ -644,10 +661,470 @@ fn the_general_category_toggles_what_the_browser_shows() {
         !rt.state.inspector.is_open(),
         "the switch hides the inspector"
     );
+    assert!(rt.state.config.scroll_inertia, "inertia starts on");
+    click(&mut rt, "setting-inertia");
+    assert!(
+        !rt.state.config.scroll_inertia,
+        "the switch turns inertia off"
+    );
+    assert!(rt.state.config.overscroll, "overscroll starts on");
+    click(&mut rt, "setting-overscroll");
+    assert!(
+        !rt.state.config.overscroll,
+        "the switch turns overscroll off"
+    );
 
     let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(config.contains("show-hidden #true"), "{config}");
     assert!(config.contains("inspector #false"), "{config}");
+    assert!(config.contains("scroll-inertia #false"), "{config}");
+    assert!(config.contains("overscroll #false"), "{config}");
+}
+
+#[test]
+fn a_wheel_leaves_the_list_coasting_when_inertia_is_on() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    rt.wheel_event(WheelEvent::new(0.0, -120.0).at(x, y));
+    rt.frame(1.0 / 60.0);
+    let landed = rt.find("f:file08.txt").expect("the eighth row").1;
+    for _ in 0..4 {
+        rt.frame(1.0 / 60.0);
+    }
+    let coasted = rt.find("f:file08.txt").expect("the eighth row").1;
+    assert!(
+        coasted < landed - 0.5,
+        "the rows kept moving after the wheel: {landed} -> {coasted}"
+    );
+}
+
+/// Where the list is scrolled to, as the viewport last said.
+fn scroll_offset(rt: &Runtime<App>) -> f32 {
+    rt.state.scroll_told.get().offset[1]
+}
+
+/// A fast trackpad: four precise deltas of 9 points between frames, partway down the list.
+fn trackpad_burst(rt: &mut Runtime<App>, frames: usize) -> Vec<f32> {
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    let mut at = vec![scroll_offset(rt)];
+    for _ in 0..frames {
+        for _ in 0..4 {
+            rt.wheel_event(WheelEvent::new(0.0, -9.0).precise(true).at(x, y));
+        }
+        rt.frame(1.0 / 60.0);
+        at.push(scroll_offset(rt));
+    }
+    at
+}
+
+#[test]
+fn a_fast_trackpad_scroll_never_jumps_back() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.overscroll = true;
+    rt.frame(0.0);
+    let at = trackpad_burst(&mut rt, 8);
+    for pair in at.windows(2) {
+        let moved = pair[1] - pair[0];
+        assert!(
+            (moved - 36.0).abs() < 0.5,
+            "a frame moved {moved}, not the wheel's 36: {at:?}"
+        );
+    }
+}
+
+#[test]
+fn inertia_carries_the_fingers_speed_without_outrunning_them() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let at = trackpad_burst(&mut rt, 8);
+    // While the fingers move they carry the rows: no frame moves more than the wheel's 36.
+    for pair in at.windows(2) {
+        let moved = pair[1] - pair[0];
+        assert!(
+            (moved - 36.0).abs() < 0.5,
+            "a frame moved {moved}, not the wheel's 36: {at:?}"
+        );
+    }
+
+    // The fingers stop: the rows keep the speed they had, slowing down until they rest.
+    let lifted = at[at.len() - 1];
+    let mut coast = Vec::new();
+    for _ in 0..120 {
+        rt.frame(1.0 / 60.0);
+        coast.push(scroll_offset(&rt));
+    }
+    let steps: Vec<f32> = coast.windows(2).map(|pair| pair[1] - pair[0]).collect();
+    assert!(
+        steps[0] > 15.0,
+        "the rows keep the finger's speed: {steps:?}"
+    );
+    for step in &steps {
+        assert!(
+            *step <= 36.1,
+            "the coast never runs ahead of the fingers: {steps:?}"
+        );
+    }
+    for pair in steps.windows(2) {
+        assert!(pair[1] <= pair[0] + 0.01, "the coast only slows: {steps:?}");
+    }
+    let coasted = coast[coast.len() - 1] - lifted;
+    assert!(coasted > 100.0, "the rows coast on for {coasted} points");
+    assert!(
+        steps[steps.len() - 1] < 0.5,
+        "the rows come to rest: {steps:?}"
+    );
+}
+
+#[test]
+fn a_hard_flick_carries_a_lot_further() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    // A hard flick: 120 points in one frame, the fastest a hand moves the content.
+    for _ in 0..4 {
+        rt.wheel_event(WheelEvent::new(0.0, -30.0).precise(true).at(x, y));
+    }
+    rt.frame(1.0 / 60.0);
+    let lifted = scroll_offset(&rt);
+    for _ in 0..240 {
+        rt.frame(1.0 / 60.0);
+    }
+    let coasted = scroll_offset(&rt) - lifted;
+    assert!(
+        coasted > 1200.0,
+        "a hard flick carries {coasted} points, not a screenful"
+    );
+}
+
+#[test]
+fn fingers_on_the_trackpad_stop_the_coast_where_it_is() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    for _ in 0..4 {
+        rt.wheel_event(WheelEvent::new(0.0, -20.0).precise(true).at(x, y));
+    }
+    rt.frame(1.0 / 60.0);
+    for _ in 0..3 {
+        rt.frame(1.0 / 60.0);
+    }
+    // Two fingers down, not moving: the rows stop at once, not after the coast runs out.
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Began)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    let stopped = scroll_offset(&rt);
+    for _ in 0..10 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        (scroll_offset(&rt) - stopped).abs() < 0.01,
+        "the rows stopped under the fingers: {stopped} -> {}",
+        scroll_offset(&rt)
+    );
+}
+
+#[test]
+fn fingers_that_never_lift_never_coast() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    // A gesture whose fingers stay down: the rows go with them, and stop with them.
+    for frame in 0..4 {
+        let phase = if frame == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        rt.wheel_event(
+            WheelEvent::new(0.0, -20.0)
+                .precise(true)
+                .phase(phase)
+                .at(x, y),
+        );
+        rt.frame(1.0 / 60.0);
+    }
+    let held = scroll_offset(&rt);
+    for _ in 0..3 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        (scroll_offset(&rt) - held).abs() < 0.01,
+        "a held gesture doesn't coast: {held} -> {}",
+        scroll_offset(&rt)
+    );
+    // Lifting them right away hands the speed they had to the coast.
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Ended)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    for _ in 0..5 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        scroll_offset(&rt) > held + 10.0,
+        "lifting the fingers starts the coast: {held} -> {}",
+        scroll_offset(&rt)
+    );
+}
+
+#[test]
+fn resting_the_fingers_clears_the_inertia() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    for frame in 0..4 {
+        let phase = if frame == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        rt.wheel_event(
+            WheelEvent::new(0.0, -20.0)
+                .precise(true)
+                .phase(phase)
+                .at(x, y),
+        );
+        rt.frame(1.0 / 60.0);
+    }
+    let held = scroll_offset(&rt);
+    // A second with the fingers in one place: nothing is left to fling when they lift.
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Ended)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    for _ in 0..10 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        (scroll_offset(&rt) - held).abs() < 0.01,
+        "resting the fingers clears the inertia: {held} -> {}",
+        scroll_offset(&rt)
+    );
+}
+
+/// How far the rows glide after lifting the fingers `hold` frames after the last delta.
+fn glide_after_hold(hold: usize) -> f32 {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    for frame in 0..4 {
+        let phase = if frame == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        rt.wheel_event(
+            WheelEvent::new(0.0, -20.0)
+                .precise(true)
+                .phase(phase)
+                .at(x, y),
+        );
+        rt.frame(1.0 / 60.0);
+    }
+    for _ in 0..hold {
+        rt.frame(1.0 / 60.0);
+    }
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Ended)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    let lifted = scroll_offset(&rt);
+    for _ in 0..120 {
+        rt.frame(1.0 / 60.0);
+    }
+    scroll_offset(&rt) - lifted
+}
+
+#[test]
+fn resting_before_lifting_takes_the_speed_away_fast() {
+    let quick = glide_after_hold(0);
+    // A few frames of stillness, well inside the hold limit: it shouldn't glide nearly as far.
+    let resting = glide_after_hold(5);
+    assert!(quick > 100.0, "lifting at once carries {quick} points");
+    assert!(
+        resting < quick * 0.6,
+        "resting takes the speed away: {quick} -> {resting}"
+    );
+}
+
+#[test]
+fn a_pause_with_no_frames_still_clears_the_inertia() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    for frame in 0..4 {
+        let phase = if frame == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        rt.wheel_event(
+            WheelEvent::new(0.0, -20.0)
+                .precise(true)
+                .phase(phase)
+                .at(x, y),
+        );
+        rt.frame(1.0 / 60.0);
+    }
+    let held = scroll_offset(&rt);
+    // A window with nothing to draw runs no frames: two seconds of resting arrive as one step.
+    rt.frame(2.0);
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Ended)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    for _ in 0..10 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        (scroll_offset(&rt) - held).abs() < 0.01,
+        "a long rest clears the inertia: {held} -> {}",
+        scroll_offset(&rt)
+    );
+}
+
+#[test]
+fn a_gesture_that_never_reports_its_end_still_lets_inertia_run() {
+    let dir = long_folder(200);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = true;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    // A gesture whose end never comes: Wayland doesn't promise one for every device.
+    for frame in 0..4 {
+        let phase = if frame == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        rt.wheel_event(
+            WheelEvent::new(0.0, -20.0)
+                .precise(true)
+                .phase(phase)
+                .at(x, y),
+        );
+        rt.frame(1.0 / 60.0);
+    }
+    for _ in 0..90 {
+        rt.frame(1.0 / 60.0);
+    }
+    // The next delta counts as a fresh gesture, and lifting it starts a glide.
+    rt.wheel_event(WheelEvent::new(0.0, -20.0).precise(true).at(x, y));
+    rt.frame(1.0 / 60.0);
+    rt.wheel_event(
+        WheelEvent::new(0.0, 0.0)
+            .precise(true)
+            .phase(GesturePhase::Ended)
+            .at(x, y),
+    );
+    rt.frame(1.0 / 60.0);
+    let lifted = scroll_offset(&rt);
+    for _ in 0..10 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        scroll_offset(&rt) > lifted + 5.0,
+        "inertia still runs after a lost gesture end: {lifted} -> {}",
+        scroll_offset(&rt)
+    );
+}
+
+#[test]
+fn without_inertia_the_list_stops_with_the_wheel() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.scroll_inertia = false;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    rt.wheel_event(WheelEvent::new(0.0, -120.0).at(x, y));
+    rt.frame(1.0 / 60.0);
+    let landed = rt.find("f:file08.txt").expect("the eighth row").1;
+    for _ in 0..4 {
+        rt.frame(1.0 / 60.0);
+    }
+    let stayed = rt.find("f:file08.txt").expect("the eighth row").1;
+    assert_eq!(landed, stayed, "with the setting off the list stops");
+}
+
+#[test]
+fn overscroll_pulls_the_rows_past_the_top_and_springs_them_back() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.overscroll = true;
+    rt.frame(0.0);
+    let row_top = |rt: &Runtime<App>| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some("f:file00.txt"))
+            .expect("the first row is on screen")
+            .rect[1]
+    };
+    let before = row_top(&rt);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
+    rt.frame(1.0 / 60.0);
+    assert!(
+        rt.state.scroll_overshoot > 1.0,
+        "the wheel at the top pulled the rows down: {}",
+        rt.state.scroll_overshoot
+    );
+    assert!(
+        row_top(&rt) > before + 1.0,
+        "the rows are drawn out of place, not the viewport"
+    );
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert_eq!(rt.state.scroll_overshoot, 0.0, "the rows spring back");
+}
+
+#[test]
+fn without_overscroll_an_end_is_hard() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.overscroll = false;
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
+    rt.frame(1.0 / 60.0);
+    assert_eq!(rt.state.scroll_overshoot, 0.0);
 }
 
 #[test]
@@ -672,6 +1149,28 @@ fn saved_settings_load_at_launch() {
         names(&app).contains(&".secret"),
         "the saved choice shows hidden files"
     );
+}
+
+#[test]
+fn saved_scroll_settings_load_at_launch() {
+    let dir = fixture();
+    let path = dir.path().join("config.kdl");
+    fs::write(
+        &path,
+        "settings {\n    scroll-inertia #true\n    overscroll #true\n}\n",
+    )
+    .unwrap();
+
+    let saved = Settings::at(path);
+    assert_eq!(saved.error, None);
+    assert!(saved.scroll_inertia);
+    assert!(saved.overscroll);
+    assert!(!saved.show_hidden, "the rest keep their defaults");
+    assert!(saved.inspector);
+
+    let app = App::open_with(dir.path().to_path_buf(), saved);
+    assert!(app.config.scroll_inertia);
+    assert!(app.config.overscroll);
 }
 
 #[test]
@@ -718,6 +1217,8 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
     );
     assert!(!saved.show_hidden);
     assert!(saved.inspector);
+    assert!(saved.scroll_inertia);
+    assert!(saved.overscroll);
 }
 
 #[test]

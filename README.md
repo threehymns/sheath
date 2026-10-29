@@ -117,9 +117,9 @@ navigate in place, and back/forward keep their history while the search field is
   the pointer with the three file operations, closing on Escape, an outside press or a pick.
 - A command bar (Cmd/Ctrl+P) listing every command the keybinds registry holds, filtered by
   name, run with Return or a click, with commands that need a selection dimmed.
-- A settings panel that covers the window with its own sidebar: General toggles hidden files
-  and the inspector, Keybinds holds a recorder per command, About shows the version and the
-  keybinds file.
+- A settings panel that covers the window with its own sidebar: General toggles hidden files,
+  the inspector, scroll inertia and overscroll, Keybinds holds a recorder per command, About
+  shows the version and the keybinds file.
 - Remappable shortcuts, recorded from the keyboard in the panel and matched by key position, so
   a recorded chord runs the same command after a restart as it did before.
 - Errors such as permission-denied appear in a banner rather than blanking the window.
@@ -137,7 +137,7 @@ obvious next steps rather than hidden behaviour.
 | `src/format.rs` | Human sizes, dates, kinds and permissions |
 | `src/icons.rs` | The extra SVG glyphs the browser draws |
 | `src/keybinds.rs` | The commands shortcuts can run, their default chords, matching a key event, and the KDL keybinds file |
-| `src/settings.rs` | The two view settings and their own `config.kdl` |
+| `src/settings.rs` | The saved view settings and their own `config.kdl` |
 | `src/tests.rs` | Model tests and headless `Runtime` tests that click, type and assert layouts |
 
 ## Settings and keybinds
@@ -145,14 +145,29 @@ obvious next steps rather than hidden behaviour.
 The panel opens from the toolbar gear (or Cmd/Ctrl+,), with **General**, **Keybinds** and
 **About** in its sidebar; Escape or Done returns to the browser. Settings and keybinds each
 save to a file of their own, so editing one never rewrites the other. The view settings (hidden
-files and the inspector) live in `config.kdl` beside this file:
+files, the inspector, and the two scrolling behaviours) live in `config.kdl` beside this file:
 
 ```kdl
 settings {
     show-hidden #false
     inspector #true
+    scroll-inertia #true
+    overscroll #true
 }
 ```
+
+Scroll inertia carries the wheel's own motion: the rows follow a trackpad's deltas 1:1 while
+the fingers move, then coast at the speed they had and decay over about a second, while a notch
+of a notched wheel leaves a shorter glide. A hard flick carries as far as the hand threw it, and
+where the platform reports a gesture's phases they count as the fingers: down stops the rows
+where they are, even if they never lifted, and resting them for a moment clears the speed, so
+lifting after a pause starts nothing. Overscroll lets a wheel at the first or last row pull the
+rows up to 72 points out of place and springs them back. Both start on, so a fresh app scrolls
+the way the platform does; either can be turned off in General. The wheel handling lives in
+`src/app.rs` (`list_wheel` and the per-frame `poll`), because Rune's scroll viewport applies
+wheel deltas 1:1 and clamps them to its ends. It reads the viewport's position from `El::on_scroll_offset` rather than from
+the rows' rects, which Rune reports a frame late and only past a movement threshold: starting a
+delta from a stale position made a fast trackpad scroll jump back.
 
 Keybinds live in `keybinds.kdl`:
 
@@ -188,10 +203,11 @@ as Rune's app guidance recommends. Update the `rev` in `Cargo.toml` to move to a
 cargo test
 ```
 
-The 77 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
+The 91 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
 rename/move/trash including their refusal cases, text and folder previews, copy/cut/paste and
 duplicate (files and folders, unique names, cuts pasting once), keybinds (matching, recorded
-changes, conflicts, the KDL round trip and a broken file), the two saved settings files, plus
+changes, conflicts, the KDL round trip and a broken file), the saved settings files, the
+scrolling options and their momentum and bounce, plus
 headless Rune runs that select and open rows, walk rows with the keyboard, extend, toggle and
 Ctrl+Shift-click a selection, draw a box with each modifier combination, drag rows onto a
 folder row and onto a sidebar place (and refuse a collision), resize a column, jump to a name

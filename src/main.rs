@@ -21,6 +21,7 @@ fn main() {
         fonts: rune_theme_opencode::FONTS,
         families: rune_theme_opencode::FAMILIES,
         on_key: Some(app::on_key),
+        poll: Some(app::poll),
         ..AppSpec::new("Sheath", (1180.0, 760.0), app::App::new, ui::view)
     });
 }

@@ -16,6 +16,10 @@ const FILE: &str = "config.kdl";
 pub struct Settings {
     pub show_hidden: bool,
     pub inspector: bool,
+    /// The list keeps moving after the wheel stops.
+    pub scroll_inertia: bool,
+    /// The list can be pulled past its first and last row, then springs back.
+    pub overscroll: bool,
     path: Option<PathBuf>,
     /// Why the file couldn't be read or written, for the settings panel.
     pub error: Option<String>,
@@ -26,6 +30,10 @@ impl Default for Settings {
         Settings {
             show_hidden: false,
             inspector: true,
+            // Both are what the platform's own scrolling does, so they start on; the panel
+            // can turn either off.
+            scroll_inertia: true,
+            overscroll: true,
             path: None,
             error: None,
         }
@@ -59,9 +67,11 @@ impl Settings {
         };
         match fs::read_to_string(&path) {
             Ok(text) => match parse(&text) {
-                Ok((show_hidden, inspector)) => {
-                    settings.show_hidden = show_hidden;
-                    settings.inspector = inspector;
+                Ok(view) => {
+                    settings.show_hidden = view.0;
+                    settings.inspector = view.1;
+                    settings.scroll_inertia = view.2;
+                    settings.overscroll = view.3;
                 }
                 Err(err) => {
                     settings.error = Some(format!(
@@ -88,12 +98,17 @@ impl Settings {
 
     /// Records the browser's current state and saves it. A failure keeps the value for this
     /// session and reports why the next launch won't have it.
-    pub fn remember(&mut self, show_hidden: bool, inspector: bool) {
-        if self.show_hidden == show_hidden && self.inspector == inspector {
-            return;
-        }
+    pub fn remember(
+        &mut self,
+        show_hidden: bool,
+        inspector: bool,
+        scroll_inertia: bool,
+        overscroll: bool,
+    ) {
         self.show_hidden = show_hidden;
         self.inspector = inspector;
+        self.scroll_inertia = scroll_inertia;
+        self.overscroll = overscroll;
         self.save();
     }
 
@@ -122,6 +137,8 @@ fn render(settings: &Settings) -> String {
     for (name, on) in [
         ("show-hidden", settings.show_hidden),
         ("inspector", settings.inspector),
+        ("scroll-inertia", settings.scroll_inertia),
+        ("overscroll", settings.overscroll),
     ] {
         let mut child = KdlNode::new(name);
         child.push(KdlEntry::new(on));
@@ -134,12 +151,13 @@ fn render(settings: &Settings) -> String {
     format!("// Sheath settings. Keybinds live in keybinds.kdl, not here.\n{doc}")
 }
 
-/// The two settings the file names; anything missing or unreadable keeps its default, so an
-/// edited file degrades instead of breaking the app.
-fn parse(text: &str) -> Result<(bool, bool), String> {
+/// The settings the file names, in the order the file writes them; anything missing or
+/// unreadable keeps its default, so an edited file degrades instead of breaking the app.
+fn parse(text: &str) -> Result<(bool, bool, bool, bool), String> {
     let doc: KdlDocument = text.parse().map_err(|err: kdl::KdlError| err.to_string())?;
     let defaults = Settings::defaults();
     let (mut show_hidden, mut inspector) = (defaults.show_hidden, defaults.inspector);
+    let (mut scroll_inertia, mut overscroll) = (defaults.scroll_inertia, defaults.overscroll);
     for node in doc.nodes() {
         for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
             let Some(on) = child.get(0).and_then(|value| value.as_bool()) else {
@@ -148,9 +166,11 @@ fn parse(text: &str) -> Result<(bool, bool), String> {
             match child.name().value() {
                 "show-hidden" => show_hidden = on,
                 "inspector" => inspector = on,
+                "scroll-inertia" => scroll_inertia = on,
+                "overscroll" => overscroll = on,
                 _ => {}
             }
         }
     }
-    Ok((show_hidden, inspector))
+    Ok((show_hidden, inspector, scroll_inertia, overscroll))
 }

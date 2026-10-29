@@ -437,6 +437,9 @@ fn file_table(s: &App, k: &'static Kit) -> El {
         header_height: 32.0,
         ..TableStyle::from_kit(k)
     };
+    // The viewport's own offset, told in the frame that scrolls it, so the wheel and its coast
+    // start where the rows really are rather than where their rects last reported.
+    let told = s.scroll_told.clone();
     // The presses, the keys and the drags live on the scrolling viewport, so a press on the
     // empty space below the rows starts a selection box too.
     let viewport = col()
@@ -451,10 +454,13 @@ fn file_table(s: &App, k: &'static Kit) -> El {
         })
         .focusable(true)
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
+        .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
         .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
         .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
         .on_layout(|s: &mut App, rect| s.rows_view = rect)
-        .child(file_rows(s, k, style));
+        .on_scroll_offset(move |at| told.set(at))
+        // The bounce moves the rows without moving the viewport, so its edges stay put.
+        .child(file_rows(s, k, style).offset(0.0, s.scroll_overshoot));
     col()
         .key("file-table")
         .w_full()
@@ -604,7 +610,6 @@ fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
             |s: &App, i| Cow::Borrowed(s.entries[s.visible[i]].id.as_str()),
             move |s: &App, i| file_row(s, i, k, style),
         )
-        .on_layout(|s: &mut App, rect| s.rows_at = (rect[0], rect[1]))
 }
 
 fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
@@ -1495,6 +1500,20 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_inspector())
         .build(k)
         .key("setting-inspector");
+    let inertia = Switch::new(s.config.scroll_inertia)
+        .label("Scroll inertia")
+        .hide_label()
+        .control_size(ControlSize::Regular)
+        .on_toggle(|s: &mut App| s.toggle_scroll_inertia())
+        .build(k)
+        .key("setting-inertia");
+    let overscroll = Switch::new(s.config.overscroll)
+        .label("Overscroll")
+        .hide_label()
+        .control_size(ControlSize::Regular)
+        .on_toggle(|s: &mut App| s.toggle_overscroll())
+        .build(k)
+        .key("setting-overscroll");
     let mut page = col()
         .w_full()
         .px(24.0)
@@ -1503,7 +1522,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .child(page_title(
             k,
             "General",
-            "How the browser presents a folder. These are saved in config.kdl.",
+            "How the browser presents a folder and scrolls its list. These are saved in config.kdl.",
         ))
         .child(setting_row(
             k,
@@ -1517,6 +1536,20 @@ fn general_settings(s: &App, k: &Kit) -> El {
             "Show inspector",
             "The details and preview pane beside the table.",
             inspector,
+        ))
+        .child(rule(k))
+        .child(setting_row(
+            k,
+            "Scroll inertia",
+            "Keep the list coasting after the wheel stops.",
+            inertia,
+        ))
+        .child(rule(k))
+        .child(setting_row(
+            k,
+            "Overscroll",
+            "Pull the list past its first and last row, then let it spring back.",
+            overscroll,
         ));
     if let Some(error) = &s.config.error {
         page = page.child(error_text(k, error));
