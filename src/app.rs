@@ -2,16 +2,17 @@
 //! filter, and the selected entry's preview. Everything here is plain Rust; `ui` turns it into
 //! Rune elements.
 //!
-//! The behaviour is split by job: `browse` reads and orders the folder, `selection` owns which
-//! rows are picked, `drag` the pointer gestures, `files` and `sheets` the operations that change
-//! files, `commands` what a shortcut or menu can ask for, `scrolling` the list's momentum, and
-//! `input` the keys the window takes.
+//! The behaviour is split by job: `browse` reads and orders the folder, `grid` the tile
+//! layout's geometry, `selection` owns which rows are picked, `drag` the pointer gestures,
+//! `files` and `sheets` the operations that change files, `commands` what a shortcut or menu
+//! can ask for, `scrolling` the list's momentum, and `input` the keys the window takes.
 
 mod browse;
 mod commands;
 mod drag;
 mod entry;
 mod files;
+mod grid;
 mod input;
 mod paths;
 mod scroll;
@@ -23,6 +24,7 @@ pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, Marquee, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
+pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
 pub use scrolling::poll;
@@ -62,6 +64,8 @@ pub struct App {
     pub anchor: Option<String>,
     /// The column the list sorts by, and which way.
     pub sort: (String, SortDir),
+    /// Whether the folder is a table of rows or a grid of tiles.
+    pub view: ViewMode,
     /// The drag box, while the pointer is down in the list's empty space.
     pub marquee: Option<Marquee>,
     /// The rows being dragged toward a folder, while the pointer is down on a row.
@@ -140,6 +144,11 @@ impl App {
         let recorders = Keybinds::recorders();
         let mut inspector = PaneState::new(286.0).range(232.0, 420.0);
         inspector.set_open(config.inspector);
+        let view = if config.grid {
+            ViewMode::Grid
+        } else {
+            ViewMode::List
+        };
         App {
             cwd: PathBuf::new(),
             entries: Vec::new(),
@@ -148,6 +157,7 @@ impl App {
             selected: None,
             anchor: None,
             sort: ("name".to_owned(), SortDir::Ascending),
+            view,
             marquee: None,
             file_drag: None,
             clipboard: None,

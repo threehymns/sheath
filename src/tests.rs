@@ -4,6 +4,7 @@ mod browse;
 mod commands;
 mod drag;
 mod files;
+mod grid;
 mod helpers;
 mod marquee;
 mod menu;

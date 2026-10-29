@@ -17,14 +17,16 @@ const FILE: &str = "config.kdl";
 pub enum Setting {
     ShowHidden,
     Inspector,
+    GridView,
     ScrollInertia,
     Overscroll,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 4] = [
+    pub const ALL: [Setting; 5] = [
         Setting::ShowHidden,
         Setting::Inspector,
+        Setting::GridView,
         Setting::ScrollInertia,
         Setting::Overscroll,
     ];
@@ -34,6 +36,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => "show-hidden",
             Setting::Inspector => "inspector",
+            Setting::GridView => "grid",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -44,6 +47,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => "hidden",
             Setting::Inspector => "inspector",
+            Setting::GridView => "grid",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -52,7 +56,7 @@ impl Setting {
     /// What the app does when the file doesn't name it.
     pub fn default_on(self) -> bool {
         match self {
-            Setting::ShowHidden => false,
+            Setting::ShowHidden | Setting::GridView => false,
             Setting::Inspector | Setting::ScrollInertia | Setting::Overscroll => true,
         }
     }
@@ -61,8 +65,9 @@ impl Setting {
         match self {
             Setting::ShowHidden => 0,
             Setting::Inspector => 1,
-            Setting::ScrollInertia => 2,
-            Setting::Overscroll => 3,
+            Setting::GridView => 2,
+            Setting::ScrollInertia => 3,
+            Setting::Overscroll => 4,
         }
     }
 
@@ -76,6 +81,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => settings.show_hidden,
             Setting::Inspector => settings.inspector,
+            Setting::GridView => settings.grid,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
         }
@@ -85,6 +91,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => settings.show_hidden = on,
             Setting::Inspector => settings.inspector = on,
+            Setting::GridView => settings.grid = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
         }
@@ -96,13 +103,15 @@ impl Setting {
 pub struct Settings {
     pub show_hidden: bool,
     pub inspector: bool,
+    /// The folder shows as a grid of tiles rather than a table of rows.
+    pub grid: bool,
     /// The list keeps moving after the wheel stops.
     pub scroll_inertia: bool,
     /// The list can be pulled past its first and last row, then springs back.
     pub overscroll: bool,
     path: Option<PathBuf>,
     /// The settings the file names; the rest are defaults a save leaves out.
-    present: [bool; 4],
+    present: [bool; 5],
     /// Why the file couldn't be read or written, for the settings panel.
     pub error: Option<String>,
 }
@@ -112,12 +121,13 @@ impl Default for Settings {
         Settings {
             show_hidden: false,
             inspector: true,
+            grid: false,
             // Both are what the platform's own scrolling does, so they start on; the panel
             // can turn either off.
             scroll_inertia: true,
             overscroll: true,
             path: None,
-            present: [false; 4],
+            present: [false; 5],
             error: None,
         }
     }
@@ -191,11 +201,13 @@ impl Settings {
         changed: Setting,
         show_hidden: bool,
         inspector: bool,
+        grid: bool,
         scroll_inertia: bool,
         overscroll: bool,
     ) {
         self.show_hidden = show_hidden;
         self.inspector = inspector;
+        self.grid = grid;
         self.scroll_inertia = scroll_inertia;
         self.overscroll = overscroll;
         self.present[changed.index()] = true;

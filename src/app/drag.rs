@@ -85,10 +85,13 @@ impl App {
         (self.rows_view[0] + local.0, self.rows_view[1] + local.1)
     }
 
-    /// The row under a window point inside the list.
-    pub fn row_at_window(&self, y: f32) -> Option<usize> {
+    /// The tile or row under a point in window points inside the list.
+    pub fn index_at_window(&self, at: (f32, f32)) -> Option<usize> {
         // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
-        self.row_at(y - self.rows_view[1] + self.told_offset() - self.overshoot())
+        self.index_at((
+            at.0 - self.rows_view[0],
+            at.1 - self.rows_view[1] + self.told_offset() - self.overshoot(),
+        ))
     }
 
     /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
@@ -98,7 +101,7 @@ impl App {
     pub fn begin_press(&mut self, at: (f32, f32), mods: Mods, tx: &mut Tx) {
         // A box over the rows is the one thing they can't get otherwise: the list only has empty
         // space to start one in when it doesn't scroll, so Option is how a long list gets swept.
-        if mods.alt && self.row_at_window(at.1).is_some() {
+        if mods.alt && self.index_at_window(at).is_some() {
             self.file_drag = None;
             self.marquee = Some(Marquee {
                 start: at,
@@ -110,7 +113,7 @@ impl App {
             });
             return;
         }
-        let Some(index) = self.row_at_window(at.1) else {
+        let Some(index) = self.index_at_window(at) else {
             self.file_drag = None;
             self.marquee = Some(Marquee {
                 start: at,
@@ -269,7 +272,11 @@ impl App {
             return;
         }
         // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
-        let Some(index) = self.row_at(y - self.rows_view[1] + scroll - self.overshoot()) else {
+        let local = (
+            x - self.rows_view[0],
+            y - self.rows_view[1] + scroll - self.overshoot(),
+        );
+        let Some(index) = self.index_at(local) else {
             return;
         };
         if let Some(&entry) = self.visible.get(index) {
@@ -387,10 +394,26 @@ impl App {
         }
         // The rows are where this frame is putting them, not where the last one drew them.
         let scroll = self.scroll.current();
-        let row = |y: f32| self.row_at(y - view[1] + scroll - self.overshoot());
-        let first = row(top).unwrap_or(0);
-        let last = row(bottom).unwrap_or(self.visible.len().saturating_sub(1));
-        (first..=last.min(self.visible.len() - 1))
+        let offset = scroll - self.overshoot();
+        let indices = if self.is_grid() {
+            let (left, right) = (
+                a.0.min(b.0).max(view[0]) - view[0],
+                a.0.max(b.0).min(view[0] + view[2]) - view[0],
+            );
+            self.grid_indices_in_rect(
+                left,
+                top - view[1] + offset,
+                right,
+                bottom - view[1] + offset,
+            )
+        } else {
+            let row = |y: f32| self.index_at((0.0, y - view[1] + offset));
+            let first = row(top).unwrap_or(0);
+            let last = row(bottom).unwrap_or(self.visible.len().saturating_sub(1));
+            (first..=last.min(self.visible.len() - 1)).collect()
+        };
+        indices
+            .into_iter()
             .filter_map(|i| self.visible.get(i).map(|&i| self.entries[i].id.clone()))
             .collect()
     }

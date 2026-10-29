@@ -2,8 +2,8 @@
 
 A file manager built with [Rune](https://github.com/anomalyco/rune) for its
 views, layout, input, animation and rendering. It has a sidebar of places, a breadcrumb path
-bar, a sortable file list, live search, an inspector with a text preview, and copy, move,
-rename and trash operations.
+bar, a sortable file list or tile grid, live search, an inspector with a text preview, and
+copy, move, rename and trash operations.
 
 ## Run
 
@@ -55,6 +55,7 @@ unsupported by this backend.
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
 | Search this folder | The search field; Escape clears it |
 | Sort or resize | Click a column header; drag a header edge |
+| List or grid | The view button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Command bar | Cmd/Ctrl+P |
@@ -78,13 +79,15 @@ Settings and keybinds are KDL files in one config folder:
 settings {
     show-hidden #false
     inspector #true
+    grid #false
     scroll-inertia #true
     overscroll #true
 }
 ```
 
-`scroll-inertia` lets the list coast after the wheel stops; `overscroll` lets it pull past the
-first or last row and spring back.
+`grid` shows the folder as tiles instead of a table of rows, and is also the toolbar's view
+button. `scroll-inertia` lets the list coast after the wheel stops; `overscroll` lets it pull
+past the first or last row and spring back.
 
 `keybinds.kdl` holds the shortcuts. Delete the file, or press Restore Defaults in Settings, to
 get the defaults back:

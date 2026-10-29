@@ -166,6 +166,19 @@ impl App {
         self.remember(Setting::ShowHidden);
     }
 
+    /// Switches between the table of rows and the grid of tiles, and remembers the choice.
+    pub fn toggle_view(&mut self) {
+        self.view = if self.is_grid() {
+            ViewMode::List
+        } else {
+            ViewMode::Grid
+        };
+        // The two views measure their content differently, so what the old one was coasting
+        // toward means nothing in the new one.
+        self.scroll.stop();
+        self.remember(Setting::GridView);
+    }
+
     /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
@@ -196,6 +209,7 @@ impl App {
             changed,
             self.show_hidden,
             self.inspector.is_open(),
+            self.is_grid(),
             self.config.scroll_inertia,
             self.config.overscroll,
         );
@@ -208,6 +222,11 @@ impl App {
         self.show_hidden = self.config.show_hidden;
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
+        self.view = if self.config.grid {
+            ViewMode::Grid
+        } else {
+            ViewMode::List
+        };
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }

@@ -114,11 +114,18 @@ pub fn list_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     if mods.cmd || mods.ctrl || mods.alt {
         return false;
     }
+    // In the grid the arrows walk the tiles: across a row with Left and Right, and a row at a
+    // time with Up and Down. The page keys go ten grid rows.
+    let columns = s.grid_columns() as isize;
+    let step = if s.is_grid() { columns } else { 1 };
+    let page = step * 10;
     match event.key {
-        Key::Up => s.move_selection(-1, mods, tx),
-        Key::Down => s.move_selection(1, mods, tx),
-        Key::PageUp => s.move_selection(-10, mods, tx),
-        Key::PageDown => s.move_selection(10, mods, tx),
+        Key::Up => s.move_selection(-step, mods, tx),
+        Key::Down => s.move_selection(step, mods, tx),
+        Key::Left if s.is_grid() => s.move_selection(-1, mods, tx),
+        Key::Right if s.is_grid() => s.move_selection(1, mods, tx),
+        Key::PageUp => s.move_selection(-page, mods, tx),
+        Key::PageDown => s.move_selection(page, mods, tx),
         Key::Home => s.select_edge(false, mods, tx),
         Key::End => s.select_edge(true, mods, tx),
         Key::Enter => {

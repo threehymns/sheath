@@ -22,7 +22,7 @@ impl App {
 
     /// How far the list can scroll before its last row is at the bottom, in points.
     fn max_scroll(&self) -> f32 {
-        (self.visible.len() as f32 * ROW_HEIGHT - self.rows_view[3]).max(0.0)
+        (self.content_height() - self.rows_view[3]).max(0.0)
     }
 
     /// What this frame tells the scroll: how far it can go, and which of its behaviours are on.

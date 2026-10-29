@@ -2,6 +2,7 @@
 //! the app's state into elements, one region or overlay apiece.
 
 mod dialogs;
+mod grid;
 mod inspector;
 mod palette;
 mod path_bar;
@@ -155,6 +156,21 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .build(k)
         .key("toggle-hidden");
 
+    let (view_icon, view_label) = if s.is_grid() {
+        (&icons::LIST, "List View")
+    } else {
+        (&icons::GRID, "Grid View")
+    };
+    let view = IconButton::new(view_icon)
+        .variant(IconButtonVariant::GhostMuted)
+        .control_size(ControlSize::Regular)
+        .label(view_label)
+        .help(view_label)
+        .expanded(s.is_grid())
+        .on_press(|s: &mut App| s.toggle_view())
+        .build(k)
+        .key("toggle-view");
+
     let inspector = IconButton::new(&icons::INSPECTOR)
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Regular)
@@ -182,6 +198,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .center(search)
         .trailing(new_folder)
         .trailing(hidden)
+        .trailing(view)
         .trailing(inspector)
         .trailing(settings)
 }
@@ -236,6 +253,8 @@ fn main(s: &App, k: &'static Kit) -> El {
     }
     if s.visible.is_empty() {
         content.child(empty_state(s, k).grow(1.0).min_h(0.0))
+    } else if s.is_grid() {
+        content.child(grid::file_grid(s, k).grow(1.0).min_h(0.0))
     } else {
         content.child(file_table(s, k).grow(1.0).min_h(0.0))
     }

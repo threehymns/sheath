@@ -308,6 +308,12 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_inspector())
         .build(k)
         .key("setting-inspector");
+    let grid = Switch::new(s.is_grid())
+        .label("Grid view")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_view())
+        .build(k)
+        .key("setting-grid");
     let inertia = Switch::new(s.config.scroll_inertia)
         .label("Scroll inertia")
         .hide_label()
@@ -338,6 +344,13 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 "Show inspector",
                 Some("The details and preview pane beside the table."),
                 setting_control(s, k, Setting::Inspector, inspector),
+            ),
+            settings_row(
+                k,
+                &icons::GRID,
+                "Grid view",
+                Some("Show the folder as tiles instead of a table of rows."),
+                setting_control(s, k, Setting::GridView, grid),
             ),
         ],
     );

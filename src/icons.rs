@@ -92,6 +92,18 @@ pub static CLIPBOARD: Icon = Icon {
     body: r#"<path d="M5.5 3H3.75v11h8.5V3H10.5" stroke="currentColor" stroke-linejoin="round"/><rect x="5.5" y="1.75" width="5" height="2.5" rx=".75" stroke="currentColor"/><path d="M6 8h4M6 10.5h4" stroke="currentColor" stroke-linecap="round"/>"#,
 };
 
+pub static GRID: Icon = Icon {
+    name: "sheath-grid",
+    view: 16.0,
+    body: r#"<rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor"/>"#,
+};
+
+pub static LIST: Icon = Icon {
+    name: "sheath-list",
+    view: 16.0,
+    body: r#"<path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" stroke-linecap="round"/><circle cx="2.75" cy="4" r=".75" fill="currentColor"/><circle cx="2.75" cy="8" r=".75" fill="currentColor"/><circle cx="2.75" cy="12" r=".75" fill="currentColor"/>"#,
+};
+
 pub static FOLDER_PLUS: Icon = Icon {
     name: "sheath-folder-plus",
     view: 16.0,

@@ -1,7 +1,7 @@
 //! Which rows are selected, which one the keyboard cursor is on, and the clicks and
 //! arrow keys that move both.
 
-use crate::app::{App, ROW_HEIGHT};
+use crate::app::App;
 use rune::{Mods, PointerPress, Tx};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -153,7 +153,9 @@ impl App {
             return false;
         };
         self.select_id(&id);
-        tx.scroll_into_view_in("files-table", id);
+        if let Some(key) = self.scroll_key(index) {
+            tx.scroll_into_view_in("files-table", key);
+        }
         true
     }
 
@@ -181,25 +183,25 @@ impl App {
     }
 
     /// The row under a point in the list's own points, where the first row starts at zero.
-    pub fn row_at(&self, y: f32) -> Option<usize> {
-        if y < 0.0 || self.visible.is_empty() {
-            return None;
-        }
-        let index = (y / ROW_HEIGHT).floor() as usize;
-        (index < self.visible.len()).then_some(index)
-    }
-
     pub(super) fn row_id(&self, index: usize) -> Option<String> {
         self.visible.get(index).map(|&i| self.entries[i].id.clone())
     }
 
-    /// The rows from the anchor to row `index`, or that row alone when there's no anchor.
+    /// The visible index a Shift range starts from, when the anchor is still on screen.
+    pub(super) fn anchor_index(&self) -> Option<usize> {
+        let id = self.anchor.as_deref()?;
+        self.visible.iter().position(|&i| self.entries[i].id == id)
+    }
+
+    /// The rows from the anchor to row `index`, or that row alone when there's no anchor. In
+    /// the grid the range is the rectangle of tiles between the two.
     fn range_to(&self, index: usize) -> BTreeSet<String> {
-        let from = self
-            .anchor
-            .as_deref()
-            .and_then(|id| self.visible.iter().position(|&i| self.entries[i].id == id))
-            .unwrap_or(index);
+        if self.is_grid() {
+            let mut range = BTreeSet::new();
+            self.grid_range_to(index, &mut range);
+            return range;
+        }
+        let from = self.anchor_index().unwrap_or(index);
         let (a, b) = (from.min(index), from.max(index));
         (a..=b)
             .filter_map(|i| self.visible.get(i).map(|&i| self.entries[i].id.clone()))
@@ -242,7 +244,9 @@ impl App {
         {
             self.focus_id(&next);
         }
-        tx.scroll_into_view_in("files-table", id);
+        if let Some(key) = self.scroll_key(index) {
+            tx.scroll_into_view_in("files-table", key);
+        }
     }
 
     /// The selected row closest to row `index` in the list.
@@ -295,7 +299,9 @@ impl App {
             self.anchor = Some(id.clone());
         }
         self.focus_id(&id);
-        tx.scroll_into_view_in("files-table", id);
+        if let Some(key) = self.scroll_key(index) {
+            tx.scroll_into_view_in("files-table", key);
+        }
     }
 
     pub fn open_selected(&mut self) {
@@ -335,11 +341,14 @@ impl App {
         self.menu = Some(at);
     }
 
-    /// A right-click anywhere in the list, in window points: the row under it gets the menu.
+    /// A right-click anywhere in the list, in window points: the row or tile under it gets the
+    /// menu.
     pub fn row_menu_at(&mut self, at: PointerPress) {
-        match self.row_at_window(at.y) {
-            Some(index) if self.rows_view[0] <= at.x => self.open_row_menu(index, at),
-            _ => self.menu = None,
+        let view = self.rows_view;
+        let inside = view[0] <= at.x && at.x <= view[0] + view[2];
+        match self.index_at_window((at.x, at.y)).filter(|_| inside) {
+            Some(index) => self.open_row_menu(index, at),
+            None => self.menu = None,
         }
     }
 
