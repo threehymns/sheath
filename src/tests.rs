@@ -610,7 +610,7 @@ fn the_settings_pages_group_their_rows_into_a_card_beside_the_rail() {
     let rail = find("settings-sidebar").rect;
     let panel = find("settings-panel").rect;
     assert_eq!(
-        (panel[0], panel[1]),
+        (panel[0] - rail[0], panel[1] - rail[1]),
         (rail[2], 8.0),
         "the panel starts where the rail ends, inset 8 pt from the top"
     );
@@ -619,6 +619,51 @@ fn the_settings_pages_group_their_rows_into_a_card_beside_the_rail() {
     assert!(
         toggle.path.starts_with(&card.path),
         "the hidden-files switch sits in the Browser card"
+    );
+}
+
+#[test]
+fn done_sits_in_the_dialogs_corner_outside_the_panel() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+
+    let (dialog, _) = rt.presented("settings-dialog").expect("the dialog is up");
+    let (panel, _) = rt.presented("settings-panel").expect("the panel is up");
+    let (done, _) = rt.presented("close-settings").expect("Done is up");
+    let (cut, _) = rt
+        .presented("corner-cut")
+        .expect("the panel's corner is cut");
+    // The inset the panel keeps from the dialog's edge, so Done shares the dialog's corner.
+    let inset = dialog[0] + dialog[2] - (panel[0] + panel[2]);
+    assert!(
+        (done[0] + done[2] - (dialog[0] + dialog[2] - inset)).abs() < 0.6
+            && (done[1] - (dialog[1] + inset)).abs() < 0.6,
+        "Done sits in the dialog's top-right corner: {done:?} against {dialog:?}"
+    );
+    assert!(
+        cut[0] < done[0] && cut[1] + cut[3] > done[1] + done[3],
+        "the cut reaches around Done's left and bottom edges: {cut:?} against {done:?}"
+    );
+    assert!(
+        (cut[0] + cut[2] - (panel[0] + panel[2])).abs() < 0.6,
+        "the cut ends on the panel's right edge: {cut:?} against {panel:?}"
+    );
+    // The bite, its gap around Done, and room for the panel's own 8 pt corner radius where it
+    // rounds down onto the panel's right edge.
+    assert!(
+        (cut[2] - (done[2] + 8.0 + 8.0)).abs() < 0.6,
+        "the cut is Done plus its gap and the panel corner's radius: {cut:?} against {done:?}"
+    );
+    assert!(
+        rt.find("settings-footer").is_none(),
+        "General has no footer, since Done left it"
+    );
+    assert!(
+        rt.find("settings-version").is_some(),
+        "the version sits at the rail's foot"
     );
 }
 
@@ -632,6 +677,10 @@ fn the_settings_panel_has_a_sidebar_of_categories() {
     click(&mut rt, "open-settings");
     assert_eq!(rt.state.settings, Some(SettingsTab::General));
     assert!(rt.find("settings").is_some());
+    assert!(
+        rt.find("copy-keybinds-path").is_some(),
+        "General lists where the keybinds are saved"
+    );
     for tab in SettingsTab::ALL {
         assert!(
             rt.find(&format!("settings-tab-{}", tab.id())).is_some(),
@@ -656,10 +705,6 @@ fn the_settings_panel_has_a_sidebar_of_categories() {
         Keybinds::defaults().chord(Action::Rename)
     );
 
-    click(&mut rt, "settings-tab-about");
-    assert_eq!(rt.state.settings, Some(SettingsTab::About));
-    assert!(rt.find("copy-keybinds-path").is_some());
-
     rt.key(KeyEvent {
         key: Key::Escape,
         mods: Mods::default(),
@@ -674,20 +719,29 @@ fn the_settings_panel_has_a_sidebar_of_categories() {
 }
 
 #[test]
-fn the_settings_panel_covers_the_browser() {
+fn the_settings_modal_takes_presses_from_the_browser() {
     let dir = fixture();
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     rt.frame(0.0);
-
     click(&mut rt, "open-settings");
-    // The row is still laid out under the panel; a press there lands on the panel instead.
-    let (x, y) = rt.find("f:alpha").expect("the row is under the panel");
+    // The row is still laid out under the dialog; a press there lands on the settings rather
+    // than the browser.
+    let (x, y) = rt.find("f:alpha").expect("the row is under the dialog");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.1);
     assert!(rt.state.selected.is_none(), "no row was clicked");
-    assert_eq!(rt.state.settings, Some(SettingsTab::General));
+
+    // A press outside the dialog lands on the scrim, which dismisses the settings.
+    rt.pointer_down(8.0, 8.0);
+    rt.pointer_up(8.0, 8.0);
+    rt.frame(0.1);
+    assert!(rt.state.selected.is_none(), "no row was clicked");
+    assert!(
+        rt.state.settings.is_none(),
+        "the scrim dismissed the settings"
+    );
 }
 
 #[test]
@@ -724,6 +778,41 @@ fn the_general_category_toggles_what_the_browser_shows() {
     assert!(config.contains("inspector #false"), "{config}");
     assert!(config.contains("scroll-inertia #false"), "{config}");
     assert!(config.contains("overscroll #false"), "{config}");
+}
+
+/// A setting the config file names can be reset, which takes its key out rather than writing
+/// the default down; a setting the file doesn't name has no Reset at all.
+#[test]
+fn resetting_a_setting_takes_its_key_out_of_the_config() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    assert!(
+        rt.find("reset-hidden").is_none(),
+        "there is nothing to reset until the file names the setting"
+    );
+
+    click(&mut rt, "setting-hidden");
+    click(&mut rt, "setting-inspector");
+    assert!(
+        rt.find("reset-hidden").is_some(),
+        "the switch writes the setting into the file"
+    );
+
+    click(&mut rt, "reset-hidden");
+    assert!(!rt.state.show_hidden, "resetting brings the default back");
+    assert!(
+        rt.find("reset-hidden").is_none(),
+        "the Reset goes with the key"
+    );
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(!config.contains("show-hidden"), "{config}");
+    assert!(
+        config.contains("inspector #false"),
+        "the setting left alone stays: {config}"
+    );
 }
 
 #[test]

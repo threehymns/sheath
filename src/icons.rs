@@ -38,6 +38,12 @@ pub static DRIVE: Icon = Icon {
     body: r#"<rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor"/><path d="M2 9.5h12" stroke="currentColor"/><circle cx="11.25" cy="6.25" r=".75" fill="currentColor"/>"#,
 };
 
+pub static UNDO: Icon = Icon {
+    name: "sheath-undo",
+    view: 16.0,
+    body: r#"<path d="M13.5 12.5a5.5 5.5 0 0 0-5.5-5.5H3M6 4 3 7l3 3" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 pub static CHEVRON_LEFT: Icon = Icon {
     name: "sheath-chevron-left",
     view: 16.0,

@@ -16,10 +16,11 @@ use rune_kit::{
 use rune_theme_opencode as theme;
 
 use crate::app::{App, Preview, ROW_HEIGHT, SettingsTab, Sheet, SheetKind, home_dir, root_dir};
+use crate::corner::CornerControl;
 use crate::format;
 use crate::icons;
 use crate::keybinds::{Action, Keybinds};
-use crate::settings::Settings;
+use crate::settings::{Setting, Settings};
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let k = theme::kit(cx.system_dark());
@@ -75,7 +76,7 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         sheet_layer(s, sheet, k, &mut layers);
     }
     if s.settings.is_some() {
-        settings_layer(s, k, cx.titlebar_inset(), &mut layers);
+        settings_layer(s, k, &mut layers);
     }
     rune_kit::root(shell, layers)
 }
@@ -1232,17 +1233,25 @@ const SETTINGS_RAIL: f32 = 220.0;
 const SETTINGS_GUTTER: f32 = 32.0;
 const SETTINGS_ROW_INSET: f32 = 16.0;
 const SETTINGS_ROW_HEIGHT: f32 = 48.0;
+/// The dialog's radius, rounder than the kit's own so the panel inside it keeps a visible curve.
+const SETTINGS_RADIUS: f32 = 16.0;
+/// How far the panel is set in from the dialog's edges, which is how much comes off the radius so
+/// the two corners stay concentric.
+const SETTINGS_INSET: f32 = 8.0;
+/// Done, in the dialog's top-right corner: the panel is cut away around it, so it is on the
+/// dialog's surface rather than in the pane.
+const DONE_SIZE: (f32, f32) = (76.0, 26.0);
+/// Panel left around Done's left and bottom edges.
+const DONE_GAP: f32 = 8.0;
 
-/// The settings window after Hex's: navigation on the window's background, the chosen page in a
-/// raised panel beside it, and Done beside the version at the rail's foot. It covers the window
-/// and gives Escape back to the browser.
-fn settings_layer(s: &App, k: &Kit, titlebar: f32, layers: &mut Vec<El>) {
+/// Settings after Hex's, as a modal: a dialog over the browser holding navigation on its
+/// background and the chosen page in a raised panel beside it, with Done in the dialog's
+/// top-right corner, outside the panel, so the way out is a button rather than a line in the
+/// rail. The scrim, the dialog and Escape all close it.
+fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(tab) = s.settings else {
         return;
     };
-    // macOS draws the traffic lights over the rail, so the navigation starts below them;
-    // elsewhere it only clears the window's edge (Hex's sidebar top).
-    let top = if titlebar > 0.0 { 40.0 } else { 12.0 };
     let mut nav = col().key("settings-nav").w_full().gap(4.0);
     for category in SettingsTab::ALL {
         let selected = category == tab;
@@ -1279,21 +1288,10 @@ fn settings_layer(s: &App, k: &Kit, titlebar: f32, layers: &mut Vec<El>) {
         }
         nav = nav.child(item);
     }
-    let done = row()
-        .key("close-settings")
-        .role("button")
-        .label("Done")
-        .w_full()
-        .h(28.0)
-        .px(6.0)
-        .center_y()
-        .radius(k.radius.sm)
-        .hover(k.c.hover)
-        .on_press(|s: &mut App| s.close_settings())
-        .default_button()
-        .child(text("Done").font(k.ty.ui).color(k.c.text_base));
+    // Version sits at the rail's foot, as Hex's does.
     let version = row().h(20.0).px(6.0).center_y().child(
         text(format!("Version {}", env!("CARGO_PKG_VERSION")))
+            .key("settings-version")
             .font(k.ty.small)
             .color(k.c.text_faint),
     );
@@ -1301,91 +1299,143 @@ fn settings_layer(s: &App, k: &Kit, titlebar: f32, layers: &mut Vec<El>) {
         .key("settings-sidebar")
         .w(SETTINGS_RAIL)
         .h_full()
-        .pt(top)
-        .pb(12.0)
+        .pt(16.0)
+        .pb(16.0)
         .pl(10.0)
         .pr(6.0)
-        .child(nav)
-        .child(el().grow(1.0))
-        .child(done)
+        .child(nav.grow(1.0))
         .child(version);
-    let action = match tab {
-        SettingsTab::Keybinds => Some(
+    let mut left = row().center_y().gap(8.0);
+    if tab == SettingsTab::Keybinds {
+        left = left.child(
             Button::new("Restore Defaults")
                 .variant(ButtonVariant::GhostMuted)
                 .control_size(ControlSize::Small)
                 .on_press(|s: &mut App| s.reset_bindings())
                 .build(k)
                 .key("reset-keybinds"),
-        ),
-        SettingsTab::General | SettingsTab::About => None,
-    };
+        );
+    }
+    // The footer holds the page's own actions; Done is in the dialog's corner, so there is no
+    // footer at all on a page without any.
+    let mut footer = None;
+    if tab == SettingsTab::Keybinds {
+        footer = Some(
+            col()
+                .key("settings-footer")
+                .w_full()
+                .child(settings_rule(k))
+                .child(
+                    row()
+                        .w_full()
+                        .h(52.0)
+                        .px(SETTINGS_ROW_INSET)
+                        .center_y()
+                        .child(left),
+                ),
+        );
+    }
     let body = match tab {
         SettingsTab::General => general_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
-        SettingsTab::About => about_settings(k),
     };
+    // Concentric with the dialog's corners: the same 8 pt inset taken off the radius.
+    let panel_radius = SETTINGS_RADIUS - SETTINGS_INSET;
+    let mut panel = col()
+        .key("settings-panel")
+        .grow(1.0)
+        .shrink()
+        .min_h(0.0)
+        .mt(SETTINGS_INSET)
+        .mr(SETTINGS_INSET)
+        .mb(SETTINGS_INSET)
+        .radius(panel_radius)
+        .fill(k.c.bg_base)
+        .border(0.5, k.c.border_weak)
+        .padding(0.5)
+        .clip_rounded(panel_radius)
+        .child(settings_header(k, tab))
+        .child(
+            col()
+                .key("settings-scroll")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .scroll_edge_fade(16.0)
+                .child(
+                    col()
+                        .key("settings-content")
+                        .w_full()
+                        .px(SETTINGS_GUTTER - SETTINGS_ROW_INSET)
+                        .pt(4.0)
+                        .pb(24.0)
+                        .gap(24.0)
+                        .child(body),
+                ),
+        );
+    if let Some(footer) = footer {
+        panel = panel.child(footer);
+    }
+    let done = CornerControl {
+        dialog_width: 880.0,
+        dialog_radius: SETTINGS_RADIUS,
+        inset: SETTINGS_INSET,
+        size: DONE_SIZE,
+        gap: DONE_GAP,
+    };
+    let dialog = k.elevate(
+        row()
+            .key("settings-dialog")
+            .w(done.dialog_width)
+            .h_full()
+            .max_h(600.0)
+            .radius(SETTINGS_RADIUS)
+            .fill(k.c.bg_deep)
+            .border(1.0, k.c.border_muted)
+            .clip_rounded(SETTINGS_RADIUS)
+            // A modal, so Escape closes it and focus stays inside while it is up.
+            .modal(true, |s: &mut App| s.close_settings())
+            .on_press(|_: &mut App| {})
+            .child(sidebar)
+            .child(panel)
+            // The bite, then Done in it: the dialog's surface at its corner, not the panel's.
+            .child(done.backdrop(k.c.bg_deep, k.c.border_weak))
+            .child(
+                done.place(
+                    Button::new("Done")
+                        .variant(ButtonVariant::Neutral)
+                        .control_size(ControlSize::Regular)
+                        .on_press(|s: &mut App| s.close_settings())
+                        .build(k),
+                )
+                .key("close-settings")
+                .default_button(),
+            ),
+        &k.elevation.overlay,
+    );
+    layers.push(
+        scrim("settings-scrim", |s: &mut App| s.close_settings()).fill(k.alpha(k.c.black, 0.32)),
+    );
     layers.push(
         col()
             .key("settings")
             .absolute(0.0, 0.0)
             .w_full()
             .h_full()
-            .fill(k.c.bg_deep)
-            .modal(false, |s: &mut App| s.close_settings())
-            // The panel is opaque, so it takes presses itself: none reach the browser below.
-            .on_press(|_: &mut App| {})
-            .child(
-                row()
-                    .key("settings-body")
-                    .w_full()
-                    .grow(1.0)
-                    .min_h(0.0)
-                    .child(sidebar)
-                    .child(
-                        col()
-                            .key("settings-panel")
-                            .grow(1.0)
-                            .shrink()
-                            .min_h(0.0)
-                            .mt(8.0)
-                            .mr(8.0)
-                            .mb(8.0)
-                            .radius(k.radius.lg)
-                            .fill(k.c.bg_base)
-                            .border(0.5, k.c.border_weak)
-                            .padding(0.5)
-                            .clip_rounded(k.radius.lg)
-                            .child(settings_header(k, tab, action))
-                            .child(
-                                col()
-                                    .key("settings-scroll")
-                                    .w_full()
-                                    .grow(1.0)
-                                    .min_h(0.0)
-                                    .scroll(ScrollSpec {
-                                        stick_bottom: false,
-                                    })
-                                    .scroll_edge_fade(16.0)
-                                    .child(
-                                        col()
-                                            .key("settings-content")
-                                            .w_full()
-                                            .px(SETTINGS_GUTTER - SETTINGS_ROW_INSET)
-                                            .pt(4.0)
-                                            .pb(24.0)
-                                            .gap(24.0)
-                                            .child(body),
-                                    ),
-                            ),
-                    ),
-            ),
+            .padding(32.0)
+            .justify_center()
+            .items_center()
+            .child(dialog),
     );
 }
 
-/// The pane's title, with an action on its line (Hex's pane header).
-fn settings_header(k: &Kit, tab: SettingsTab, action: Option<El>) -> El {
-    let mut header = row()
+/// The pane's title (Hex's pane header). Done is in the dialog's corner, and a page's own
+/// actions live in its footer.
+fn settings_header(k: &Kit, tab: SettingsTab) -> El {
+    row()
         .key("settings-header")
         .w_full()
         .h(52.0)
@@ -1399,11 +1449,7 @@ fn settings_header(k: &Kit, tab: SettingsTab, action: Option<El>) -> El {
                 .color(k.c.text_base)
                 .grow(1.0)
                 .truncate(),
-        );
-    if let Some(action) = action {
-        header = header.child(action);
-    }
-    header
+        )
 }
 
 /// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
@@ -1482,7 +1528,6 @@ fn tab_icon(tab: SettingsTab) -> &'static Icon {
     match tab {
         SettingsTab::General => &theme::icons::SETTINGS_GEAR,
         SettingsTab::Keybinds => &glyphs::KEYBOARD,
-        SettingsTab::About => &theme::icons::INFO,
     }
 }
 
@@ -1690,14 +1735,14 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 k.glyph.eye,
                 "Show hidden files",
                 Some("Also list names that start with a dot."),
-                hidden,
+                setting_control(s, k, Setting::ShowHidden, hidden),
             ),
             settings_row(
                 k,
                 &icons::INSPECTOR,
                 "Show inspector",
                 Some("The details and preview pane beside the table."),
-                inspector,
+                setting_control(s, k, Setting::Inspector, inspector),
             ),
         ],
     );
@@ -1711,14 +1756,35 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 &icons::ARROW_UP,
                 "Scroll inertia",
                 Some("Keep the list coasting after the wheel stops."),
-                inertia,
+                setting_control(s, k, Setting::ScrollInertia, inertia),
             ),
             settings_row(
                 k,
                 &icons::REFRESH,
                 "Overscroll",
                 Some("Pull the list past its first and last row, then let it spring back."),
-                overscroll,
+                setting_control(s, k, Setting::Overscroll, overscroll),
+            ),
+        ],
+    );
+    let files = settings_section(
+        k,
+        "settings-files",
+        "Files",
+        vec![
+            file_path_row(
+                k,
+                &glyphs::KEYBOARD,
+                "Keybinds",
+                Keybinds::file(),
+                "copy-keybinds-path",
+            ),
+            file_path_row(
+                k,
+                &theme::icons::SETTINGS_GEAR,
+                "Settings",
+                Settings::file(),
+                "copy-settings-path",
             ),
         ],
     );
@@ -1727,7 +1793,8 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .w_full()
         .gap(24.0)
         .child(browser)
-        .child(scrolling);
+        .child(scrolling)
+        .child(files);
     if let Some(error) = &s.config.error {
         page = page.child(error_text(k, error));
     }
@@ -1850,50 +1917,23 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
     root
 }
 
-fn about_settings(k: &Kit) -> El {
-    let version = settings_row(
-        k,
-        &icons::HOUSE,
-        "Version",
-        None,
-        text(env!("CARGO_PKG_VERSION"))
-            .font(k.ty.caption())
-            .color(k.c.text_muted),
-    );
-    let keybinds = file_path_row(
-        k,
-        &glyphs::KEYBOARD,
-        "Keybinds",
-        Keybinds::file(),
-        "copy-keybinds-path",
-    );
-    let settings = file_path_row(
-        k,
-        &theme::icons::SETTINGS_GEAR,
-        "Settings",
-        Settings::file(),
-        "copy-settings-path",
-    );
-    col()
-        .key("settings-about")
-        .w_full()
-        .gap(24.0)
-        .child(settings_section(
-            k,
-            "settings-application",
-            "Application",
-            vec![version, keybinds, settings],
-        ))
-        .child(
-            text(
-                "Keybinds and settings each live in their own file so they can be edited by \
-                 hand, and editing one never rewrites the other.",
-            )
-            .font(k.ty.caption())
-            .color(k.c.text_faint)
-            .mx(SETTINGS_ROW_INSET)
-            .wrap(),
-        )
+/// A setting's control: its switch, with an undo beside it while the config file names the
+/// setting. Resetting takes the key out, so the default is what the file no longer says.
+fn setting_control(s: &App, k: &Kit, setting: Setting, control: El) -> El {
+    let mut row = row().gap(6.0).center_y();
+    if s.config.is_set(setting) {
+        row = row.child(
+            IconButton::new(&icons::UNDO)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label(format!("Reset {}", setting.name()))
+                .help("Reset to the default, taking the key out of config.kdl")
+                .on_press(move |s: &mut App| s.reset_setting(setting))
+                .build(k)
+                .key(format!("reset-{}", setting.id())),
+        );
+    }
+    row.child(control)
 }
 
 /// A file the settings are saved in, with a button that copies its path.

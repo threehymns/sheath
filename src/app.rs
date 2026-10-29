@@ -20,7 +20,7 @@ use rune_kit::{PaneState, SortDir};
 
 use crate::keybinds::{Action, Keybinds};
 use crate::recorder::{Outcome, Recorder};
-use crate::settings::Settings;
+use crate::settings::{Setting, Settings};
 
 mod scroll;
 
@@ -109,22 +109,16 @@ pub enum Preview {
 pub enum SettingsTab {
     General,
     Keybinds,
-    About,
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 3] = [
-        SettingsTab::General,
-        SettingsTab::Keybinds,
-        SettingsTab::About,
-    ];
+    pub const ALL: [SettingsTab; 2] = [SettingsTab::General, SettingsTab::Keybinds];
 
     /// The stable name the element keys use.
     pub fn id(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
             SettingsTab::Keybinds => "keybinds",
-            SettingsTab::About => "about",
         }
     }
 
@@ -133,7 +127,6 @@ impl SettingsTab {
         match self {
             SettingsTab::General => "General",
             SettingsTab::Keybinds => "Keybinds",
-            SettingsTab::About => "About",
         }
     }
 }
@@ -493,13 +486,13 @@ impl App {
     pub fn toggle_hidden(&mut self) {
         self.show_hidden = !self.show_hidden;
         self.apply_filter();
-        self.remember();
+        self.remember(Setting::ShowHidden);
     }
 
     /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
-        self.remember();
+        self.remember(Setting::Inspector);
     }
 
     /// Keeps the list coasting after the wheel, or stops it doing so, and remembers the choice.
@@ -508,7 +501,7 @@ impl App {
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }
-        self.remember();
+        self.remember(Setting::ScrollInertia);
     }
 
     /// Lets the list be pulled past its ends, or not, and remembers the choice.
@@ -517,17 +510,33 @@ impl App {
         if !self.config.overscroll {
             self.scroll.stop_bounce();
         }
-        self.remember();
+        self.remember(Setting::Overscroll);
     }
 
-    /// Saves the browser's view settings into `config.kdl`.
-    fn remember(&mut self) {
+    /// Saves the browser's view settings into `config.kdl`, naming `changed` in it.
+    fn remember(&mut self, changed: Setting) {
         self.config.remember(
+            changed,
             self.show_hidden,
             self.inspector.is_open(),
             self.config.scroll_inertia,
             self.config.overscroll,
         );
+    }
+
+    /// Takes a setting out of `config.kdl`, so the next launch uses the default, and uses it
+    /// now too.
+    pub fn reset_setting(&mut self, setting: Setting) {
+        self.config.reset(setting);
+        self.show_hidden = self.config.show_hidden;
+        self.apply_filter();
+        self.inspector.set_open(self.config.inspector);
+        if !self.config.scroll_inertia {
+            self.scroll.stop_coast();
+        }
+        if !self.config.overscroll {
+            self.scroll.stop_bounce();
+        }
     }
 
     /// Selects a row on its own, as a plain click does, and loads its preview.
