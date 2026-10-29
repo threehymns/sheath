@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 description = "A file manager PoC built with the Rune UI framework"
 
+[features]
+# Opt-in Rust hot-patching for desktop development; see "Live editing" in README.md.
+hot = ["rune/hot"]
+
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 kdl = { version = "6.7.1", default-features = false }

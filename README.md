@@ -19,6 +19,31 @@ cargo run -- README.md    # start beside a file, with it selected
 Arguments after `--` go to the app; Rune parses its own flags first. The framework is pinned
 to a `dev` commit in `Cargo.toml`, so the first build fetches Rune from git and takes a while.
 
+## Live editing
+
+Rune's opt-in `hot` feature patches function bodies into the running window. The feature is
+declared in `Cargo.toml`; normal `cargo run` builds still leave it off. `scripts/dev`
+finds the Rune checkout Cargo already fetched for the pinned revision and runs its launcher
+from there. It needs Python 3.13+ and Dioxus CLI 0.7.10 at `~/.cargo/bin/dx` (`RUNE_DX`
+overrides the path):
+
+```sh
+cargo install dioxus-cli --version 0.7.10
+scripts/dev --patch 'src/**/*.rs'
+```
+
+The first build is a full development build and takes a while. Compiler artifacts land in the
+Rune checkout's `target/live-edit-build`, not Sheath's `target/`. Save a function-body edit in a
+patched file and the existing window rebuilds its view; app state, selection, scroll offsets
+and spring tracks stay put. A patched view that panics falls back to the startup view. Edits to
+types, signatures, imports, constants, impl methods, startup code, dependencies or assets print
+**Restart needed**; `scripts/dev` rebuilds and relaunches on its own, without migrating
+state. `--patch` can repeat, so narrow it to the files you are editing.
+
+This is a state-preserving loop, not a subsecond one: at this Rune commit the framework's own
+README reports about 8 s median save-to-GPU for its Settings example. Physical iOS devices are
+unsupported by this backend.
+
 ## Controls
 
 | Action | Control |

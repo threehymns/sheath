@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Run Rune's hot-reload launcher from the Rune checkout Cargo already fetched.
+#
+# The app declares `hot = ["rune/hot"]`; edits to function bodies in --patch files
+# patch into the running window. See "Live editing" in README.md.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+
+rune_manifest=$(cargo metadata --format-version 1 |
+  python3 -c 'import json,sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "rune" and "anomalyco/rune" in (p.get("source") or "")))')
+
+launcher=$(dirname "$rune_manifest")/../../scripts/rune-hot
+if [[ ! -f $launcher ]]; then
+  echo "dev: $launcher is missing; check the Rune revision in Cargo.toml" >&2
+  exit 1
+fi
+
+exec bash "$launcher" --manifest Cargo.toml "$@"
