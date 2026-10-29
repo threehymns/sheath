@@ -1305,43 +1305,13 @@ fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .pr(6.0)
         .child(nav.grow(1.0))
         .child(version);
-    let mut left = row().center_y().gap(8.0);
-    if tab == SettingsTab::Keybinds {
-        left = left.child(
-            Button::new("Restore Defaults")
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .on_press(|s: &mut App| s.reset_bindings())
-                .build(k)
-                .key("reset-keybinds"),
-        );
-    }
-    // The footer holds the page's own actions; Done is in the dialog's corner, so there is no
-    // footer at all on a page without any.
-    let mut footer = None;
-    if tab == SettingsTab::Keybinds {
-        footer = Some(
-            col()
-                .key("settings-footer")
-                .w_full()
-                .child(settings_rule(k))
-                .child(
-                    row()
-                        .w_full()
-                        .h(52.0)
-                        .px(SETTINGS_ROW_INSET)
-                        .center_y()
-                        .child(left),
-                ),
-        );
-    }
     let body = match tab {
         SettingsTab::General => general_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
     };
     // Concentric with the dialog's corners: the same 8 pt inset taken off the radius.
     let panel_radius = SETTINGS_RADIUS - SETTINGS_INSET;
-    let mut panel = col()
+    let panel = col()
         .key("settings-panel")
         .grow(1.0)
         .shrink()
@@ -1376,9 +1346,6 @@ fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                         .child(body),
                 ),
         );
-    if let Some(footer) = footer {
-        panel = panel.child(footer);
-    }
     let done = CornerControl {
         dialog_width: 880.0,
         dialog_radius: SETTINGS_RADIUS,
@@ -1432,8 +1399,8 @@ fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     );
 }
 
-/// The pane's title (Hex's pane header). Done is in the dialog's corner, and a page's own
-/// actions live in its footer.
+/// The pane's title (Hex's pane header). Done is in the dialog's corner, so nothing sits in the
+/// header but the page's name.
 fn settings_header(k: &Kit, tab: SettingsTab) -> El {
     row()
         .key("settings-header")
@@ -1812,7 +1779,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
             action_icon(action, k),
             action.label(),
             None,
-            recorder_field(s, k, action),
+            binding_control(s, k, action, recorder_field(s, k, action)),
         ));
     }
     let saved = match Keybinds::file() {
@@ -1915,6 +1882,25 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
         );
     }
     root
+}
+
+/// An action's shortcut, with an undo beside it while `keybinds.kdl` names the action.
+/// Resetting takes its line out, so the built-in chord is what the file no longer says.
+fn binding_control(s: &App, k: &Kit, action: Action, field: El) -> El {
+    let mut row = row().gap(6.0).center_y();
+    if s.keybinds.is_custom(action) {
+        row = row.child(
+            IconButton::new(&icons::UNDO)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label(format!("Reset {}", action.label()))
+                .help("Reset to the default, taking the shortcut out of keybinds.kdl")
+                .on_press(move |s: &mut App| s.reset_binding(action))
+                .build(k)
+                .key(format!("reset-binding-{}", action.id())),
+        );
+    }
+    row.child(field)
 }
 
 /// A setting's control: its switch, with an undo beside it while the config file names the

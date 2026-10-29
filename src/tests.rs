@@ -659,12 +659,53 @@ fn done_sits_in_the_dialogs_corner_outside_the_panel() {
     );
     assert!(
         rt.find("settings-footer").is_none(),
-        "General has no footer, since Done left it"
+        "the page has no footer, since Done left it"
     );
     assert!(
         rt.find("settings-version").is_some(),
         "the version sits at the rail's foot"
     );
+}
+
+/// A shortcut the file names can be reset like a setting: the undo takes its line out of
+/// `keybinds.kdl`, and an action the file leaves alone has no undo at all.
+#[test]
+fn resetting_a_keybind_takes_its_line_out_of_the_file() {
+    let dir = fixture();
+    let (app, path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-keybinds");
+    assert!(
+        rt.find("reset-binding-rename").is_none(),
+        "the built-in chord needs no reset"
+    );
+
+    click(&mut rt, "record-rename-field");
+    press(&mut rt, PhysicalKeyCode::F5);
+    assert!(rt.state.keybinds.is_custom(Action::Rename));
+    assert!(
+        rt.find("reset-binding-rename").is_some(),
+        "the file names Rename now, so it can be reset"
+    );
+
+    click(&mut rt, "reset-binding-rename");
+    assert_eq!(
+        rt.state.keybinds.chord(Action::Rename),
+        Keybinds::defaults().chord(Action::Rename),
+        "resetting brings the default back"
+    );
+    assert!(
+        rt.find("reset-binding-rename").is_none(),
+        "the undo goes with the line"
+    );
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(
+        !text.contains("rename"),
+        "the line is out of the file: {text}"
+    );
+    assert!(!Keybinds::at(path).is_custom(Action::Rename));
 }
 
 #[test]
@@ -698,11 +739,9 @@ fn the_settings_panel_has_a_sidebar_of_categories() {
             action.id()
         );
     }
-
-    click(&mut rt, "reset-keybinds");
-    assert_eq!(
-        rt.state.keybinds.chord(Action::Rename),
-        Keybinds::defaults().chord(Action::Rename)
+    assert!(
+        rt.find("settings-footer").is_none(),
+        "Keybinds has no Restore Defaults footer"
     );
 
     rt.key(KeyEvent {

@@ -1456,10 +1456,11 @@ impl App {
         }
     }
 
-    /// Puts every shortcut back to its default and shows that in the fields.
-    pub fn reset_bindings(&mut self) {
-        self.keybinds.reset();
-        self.recorders = Keybinds::recorders();
+    /// Takes one shortcut out of `keybinds.kdl`, so its built-in chord applies again, and puts
+    /// the field back to rest.
+    pub fn reset_binding(&mut self, action: Action) {
+        self.keybinds.reset(action);
+        self.recorders.insert(action, Recorder::default());
     }
 
     /// Whether `action` has something to do right now (Back needs history, the file operations

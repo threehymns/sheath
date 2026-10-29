@@ -299,9 +299,19 @@ impl Keybinds {
         Ok(())
     }
 
-    /// Puts every binding back to its built-in chord and saves.
-    pub fn reset(&mut self) {
-        self.chords = default_chords();
+    /// Whether the file names `action`, so its shortcut is one the user set rather than the
+    /// built-in one. Only those have a Reset: resetting takes the line out of the file, and a
+    /// file that doesn't name an action already gets its default.
+    pub fn is_custom(&self, action: Action) -> bool {
+        self.chords.get(&action) != default_shortcut(action).as_ref()
+    }
+
+    /// Takes `action` out of the file, so the built-in chord applies again, and saves.
+    pub fn reset(&mut self, action: Action) {
+        match default_shortcut(action) {
+            Some(chord) => self.chords.insert(action, chord),
+            None => self.chords.remove(&action),
+        };
         self.save();
     }
 
@@ -327,35 +337,46 @@ impl Keybinds {
 fn default_chords() -> BTreeMap<Action, Shortcut> {
     let mut chords = BTreeMap::new();
     for action in Action::ALL {
-        let text = action.default_chord();
-        match text.parse::<Shortcut>() {
-            Ok(chord) => {
-                chords.insert(action, chord);
-            }
-            // A typo in a default is a programming error, but shipping a dead app is worse.
-            Err(_) => debug_assert!(
-                false,
-                "{} has an invalid default chord: {text}",
-                action.id()
-            ),
+        if let Some(chord) = default_shortcut(action) {
+            chords.insert(action, chord);
         }
     }
     chords
 }
 
-/// The KDL file: a `keybinds` node whose children are `action "chord"`; an empty string means
-/// the action has no shortcut.
+/// The chord a fresh install has for `action`.
+fn default_shortcut(action: Action) -> Option<Shortcut> {
+    let text = action.default_chord();
+    match text.parse::<Shortcut>() {
+        Ok(chord) => Some(chord),
+        // A typo in a default is a programming error, but shipping a dead app is worse.
+        Err(_) => {
+            debug_assert!(
+                false,
+                "{} has an invalid default chord: {text}",
+                action.id()
+            );
+            None
+        }
+    }
+}
+
+/// The KDL file: a `keybinds` node whose children are `action "chord"` for the shortcuts that
+/// differ from the built-in ones; an empty string means the action has no shortcut. Actions the
+/// file leaves out keep their defaults, so resetting one is deleting its line.
 fn render(chords: &BTreeMap<Action, Shortcut>) -> String {
     let mut doc = KdlDocument::new();
     let mut node = KdlNode::new("keybinds");
     let mut children = KdlDocument::new();
     for action in Action::ALL {
-        let value = chords
-            .get(&action)
-            .map(ToString::to_string)
-            .unwrap_or_default();
+        let chord = chords.get(&action);
+        if chord == default_shortcut(action).as_ref() {
+            continue;
+        }
         let mut child = KdlNode::new(action.id());
-        child.push(KdlEntry::new(value));
+        child.push(KdlEntry::new(
+            chord.map(ToString::to_string).unwrap_or_default(),
+        ));
         children.nodes_mut().push(child);
     }
     node.set_children(children);
@@ -364,7 +385,8 @@ fn render(chords: &BTreeMap<Action, Shortcut>) -> String {
     doc.autoformat();
     format!(
         "// Sheath keyboard shortcuts. Only keybinds live in this file; other settings get their\n\
-         // own. An empty chord clears the shortcut; leave the file out to get the defaults.\n\
+         // own. It lists the shortcuts that differ from the built-in ones: an empty chord clears\n\
+         // one, and deleting a line gives that action its default back.\n\
          {doc}"
     )
 }
