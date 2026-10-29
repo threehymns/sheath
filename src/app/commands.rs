@@ -1,0 +1,221 @@
+//! The commands the app can run, whatever asked: a shortcut, the command bar, or a menu,
+//! and the keybinding recorder the settings panel edits.
+
+use crate::app::App;
+use crate::keybinds::Action;
+use crate::recorder::{Outcome, Recorder};
+use rune::{PhysicalInput, Shortcut, ShortcutError, TextEdit, Tx};
+
+/// The categories the settings panel's sidebar lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsTab {
+    General,
+    Keybinds,
+}
+
+impl SettingsTab {
+    pub const ALL: [SettingsTab; 2] = [SettingsTab::General, SettingsTab::Keybinds];
+
+    /// The stable name the element keys use.
+    pub fn id(self) -> &'static str {
+        match self {
+            SettingsTab::General => "general",
+            SettingsTab::Keybinds => "keybinds",
+        }
+    }
+
+    /// What the sidebar calls it.
+    pub fn label(self) -> &'static str {
+        match self {
+            SettingsTab::General => "General",
+            SettingsTab::Keybinds => "Keybinds",
+        }
+    }
+}
+
+/// The command bar's state: what's typed and which row of the filtered commands is selected.
+pub struct Palette {
+    pub query: TextEdit,
+    pub selected: usize,
+}
+
+impl App {
+    /// Opens the settings panel on General, or leaves it on the category already showing.
+    /// Shows the command bar, empty, with its field ready for typing.
+    pub fn open_palette(&mut self) {
+        let mut query = TextEdit::new("");
+        query.focused = true;
+        self.palette = Some(Palette { query, selected: 0 });
+    }
+
+    pub fn close_palette(&mut self) {
+        self.palette = None;
+    }
+
+    /// The bar's text field (`TextInput::on_edit`).
+    pub fn palette_edit(&mut self) -> &mut TextEdit {
+        &mut self
+            .palette
+            .as_mut()
+            .expect("the open command bar has a field")
+            .query
+    }
+
+    /// The commands the bar lists: every registry action but its own opener, filtered by the
+    /// query against the label or the id.
+    pub fn palette_actions(&self) -> Vec<Action> {
+        let query = self
+            .palette
+            .as_ref()
+            .map(|palette| palette.query.text.trim().to_lowercase())
+            .unwrap_or_default();
+        Action::ALL
+            .into_iter()
+            .filter(|action| *action != Action::CommandBar)
+            .filter(|action| {
+                query.is_empty()
+                    || action.label().to_lowercase().contains(&query)
+                    || action.id().contains(&query)
+            })
+            .collect()
+    }
+
+    /// The filter changed: the first row is selected again.
+    pub fn palette_requery(&mut self) {
+        if let Some(palette) = &mut self.palette {
+            palette.selected = 0;
+        }
+    }
+
+    pub fn palette_move(&mut self, delta: isize) {
+        let count = self.palette_actions().len();
+        if count == 0 {
+            self.palette_requery();
+            return;
+        }
+        if let Some(palette) = &mut self.palette {
+            let last = count as isize - 1;
+            palette.selected = (palette.selected as isize + delta).clamp(0, last) as usize;
+        }
+    }
+
+    /// Runs the selected command and closes the bar.
+    pub fn run_palette_command(&mut self, tx: &mut Tx) {
+        let actions = self.palette_actions();
+        let selected = self.palette.as_ref().map(|p| p.selected).unwrap_or(0);
+        let action = actions.get(selected).copied();
+        self.close_palette();
+        if let Some(action) = action {
+            self.run_action(action, tx);
+        }
+    }
+
+    /// Runs a command picked with the pointer, and closes the bar.
+    pub fn choose_command(&mut self, action: Action, tx: &mut Tx) {
+        self.close_palette();
+        self.run_action(action, tx);
+    }
+
+    pub fn open_settings(&mut self) {
+        if self.settings.is_none() {
+            self.settings = Some(SettingsTab::General);
+        }
+    }
+
+    pub fn open_tab(&mut self, tab: SettingsTab) {
+        self.settings = Some(tab);
+    }
+
+    pub fn close_settings(&mut self) {
+        self.settings = None;
+    }
+
+    /// A recorder proposed `shortcut` for `action`: refuse a chord another action uses, and
+    /// save the change. The error words itself on the recorder's field.
+    pub fn set_binding(
+        &mut self,
+        action: Action,
+        shortcut: Option<&Shortcut>,
+    ) -> Result<(), ShortcutError> {
+        self.keybinds.set(action, shortcut)
+    }
+
+    /// One physical input for the settings recorder listening on `action`: Escape cancels,
+    /// Backspace clears, and any other chord is proposed to the keybinds, which may refuse it
+    /// as a conflict. Returns whether the recorder took it.
+    pub fn record_key(&mut self, action: Action, event: &PhysicalInput) -> bool {
+        let Some(recorder) = self.recorders.get_mut(&action) else {
+            return false;
+        };
+        match recorder.input(event) {
+            Outcome::Pass => false,
+            Outcome::Consumed => true,
+            Outcome::Change(next) => {
+                let same = next.as_ref() == self.keybinds.chord(action);
+                let result = if same {
+                    Ok(())
+                } else {
+                    self.set_binding(action, next.as_ref())
+                };
+                self.recorders
+                    .get_mut(&action)
+                    .expect("every action has a recorder")
+                    .finish(next, result);
+                true
+            }
+        }
+    }
+
+    /// Takes one shortcut out of `keybinds.kdl`, so its built-in chord applies again, and puts
+    /// the field back to rest.
+    pub fn reset_binding(&mut self, action: Action) {
+        self.keybinds.reset(action);
+        self.recorders.insert(action, Recorder::default());
+    }
+
+    /// Whether `action` has something to do right now (Back needs history, the file operations
+    /// need a selection); the command bar dims the rest.
+    pub fn action_enabled(&self, action: Action) -> bool {
+        match action {
+            Action::Back => self.can_back(),
+            Action::Forward => self.can_forward(),
+            Action::EnclosingFolder => self.can_up(),
+            // Only one file can be renamed at a time; the rest take the selection.
+            Action::Rename => self.selection_len() == 1,
+            Action::Move | Action::Trash | Action::Copy | Action::Cut | Action::Duplicate => {
+                self.selection_len() > 0
+            }
+            Action::Paste => self.clipboard.is_some() && self.selection_len() > 0,
+            _ => true,
+        }
+    }
+
+    /// Runs `action` when it applies, whatever asked: a shortcut, the command bar or a menu.
+    pub fn run_action(&mut self, action: Action, tx: &mut Tx) {
+        if !self.action_enabled(action) {
+            return;
+        }
+        self.perform(action, tx);
+    }
+
+    /// Runs a bound command.
+    pub(super) fn perform(&mut self, action: Action, tx: &mut Tx) {
+        match action {
+            Action::CommandBar => self.open_palette(),
+            Action::OpenSettings => self.open_settings(),
+            Action::Back => self.back(),
+            Action::Forward => self.forward(),
+            Action::EnclosingFolder => self.up(),
+            Action::Refresh => self.reload(),
+            Action::NewFolder => self.new_folder(tx),
+            Action::ToggleHidden => self.toggle_hidden(),
+            Action::Rename => self.begin_rename(),
+            Action::Move => self.begin_move(),
+            Action::Trash => self.begin_trash(),
+            Action::Copy => self.copy_selection(false),
+            Action::Cut => self.copy_selection(true),
+            Action::Paste => self.paste(),
+            Action::Duplicate => self.duplicate_selection(),
+        }
+    }
+}
