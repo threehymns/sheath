@@ -253,13 +253,20 @@ impl Keybinds {
             .unwrap_or_default()
     }
 
+    /// The chord's keycaps (`["⌘", "R"]`, `["Ctrl", "R"]`) for drawing as a [`Keybind`], or
+    /// empty when unbound.
+    ///
+    /// [`Keybind`]: rune_kit::Keybind
+    pub fn keycaps(&self, action: Action) -> Vec<String> {
+        self.chord(action)
+            .map(Shortcut::menu_keycaps)
+            .unwrap_or_default()
+    }
+
     /// The chord as a menu shows it (`"⌘R"`, `"Ctrl+R"`), or empty when unbound.
     pub fn menu_label(&self, action: Action) -> String {
-        let Some(chord) = self.chord(action) else {
-            return String::new();
-        };
         let separator = if cfg!(target_os = "macos") { "" } else { "+" };
-        chord.menu_keycaps().join(separator)
+        self.keycaps(action).join(separator)
     }
 
     /// Whether `event` is the chord bound to `action`, or, for an action that ignores Shift,

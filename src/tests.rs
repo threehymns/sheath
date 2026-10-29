@@ -2059,3 +2059,25 @@ fn the_command_bar_rows_keep_their_padding_from_the_edges() {
         "and stops short of the far edge instead of clipping"
     );
 }
+
+#[test]
+fn the_command_bar_draws_shortcuts_as_keycaps() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.state.open_palette();
+    rt.invalidate();
+    rt.frame(0.1);
+
+    // The kit's keybind draws one cap per key, each with its own text.
+    let first = rt.state.keybinds.keycaps(Action::Rename)[0].clone();
+    let drawn = rt.elements().iter().any(|e| {
+        e.path.contains("/command-rename/")
+            && e.path.ends_with("/key0/#0")
+            && e.text.as_deref() == Some(first.as_str())
+    });
+    assert!(
+        drawn,
+        "the rename row draws its chord {first:?} as a keycap"
+    );
+}

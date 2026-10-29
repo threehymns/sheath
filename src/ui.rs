@@ -9,9 +9,9 @@ use rune::{
     el, icon, row, text,
 };
 use rune_kit::{
-    Button, ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, MenuItem,
-    ShortcutRecorder, Sidebar, SidebarRow, SidebarSection, SortDir, SplitView, Switch, TableStyle,
-    TextInput, Toolbar, context_menu, file_icon, glyphs, scrim,
+    Button, ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Keybind, Kit,
+    MenuItem, ShortcutRecorder, Sidebar, SidebarRow, SidebarSection, SortDir, SplitView, Switch,
+    TableStyle, TextInput, Toolbar, context_menu, file_icon, glyphs, scrim,
 };
 use rune_theme_opencode as theme;
 
@@ -1406,12 +1406,11 @@ fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                     })
                     .grow(1.0)
                     .truncate(),
-            )
-            .child(
-                text(s.keybinds.menu_label(action))
-                    .font(k.ty.caption())
-                    .color(k.c.text_faint),
             );
+        let keycaps = s.keybinds.keycaps(action);
+        if !keycaps.is_empty() {
+            row = row.child(Keybind::new(&keycaps).build(k));
+        }
         if selected {
             row = row.fill(k.c.hover);
         }
