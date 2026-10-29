@@ -1100,9 +1100,9 @@ impl App {
         let current = self.scroll();
         self.scroll_at = Some(current);
         let mut changed = false;
-        // A dragged row held against the list's top or bottom edge pulls the rows along with it.
+        // A drag held against the list's top or bottom edge pulls the rows along with it.
         let current = if dt > 0.0 {
-            let scrolled = self.drag_scroll(current, dt, tx);
+            let scrolled = self.edge_scroll(current, dt, tx);
             changed |= scrolled != current;
             scrolled
         } else {
@@ -1267,9 +1267,15 @@ impl App {
             return;
         }
         marquee.dragging = true;
-        let swept = self.rows_in_box(marquee.start, at);
+        self.sweep_box(&marquee);
+        self.marquee = Some(marquee);
+    }
+
+    /// Selects the rows a box covers, built on the selection it started from: Shift adds the
+    /// box, Cmd/Ctrl toggles it, and a plain box replaces the selection with it.
+    fn sweep_box(&mut self, marquee: &Marquee) {
+        let swept = self.rows_in_box(marquee.start, marquee.current);
         self.selection = if marquee.extend {
-            // Shift keeps what was selected and adds the box; with Cmd/Ctrl too, the same.
             marquee.base.union(&swept).cloned().collect()
         } else if marquee.toggle {
             marquee.base.symmetric_difference(&swept).cloned().collect()
@@ -1289,7 +1295,6 @@ impl App {
                 }
             }
         }
-        self.marquee = Some(marquee);
     }
 
     /// The button came up: drop a dragged selection on its target, narrow a click inside a
@@ -1366,17 +1371,22 @@ impl App {
         }
     }
 
-    /// Scrolls the list while a dragged row is held against its top or bottom edge, faster the
-    /// further past the edge the pointer is pushed, and re-aims the drop at the row that moved
-    /// under the pointer. Returns the offset the rows are at afterwards.
-    fn drag_scroll(&mut self, offset: f32, dt: f32, tx: &mut Tx) -> f32 {
-        let Some(mut drag) = self.file_drag.take() else {
+    /// Scrolls the list while a drag is held against its top or bottom edge, faster the further
+    /// past the edge the pointer is pushed, and applies the drag to the rows that moved under
+    /// it. Returns the offset the rows are at afterwards.
+    fn edge_scroll(&mut self, offset: f32, dt: f32, tx: &mut Tx) -> f32 {
+        // A row drag heads for a folder and a box sweeps rows: both follow their pointer.
+        let pointer = match (&self.file_drag, &self.marquee) {
+            (Some(drag), _) if drag.dragging => Some(drag.pointer),
+            (_, Some(marquee)) if marquee.dragging => Some(marquee.current),
+            _ => None,
+        };
+        let Some((x, y)) = pointer else {
             return offset;
         };
         let view = self.rows_view;
-        let (x, y) = drag.pointer;
         // The sidebar sits left of the list: a drag over a place there scrolls nothing.
-        let depth = if !drag.dragging || x < view[0] || view[3] <= 0.0 {
+        let depth = if x < view[0] || view[3] <= 0.0 {
             0.0
         } else {
             // Up at the top edge, down at the bottom one, and past either kept at full speed.
@@ -1399,12 +1409,20 @@ impl App {
             tx.scroll_to_instant("files-table", 0.0, next);
             tx.wake_after(Duration::ZERO);
         }
-        // The rows may have moved under a pointer that didn't, so the drop follows them.
-        if drag.dragging {
-            self.aim_drag(&mut drag);
-        }
-        self.file_drag = Some(drag);
+        self.follow_drag();
         next
+    }
+
+    /// Applies a dragging pointer to the rows where the frame has just put them: the folder a
+    /// row drag is over, or the rows a box now covers.
+    fn follow_drag(&mut self) {
+        if let Some(mut drag) = self.file_drag.take() {
+            self.aim_drag(&mut drag);
+            self.file_drag = Some(drag);
+        } else if let Some(marquee) = self.marquee.take() {
+            self.sweep_box(&marquee);
+            self.marquee = Some(marquee);
+        }
     }
 
     /// Where a drag would drop, for the button's release.
@@ -1469,10 +1487,11 @@ impl App {
         if bottom < top {
             return BTreeSet::new();
         }
-        let first = self.row_at_window(top).unwrap_or(0);
-        let last = self
-            .row_at_window(bottom)
-            .unwrap_or(self.visible.len().saturating_sub(1));
+        // The rows are where this frame is putting them, not where the last one drew them.
+        let scroll = self.scroll_at.unwrap_or_else(|| self.scroll());
+        let row = |y: f32| self.row_at(y - view[1] + scroll - self.scroll_overshoot);
+        let first = row(top).unwrap_or(0);
+        let last = row(bottom).unwrap_or(self.visible.len().saturating_sub(1));
         (first..=last.min(self.visible.len() - 1))
             .filter_map(|i| self.visible.get(i).map(|&i| self.entries[i].id.clone()))
             .collect()
