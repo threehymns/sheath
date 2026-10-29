@@ -10,8 +10,8 @@ use rune::{
 };
 use rune_kit::{
     Button, ButtonVariant, ControlSize, Dialog, IconButton, IconButtonVariant, Kit, MenuItem,
-    ShortcutRecorder, Sidebar, SidebarRow, SidebarSection, SortDir, SplitView, Switch, TableStyle,
-    TextInput, Toolbar, context_menu, file_icon, glyphs, scrim,
+    Sidebar, SidebarRow, SidebarSection, SortDir, SplitView, Switch, TableStyle, TextInput,
+    Toolbar, context_menu, file_icon, glyphs, scrim, shortcut_error_message,
 };
 use rune_theme_opencode as theme;
 
@@ -1577,22 +1577,9 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
         .key("reset-keybinds");
     let mut list = col().key("keybind-list").w_full().gap(0.0);
     for action in Action::ALL {
-        let Some(state) = s.recorders.get(&action) else {
+        if !s.recorders.contains_key(&action) {
             continue;
-        };
-        let recorder = ShortcutRecorder::new(
-            format!("record-{}", action.id()),
-            state,
-            move |s: &mut App| {
-                s.recorders
-                    .get_mut(&action)
-                    .expect("every action has a recorder")
-            },
-        )
-        .width(196.0)
-        .allow_unmodified()
-        .on_change(move |s: &mut App, shortcut, _: &mut Tx| s.set_binding(action, shortcut))
-        .build(k);
+        }
         list = list
             .child(
                 row()
@@ -1607,7 +1594,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
                             .grow(1.0)
                             .truncate(),
                     )
-                    .child(recorder),
+                    .child(recorder_field(s, k, action)),
             )
             .child(rule(k));
     }
@@ -1657,6 +1644,71 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
                 .scroll_edge_fade(16.0)
                 .child(col().w_full().px(24.0).pb(20.0).child(list)),
         )
+}
+
+/// One action's shortcut: click to record, Escape cancels while listening, Backspace clears.
+/// The keys are drawn as the app's keycaps, so they match the command bar rather than Rune
+/// Kit's flat chips.
+fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
+    let recorder = s
+        .recorders
+        .get(&action)
+        .expect("every action has a recorder");
+    let labels = recorder.keycaps(s.keybinds.chord(action));
+    let placeholder = if recorder.is_recording() {
+        "Press shortcut"
+    } else {
+        "Record shortcut"
+    };
+    let border = if recorder.error().is_some() {
+        k.c.danger.border
+    } else if recorder.is_recording() {
+        k.c.border_focus
+    } else {
+        k.c.border_base
+    };
+    let error = recorder
+        .error()
+        .map(|error| shortcut_error_message(error, recorder.refused()));
+    let field = row()
+        .key(format!("record-{}-field", action.id()))
+        .role("button")
+        .label(if labels.is_empty() {
+            placeholder.to_owned()
+        } else {
+            labels.join(" ")
+        })
+        .w(196.0)
+        .h(32.0)
+        .px(8.0)
+        .center_y()
+        .radius(k.radius.md)
+        .fill(k.c.bg_base)
+        .border(1.0, border)
+        .focusable(true)
+        .focus_ring(2.0, 2.0, k.c.border_focus)
+        .on_press(move |s: &mut App| {
+            s.recorders
+                .get_mut(&action)
+                .expect("every action has a recorder")
+                .begin();
+        })
+        .on_physical_input(move |s: &mut App, event, _| s.record_key(action, event))
+        .child(if labels.is_empty() {
+            text(placeholder)
+                .font(k.ty.ui_compact)
+                .color(k.c.text_faint)
+        } else {
+            crate::keycaps::tray(k, format!("record-{}-keys", action.id()), &labels)
+        });
+    let mut root = col()
+        .key(format!("record-{}", action.id()))
+        .gap(4.0)
+        .child(field);
+    if let Some(error) = error {
+        root = root.child(text(error).font(k.ty.small_medium).color(k.c.danger.fg));
+    }
+    root
 }
 
 fn about_settings(k: &Kit) -> El {

@@ -13,12 +13,13 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime};
 
 use rune::{
-    Drag, Key, KeyEvent, Mods, Phase, PointerPress, ScrollPos, Shortcut, ShortcutError, TextEdit,
-    Tx, WheelEvent,
+    Drag, Key, KeyEvent, Mods, Phase, PhysicalInput, PointerPress, ScrollPos, Shortcut,
+    ShortcutError, TextEdit, Tx, WheelEvent,
 };
-use rune_kit::{PaneState, ShortcutRecorderState, SortDir};
+use rune_kit::{PaneState, SortDir};
 
 use crate::keybinds::{Action, Keybinds};
+use crate::recorder::{Outcome, Recorder};
 use crate::settings::Settings;
 
 mod scroll;
@@ -254,8 +255,8 @@ pub struct App {
     /// The settings saved in `config.kdl`: hidden files and the inspector.
     pub config: Settings,
     pub keybinds: Keybinds,
-    /// One recorder per action, holding what its field shows and records.
-    pub recorders: BTreeMap<Action, ShortcutRecorderState>,
+    /// One recorder per action, holding what its field is listening for and any refusal.
+    pub recorders: BTreeMap<Action, Recorder>,
     /// Where the list's viewport is scrolled to and how far it can go, told by its
     /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts from this rather
     /// than from the rows' rects: those are reported a frame late, and only once they have
@@ -302,7 +303,7 @@ impl App {
 
     fn blank(config: Settings) -> App {
         let keybinds = Keybinds::load();
-        let recorders = keybinds.recorders();
+        let recorders = Keybinds::recorders();
         let mut inspector = PaneState::new(286.0).range(232.0, 420.0);
         inspector.set_open(config.inspector);
         App {
@@ -1420,10 +1421,36 @@ impl App {
         self.keybinds.set(action, shortcut)
     }
 
+    /// One physical input for the settings recorder listening on `action`: Escape cancels,
+    /// Backspace clears, and any other chord is proposed to the keybinds, which may refuse it
+    /// as a conflict. Returns whether the recorder took it.
+    pub fn record_key(&mut self, action: Action, event: &PhysicalInput) -> bool {
+        let Some(recorder) = self.recorders.get_mut(&action) else {
+            return false;
+        };
+        match recorder.input(event) {
+            Outcome::Pass => false,
+            Outcome::Consumed => true,
+            Outcome::Change(next) => {
+                let same = next.as_ref() == self.keybinds.chord(action);
+                let result = if same {
+                    Ok(())
+                } else {
+                    self.set_binding(action, next.as_ref())
+                };
+                self.recorders
+                    .get_mut(&action)
+                    .expect("every action has a recorder")
+                    .finish(next, result);
+                true
+            }
+        }
+    }
+
     /// Puts every shortcut back to its default and shows that in the fields.
     pub fn reset_bindings(&mut self) {
         self.keybinds.reset();
-        self.recorders = self.keybinds.recorders();
+        self.recorders = Keybinds::recorders();
     }
 
     /// Whether `action` has something to do right now (Back needs history, the file operations

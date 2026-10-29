@@ -7,6 +7,7 @@ mod format;
 mod icons;
 mod keybinds;
 mod keycaps;
+mod recorder;
 mod settings;
 mod ui;
 

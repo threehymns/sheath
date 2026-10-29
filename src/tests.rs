@@ -40,7 +40,7 @@ fn app(dir: &TempDir) -> App {
     let mut app = App::open(dir.path().to_path_buf());
     // The defaults, not whatever the machine running the tests has saved.
     app.keybinds = Keybinds::defaults();
-    app.recorders = app.keybinds.recorders();
+    app.recorders = Keybinds::recorders();
     app.config = Settings::defaults();
     app
 }
@@ -50,7 +50,7 @@ fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     let path = dir.path().join("keybinds.kdl");
     let mut app = app(dir);
     app.keybinds = Keybinds::at(path.clone());
-    app.recorders = app.keybinds.recorders();
+    app.recorders = Keybinds::recorders();
     app.config = Settings::at(dir.path().join("config.kdl"));
     (app, path)
 }
@@ -330,6 +330,19 @@ fn click(rt: &mut Runtime<App>, key: &str) {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.1);
+}
+
+/// Presses and releases `key`, the way a keyboard sends it.
+fn press(rt: &mut Runtime<App>, key: PhysicalKeyCode) {
+    for pressed in [true, false] {
+        rt.physical_input(PhysicalInput::Key {
+            key,
+            mods: Mods::default(),
+            pressed,
+            repeat: false,
+        });
+        rt.frame(0.1);
+    }
 }
 
 #[test]
@@ -967,6 +980,54 @@ fn recording_a_chord_in_the_settings_binds_and_saves_it() {
     assert_eq!(rt.state.keybinds.chord(Action::Rename), Some(&f5));
     let saved = Keybinds::at(path);
     assert_eq!(saved.chord(Action::Rename), Some(&f5), "the file has it");
+}
+
+#[test]
+fn the_recorder_shows_the_bound_chord_as_a_keycap() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-keybinds");
+
+    let first = rt.state.keybinds.keycaps(Action::Rename)[0].clone();
+    let drawn = rt.elements().iter().any(|e| {
+        e.path.contains("/record-rename-field/")
+            && e.path.ends_with("/keycap0/cap/face/label")
+            && e.text.as_deref() == Some(first.as_str())
+    });
+    assert!(
+        drawn,
+        "the rename recorder draws its chord {first:?} on a key in a tray"
+    );
+}
+
+#[test]
+fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
+    let dir = fixture();
+    let (app, path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-keybinds");
+
+    let f2: rune::Shortcut = "f2".parse().unwrap();
+    click(&mut rt, "record-rename-field");
+    press(&mut rt, PhysicalKeyCode::Escape);
+    assert_eq!(rt.state.keybinds.chord(Action::Rename), Some(&f2));
+    assert!(!rt.state.recorders[&Action::Rename].is_recording());
+
+    click(&mut rt, "record-rename-field");
+    press(&mut rt, PhysicalKeyCode::Backspace);
+    assert_eq!(rt.state.keybinds.chord(Action::Rename), None);
+    assert_eq!(
+        Keybinds::at(path).chord(Action::Rename),
+        None,
+        "the file has the cleared chord"
+    );
 }
 
 fn command_bar_event(app: &App, shifted: bool) -> KeyEvent {

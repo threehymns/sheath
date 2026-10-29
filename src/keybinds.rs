@@ -9,8 +9,8 @@ use std::path::PathBuf;
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 
 use crate::config;
+use crate::recorder::Recorder;
 use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
-use rune_kit::ShortcutRecorderState;
 
 /// The file name under the config folder. Only keybinds live in it.
 const FILE: &str = "keybinds.kdl";
@@ -233,16 +233,12 @@ impl Keybinds {
         self.chords.get(&action)
     }
 
-    /// One recorder per action, showing the chord bound now: what the settings dialog edits.
-    pub fn recorders(&self) -> BTreeMap<Action, ShortcutRecorderState> {
+    /// One fresh recorder per action, nothing listened for yet: what the settings dialog edits.
+    /// The bound chords stay in [`Keybinds`], where the recorder's field reads them.
+    pub fn recorders() -> BTreeMap<Action, Recorder> {
         Action::ALL
             .into_iter()
-            .map(|action| {
-                (
-                    action,
-                    ShortcutRecorderState::new(self.chord(action).cloned()),
-                )
-            })
+            .map(|action| (action, Recorder::default()))
             .collect()
     }
 
