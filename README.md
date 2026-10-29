@@ -99,7 +99,9 @@ navigate in place, and back/forward keep their history while the search field is
   to narrow back to one. The path bar counts a selection ("3 of 5 selected") and a right-click
   inside one keeps it.
 - A rubber-band box: dragging in the list's empty space selects the rows it sweeps; Shift adds
-  them, Cmd/Ctrl toggles them, and Cmd/Ctrl+Shift does both.
+  them, Cmd/Ctrl toggles them, and Cmd/Ctrl+Shift does both. Option-drag (Alt on Linux) starts
+  the box on the rows themselves, so a list that fills the window can be swept too; held
+  against the list's top or bottom edge the box scrolls it and takes the rows that pass under.
 - Drag and drop: dragging a row (or a whole selection) onto a folder row or a sidebar place
   moves it there, with the target row highlighted and a badge following the pointer. Holding a
   drag against the list's top or bottom edge scrolls it under the pointer, faster the further
@@ -205,14 +207,14 @@ as Rune's app guidance recommends. Update the `rev` in `Cargo.toml` to move to a
 cargo test
 ```
 
-The 92 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
+The 93 tests cover folder ordering, hidden files, search, sorting, history, new-folder naming,
 rename/move/trash including their refusal cases, text and folder previews, copy/cut/paste and
 duplicate (files and folders, unique names, cuts pasting once), keybinds (matching, recorded
 changes, conflicts, the KDL round trip and a broken file), the saved settings files, the
 scrolling options and their momentum and bounce, plus
 headless Rune runs that select and open rows, walk rows with the keyboard, extend, toggle and
-Ctrl+Shift-click a selection, draw a box with each modifier combination, drag rows onto a
-folder row and onto a sidebar place (and refuse a collision), scroll the list they are dragged
+Ctrl+Shift-click a selection, draw a box with each modifier combination (empty space and
+Option-dragged over the rows), drag rows onto a folder row and onto a sidebar place (and refuse a collision), scroll the list they are dragged
 against, resize a column, jump to a name
 by typing, right-click rows (in every column) to open the row menu, pick its items, run the
 command bar by key and by click, walk the settings sidebar and its categories, toggle the

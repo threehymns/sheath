@@ -1197,9 +1197,24 @@ impl App {
     }
 
     /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
-    /// the selection can be dragged) and a press on the empty space starts a selection box.
+    /// the selection can be dragged) and a press on the empty space starts a selection box. With
+    /// Option (Alt) held the box starts anywhere, over the rows themselves.
     /// Points are the window's.
     pub fn begin_press(&mut self, at: (f32, f32), mods: Mods, tx: &mut Tx) {
+        // A box over the rows is the one thing they can't get otherwise: the list only has empty
+        // space to start one in when it doesn't scroll, so Option is how a long list gets swept.
+        if mods.alt && self.row_at_window(at.1).is_some() {
+            self.file_drag = None;
+            self.marquee = Some(Marquee {
+                start: at,
+                current: at,
+                base: self.selection.clone(),
+                toggle: mods.cmd || mods.ctrl,
+                extend: mods.shift,
+                dragging: false,
+            });
+            return;
+        }
         let Some(index) = self.row_at_window(at.1) else {
             self.file_drag = None;
             self.marquee = Some(Marquee {
