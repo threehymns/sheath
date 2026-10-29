@@ -1430,7 +1430,9 @@ fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .w(560.0)
         .max_h(440.0)
         .radius(10.0)
-        .fill(k.c.layer_01)
+        // A step below the page, so the shortcuts' recessed trays read as wells rather than
+        // sitting on the same brightness.
+        .fill(if k.dark { k.c.bg_base } else { k.c.layer_02 })
         .border(1.0, k.c.border_muted)
         .clip_rounded(10.0)
         // A modal, so Escape closes it (rather than just blurring the field) and focus stays
