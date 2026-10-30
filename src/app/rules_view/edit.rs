@@ -299,7 +299,9 @@ impl App {
             return;
         }
         let index = edit.index;
-        let written = self.store.edit(config::CONFIG, |doc| {
+        // A write the store could not make is `store.write_error`'s to report; `rule_error` stays
+        // for a file that does not parse, which is what makes the list read only.
+        let _ = self.store.edit(config::CONFIG, |doc| {
             let Some(&at) = rule_positions(doc).get(index) else {
                 return;
             };
@@ -312,8 +314,5 @@ impl App {
             }
         });
         self.after_rule_change();
-        if let Err(err) = written {
-            self.rule_error = Some(err);
-        }
     }
 }

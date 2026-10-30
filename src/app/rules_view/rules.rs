@@ -83,12 +83,10 @@ impl App {
             }),
             Err(err) => Err(format!("Couldn’t write the rule: {err}")),
         };
-        let appended = written.is_ok();
         self.after_rule_change();
-        // Set after the reload, which clears it whenever the file reads back cleanly.
-        if let Err(err) = written {
-            self.rule_error = Some(err);
-        } else if appended && self.settings == Some(SettingsTab::Rules) {
+        // A write the store could not make is `store.write_error`'s to report; `rule_error` stays
+        // for a file that does not parse, which is what makes the list read only.
+        if written.is_ok() && self.settings == Some(SettingsTab::Rules) {
             // The tab scrolls to the rule the action just wrote, wherever in the file it landed.
             self.rule_reveal = rule_key(&self.rules.rules, index).map(|key| (key, 1));
             self.rule_query = None;

@@ -288,6 +288,60 @@ fn a_file_that_breaks_after_it_loaded_is_never_written_back() {
     );
 }
 
+/// The atomic save writes `.config.kdl.tmp` first, so a folder in its place makes the write
+/// fail without touching the file the store holds.
+#[test]
+fn a_failed_write_is_the_stores_error_not_a_rule_error() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    grid #false\n}\n",
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    fs::create_dir(dir.path().join(".config.kdl.tmp")).unwrap();
+
+    app.save_view_rule();
+    assert!(
+        app.store.write_error.is_some(),
+        "the store says why it failed"
+    );
+    assert!(
+        app.rule_error.is_none(),
+        "a write failure is not a file that does not parse: {:?}",
+        app.rule_error
+    );
+    assert!(app.rules.rules.is_empty(), "nothing reached the file");
+}
+
+#[test]
+fn a_failed_rule_edit_is_the_stores_error_too() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    fs::create_dir(dir.path().join(".config.kdl.tmp")).unwrap();
+
+    app.open_rule_edit(0);
+    app.save_rule_edit();
+    assert!(
+        app.store.write_error.is_some(),
+        "the store says why it failed"
+    );
+    assert!(
+        app.rule_error.is_none(),
+        "a write failure is not a file that does not parse: {:?}",
+        app.rule_error
+    );
+    assert_eq!(app.rules.rules.len(), 1, "the rule is still listed");
+}
+
 #[test]
 fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
     let dir = fixture();
