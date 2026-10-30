@@ -6,13 +6,15 @@
 //! pinning an entry, deleting, reordering, and the picker.
 
 mod edit;
+mod prop;
 mod rules;
 
 use crate::app::App;
 use crate::rules::Rule;
 use kdl::KdlDocument;
 
-pub use edit::{RuleEdit, RuleProp};
+pub use edit::RuleEdit;
+pub use prop::{RuleMenu, RuleProp};
 
 /// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
 pub const RULE_ROW_HEIGHT: f32 = 56.0;

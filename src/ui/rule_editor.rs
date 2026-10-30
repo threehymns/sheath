@@ -2,11 +2,12 @@
 //! kind, matches, excludes and properties, each under its own heading; every control edits the
 //! draft, and Save writes it.
 
-use crate::app::{App, RuleEdit, RuleProp};
-use crate::rules::{EntryKind, Kind, Matcher, Prop};
+use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
+use crate::rules::{EntryKind, Kind, Matcher};
 use rune::{El, TextEdit, Tx, col, row, text};
 use rune_kit::{
-    Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SortDir, TextInput,
+    Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select,
+    SelectAppearance, TextInput,
 };
 use rune_theme_opencode as theme;
 use std::collections::BTreeMap;
@@ -14,10 +15,18 @@ use std::collections::BTreeMap;
 use super::dialogs::error_text;
 use super::settings::SETTINGS_ROW_INSET;
 
+/// The width of a property's field, and of the two menus that are not properties.
+const PROP_WIDTH: f32 = 150.0;
+const ADD_WIDTH: f32 = 140.0;
+const KIND_WIDTH: f32 = 110.0;
+
+/// What an entry matcher's `kind` accepts, as its field lists them.
+const KINDS: &[&str] = &["any", "file", "folder"];
+
 /// The open rule's form: its name and kind, a line per match and exclude, and a line per
-/// property, whose value button cycles through every value the file accepts, `inherit`
-/// included, beside a button that clears it. It edits a draft; Save writes it and Cancel drops
-/// it.
+/// property the rule sets. A property's field lists every value the file accepts, `inherit`
+/// included, and the button beside it takes the property back out; Add Property offers the
+/// properties the rule does not set yet. It edits a draft; Save writes it and Cancel drops it.
 pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
@@ -113,7 +122,7 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             form = form.child(matcher_row(k, edit, matcher, exclude, index));
         }
     }
-    form.child(property_row(k, edit))
+    form.child(properties(k, edit))
 }
 
 /// One `match` or `exclude` directive: a field per key the rule's kind accepts, and a button
@@ -163,16 +172,15 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
                     90.0,
                 ))
                 .child(
-                    Button::new(match matcher.kind {
-                        None => "kind: any".to_owned(),
-                        Some(EntryKind::File) => "kind: file".to_owned(),
-                        Some(EntryKind::Folder) => "kind: folder".to_owned(),
-                    })
-                    .variant(ButtonVariant::Outline)
-                    .control_size(ControlSize::Small)
-                    .on_press(move |s: &mut App| s.cycle_matcher_kind(exclude, index))
-                    .build(k)
-                    .key(format!("matcher-{prefix}-kind")),
+                    Select::new(format!("matcher-{prefix}-kind"), KINDS)
+                        .current(Some(kind_label(matcher.kind)))
+                        .appearance(SelectAppearance::Field)
+                        .width(KIND_WIDTH)
+                        .open(edit.menu == Some(RuleMenu::Matcher { exclude, index }))
+                        .on_toggle(move |s: &mut App| {
+                            s.toggle_rule_menu(RuleMenu::Matcher { exclude, index })
+                        })
+                        .trigger(k),
                 );
         }
     }
@@ -187,50 +195,26 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
     )
 }
 
-/// The properties the rule's kind accepts, one row apiece, under their own heading: pressing a
-/// row's value advances it, and a property the rule sets can be cleared, so the rules above
-/// decide it instead.
-fn property_row(k: &Kit, edit: &RuleEdit) -> El {
-    let mut properties = Vec::new();
-    match edit.draft.kind {
-        Kind::Folder => {
-            properties.push((
-                "view",
-                RuleProp::View,
-                describe(edit.draft.props.view, |view| {
-                    if view.is_grid() { "grid" } else { "list" }
-                }),
-                edit.draft.props.view != Prop::Unset,
-            ));
-            properties.push((
-                "sort",
-                RuleProp::Sort,
-                describe(edit.draft.props.sort, |sort| sort.as_str()),
-                edit.draft.props.sort != Prop::Unset,
-            ));
-            properties.push((
-                "direction",
-                RuleProp::Direction,
-                describe(edit.draft.props.direction, |direction| match direction {
-                    SortDir::Ascending => "ascending",
-                    SortDir::Descending => "descending",
-                }),
-                edit.draft.props.direction != Prop::Unset,
-            ));
-            properties.push((
-                "show-hidden",
-                RuleProp::ShowHidden,
-                describe(edit.draft.props.show_hidden, |on| if on { "show" } else { "hide" }),
-                edit.draft.props.show_hidden != Prop::Unset,
-            ));
-        }
-        Kind::Entry => properties.push((
-            "hidden",
-            RuleProp::Hidden,
-            describe(edit.draft.props.hidden, |on| if on { "hide" } else { "show" }),
-            edit.draft.props.hidden != Prop::Unset,
-        )),
+/// The kind a field lists, as the file's `kind` words it.
+fn kind_label(kind: Option<EntryKind>) -> &'static str {
+    match kind {
+        None => "any",
+        Some(EntryKind::File) => "file",
+        Some(EntryKind::Folder) => "folder",
     }
+}
+
+/// The properties the rule sets, one line apiece, under their own heading: the field beside
+/// each name lists every value the file accepts, and the button at the line's end — shown
+/// while the pointer is over the line — takes the property back out, so the rules above
+/// decide it. Add Property offers the properties the rule does not set yet.
+fn properties(k: &Kit, edit: &RuleEdit) -> El {
+    let unset: Vec<&str> = RuleProp::all(edit.draft.kind)
+        .iter()
+        .copied()
+        .filter(|prop| !prop.is_set(&edit.draft.props))
+        .map(RuleProp::name)
+        .collect();
     let mut section = col()
         .key("rule-editor-properties")
         .w_full()
@@ -245,61 +229,133 @@ fn property_row(k: &Kit, edit: &RuleEdit) -> El {
                         .font(k.ty.caption())
                         .color(k.c.text_muted)
                         .grow(1.0),
+                )
+                .child(
+                    Select::new("add-property", &unset)
+                        .placeholder("Add Property")
+                        .appearance(SelectAppearance::Field)
+                        .width(ADD_WIDTH)
+                        .open(edit.menu == Some(RuleMenu::AddProperty))
+                        .disabled(unset.is_empty())
+                        .on_toggle(|s: &mut App| s.toggle_rule_menu(RuleMenu::AddProperty))
+                        .trigger(k),
                 ),
-        )
-        .child(
-            text("Press a value to change it. A property the rule leaves unset follows the rule above.")
-                .font(k.ty.small)
-                .color(k.c.text_faint)
-                .wrap(),
         );
-    for (name, prop, value, set) in properties {
-        let mut line = row()
-            .w_full()
-            .center_y()
-            .gap(6.0)
-            .child(
-                text(name)
-                    .font(k.ty.ui)
-                    .color(if set {
-                        k.c.text_base
-                    } else {
-                        k.c.text_muted
-                    })
-                    .w(96.0),
+    let set: Vec<RuleProp> = RuleProp::all(edit.draft.kind)
+        .iter()
+        .copied()
+        .filter(|prop| prop.is_set(&edit.draft.props))
+        .collect();
+    if set.is_empty() {
+        section = section.child(
+            text(
+                "This rule sets no properties yet. Add Property adds a view, a sort, or which \
+                 entries the folder hides.",
             )
-            .child(
-                Button::new(if set { value } else { "not set".to_owned() })
-                    .variant(ButtonVariant::Outline)
-                    .control_size(ControlSize::Small)
-                    .on_press(move |s: &mut App| s.cycle_rule_prop(prop))
-                    .build(k)
-                    .key(format!("prop-{name}")),
-            );
-        if set {
-            line = line.child(
-                IconButton::new(&theme::icons::TRASH)
-                    .variant(IconButtonVariant::GhostMuted)
-                    .control_size(ControlSize::Small)
-                    .label(format!("Clear {name}"))
-                    .help(format!(
-                        "Take `{name}` out of the rule, so the rule above decides it"
-                    ))
-                    .on_press(move |s: &mut App| s.clear_rule_prop(prop))
-                    .build(k)
-                    .key(format!("clear-prop-{name}")),
-            );
-        }
-        section = section.child(line);
+            .font(k.ty.small)
+            .color(k.c.text_faint)
+            .wrap(),
+        );
+    }
+    for prop in set {
+        section = section.child(property_line(k, edit, prop));
     }
     section
 }
 
-fn describe<T: Copy>(prop: Prop<T>, label: impl Fn(T) -> &'static str) -> String {
-    match prop {
-        Prop::Unset => "default".to_owned(),
-        Prop::Inherit => "inherit".to_owned(),
-        Prop::Set(value) => label(value).to_owned(),
+/// One property the rule sets: its name, the field that lists its values, and the button that
+/// takes it out of the rule.
+fn property_line(k: &Kit, edit: &RuleEdit, prop: RuleProp) -> El {
+    let name = prop.name();
+    row()
+        .key(format!("prop-{name}"))
+        .w_full()
+        .center_y()
+        .gap(6.0)
+        .hover_group()
+        .child(text(name).font(k.ty.ui).color(k.c.text_base).w(96.0))
+        .child(
+            Select::new(format!("prop-select-{name}"), prop.options())
+                .current(prop.label(&edit.draft.props))
+                .appearance(SelectAppearance::Field)
+                .width(PROP_WIDTH)
+                .open(edit.menu == Some(RuleMenu::Prop(prop)))
+                .on_toggle(move |s: &mut App| s.toggle_rule_menu(RuleMenu::Prop(prop)))
+                .trigger(k),
+        )
+        .child(
+            IconButton::new(&theme::icons::TRASH)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label(format!("Remove {name}"))
+                .help(format!(
+                    "Take `{name}` out of the rule, so the rule above decides it"
+                ))
+                .on_press(move |s: &mut App| s.clear_rule_prop(prop))
+                .build(k)
+                .key(format!("clear-prop-{name}"))
+                // The line is the group: the button is there to be found once the pointer
+                // rests on it, and out of the way the rest of the time.
+                .group_opacity(0.0, 1.0),
+        )
+}
+
+/// The form's open menu, mounted after the settings panel so it paints above the panel it
+/// hangs from. The form's fields are the triggers; the list anchors to whichever one asked.
+pub(super) fn rule_editor_layers(s: &App, k: &Kit, layers: &mut Vec<El>) {
+    let Some(edit) = &s.rule_edit else {
+        return;
+    };
+    let Some(menu) = edit.menu else {
+        return;
+    };
+    match menu {
+        RuleMenu::AddProperty => {
+            let unset: Vec<&str> = RuleProp::all(edit.draft.kind)
+                .iter()
+                .copied()
+                .filter(|prop| !prop.is_set(&edit.draft.props))
+                .map(RuleProp::name)
+                .collect();
+            let _ = Select::new("add-property", &unset)
+                .appearance(SelectAppearance::Field)
+                .width(ADD_WIDTH)
+                .open(true)
+                .on_close(|s: &mut App| s.close_rule_menu())
+                .on_choose(|s: &mut App, name: &str, _: &mut Tx| s.add_rule_prop(name))
+                .build(k, layers);
+        }
+        RuleMenu::Prop(prop) => {
+            let _ = Select::new(format!("prop-select-{}", prop.name()), prop.options())
+                .current(prop.label(&edit.draft.props))
+                .appearance(SelectAppearance::Field)
+                .width(PROP_WIDTH)
+                .open(true)
+                .on_close(|s: &mut App| s.close_rule_menu())
+                .on_choose(move |s: &mut App, value: &str, _: &mut Tx| {
+                    s.set_rule_prop(prop, value)
+                })
+                .build(k, layers);
+        }
+        RuleMenu::Matcher { exclude, index } => {
+            let matchers = if exclude {
+                &edit.draft.excludes
+            } else {
+                &edit.draft.matches
+            };
+            let current = matchers.get(index).map(|matcher| matcher.kind);
+            let prefix = format!("{}{index}", if exclude { "x" } else { "m" });
+            let _ = Select::new(format!("matcher-{prefix}-kind"), KINDS)
+                .current(current.map(kind_label))
+                .appearance(SelectAppearance::Field)
+                .width(KIND_WIDTH)
+                .open(true)
+                .on_close(|s: &mut App| s.close_rule_menu())
+                .on_choose(move |s: &mut App, value: &str, _: &mut Tx| {
+                    s.set_matcher_kind(exclude, index, value)
+                })
+                .build(k, layers);
+        }
     }
 }
 

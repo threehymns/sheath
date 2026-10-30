@@ -28,7 +28,7 @@ pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
-pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp, rule_key};
+pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
 

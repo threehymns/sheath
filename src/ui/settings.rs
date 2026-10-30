@@ -198,6 +198,11 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .items_center()
             .child(dialog),
     );
+    // The rule form's open menu is mounted after the panel, so it paints above the card its
+    // field hangs from.
+    if tab == SettingsTab::Rules {
+        super::rule_editor::rule_editor_layers(s, k, layers);
+    }
 }
 
 /// The pane's title (Hex's pane header). Done is in the dialog's corner, so nothing sits in the

@@ -102,11 +102,11 @@ fn the_rules_tab_edits_a_rule_in_place() {
 }
 
 #[test]
-fn the_rule_editor_cycles_properties_and_the_rule_kind() {
+fn the_rule_editor_picks_a_property_value_from_a_list() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view list\n}\n",
     )
     .unwrap();
 
@@ -114,43 +114,53 @@ fn the_rule_editor_cycles_properties_and_the_rule_kind() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
 
-    click(&mut rt, "prop-view");
-    assert!(
-        matches!(
-            rt.state
-                .rule_edit
-                .as_ref()
-                .expect("the form is open")
-                .draft
-                .props
-                .view,
-            crate::rules::Prop::Inherit
-        ),
-        "the cycle moves the draft"
+    // The field beside `view` lists the values the file accepts: list, grid, inherit.
+    click(&mut rt, "prop-select-view-trigger");
+    assert_eq!(
+        rt.state
+            .rule_edit
+            .as_ref()
+            .expect("the form is open")
+            .menu,
+        Some(crate::app::RuleMenu::Prop(crate::app::RuleProp::View)),
+        "the field opens the property's list"
+    );
+    click(&mut rt, "option1");
+    assert_eq!(
+        rt.state
+            .rule_edit
+            .as_ref()
+            .expect("the form is open")
+            .draft
+            .props
+            .view,
+        crate::rules::Prop::Set(crate::app::ViewMode::Grid),
+        "picking a value moves the draft"
     );
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(
-        !text.contains("view inherit"),
+        !text.contains("view grid"),
         "the file waits for Save: {text}"
     );
 
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("view inherit"), "{text}");
+    assert!(text.contains("view grid"), "{text}");
 
+    // The rule's kind is still a press of its own, and an entry rule takes no view.
     click(&mut rt, "edit-rule-0");
     click(&mut rt, "rule-editor-kind");
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("entry-rule"), "the node changed kind: {text}");
     assert!(
-        !text.contains("view inherit"),
+        !text.contains("view grid"),
         "entry rules take no view: {text}"
     );
 }
 
 #[test]
-fn the_rule_editor_clears_a_property() {
+fn the_rule_editor_removes_a_property_from_the_rule() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
@@ -162,6 +172,10 @@ fn the_rule_editor_clears_a_property() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
 
+    // The line reveals its remove button while the pointer rests on it.
+    let (x, y) = rt.find("prop-view").expect("the property has a line");
+    rt.pointer_move(x, y);
+    rt.frame(0.1);
     click(&mut rt, "clear-prop-view");
     assert_eq!(
         rt.state
@@ -172,11 +186,15 @@ fn the_rule_editor_clears_a_property() {
             .props
             .view,
         crate::rules::Prop::Unset,
-        "clearing takes the property out of the draft"
+        "removing takes the property out of the draft"
+    );
+    assert!(
+        rt.find("prop-view").is_none(),
+        "and its line off the form"
     );
     assert!(
         rt.find("clear-prop-view").is_none(),
-        "a property the rule no longer sets cannot be cleared again"
+        "a property the rule no longer sets has nothing to remove"
     );
 
     click(&mut rt, "rule-editor-save");
@@ -189,6 +207,56 @@ fn the_rule_editor_clears_a_property() {
         text.contains("sort size"),
         "the other property stays: {text}"
     );
+}
+
+#[test]
+fn the_rule_editor_adds_a_property_from_the_menu() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    assert!(
+        rt.find("prop-sort").is_none(),
+        "a property the rule leaves unset has no line"
+    );
+    // Add Property lists what the rule does not set yet: view, sort, direction, show-hidden.
+    click(&mut rt, "add-property-trigger");
+    assert_eq!(
+        rt.state
+            .rule_edit
+            .as_ref()
+            .expect("the form is open")
+            .menu,
+        Some(crate::app::RuleMenu::AddProperty),
+        "the button opens the menu of properties"
+    );
+    click(&mut rt, "option1");
+    assert_eq!(
+        rt.state
+            .rule_edit
+            .as_ref()
+            .expect("the form is open")
+            .draft
+            .props
+            .sort,
+        crate::rules::Prop::Set(crate::rules::SortKey::Name),
+        "adding sets the property"
+    );
+    assert!(
+        rt.find("prop-sort").is_some(),
+        "and puts a line for it on the form"
+    );
+
+    click(&mut rt, "rule-editor-save");
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("sort name"), "the rule took it: {text}");
 }
 
 #[test]

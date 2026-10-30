@@ -1,25 +1,15 @@
 //! The rule form: the draft every control edits, the fields it holds, and the Save, Cancel, and
-//! cycles that act on it. Nothing here writes the file until Save is pressed.
+//! menus that act on it. Nothing here writes the file until Save is pressed.
 
-use crate::app::{App, ViewMode};
+use crate::app::App;
 use crate::config;
-use crate::rules::{EntryKind, Kind, Matcher, Prop, Rule, SortKey};
+use crate::rules::{EntryKind, Kind, Matcher, Prop, Rule};
 use kdl::KdlNode;
 use rune::TextEdit;
-use rune_kit::SortDir;
 use std::collections::BTreeMap;
 
+use super::prop::{RuleMenu, RuleProp};
 use super::rule_positions;
-
-/// One property the editor can change, in the button that cycles it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RuleProp {
-    View,
-    Sort,
-    Direction,
-    ShowHidden,
-    Hidden,
-}
 
 /// The rule open in the tab's editor: the draft every control edits, and one text field per
 /// string the draft holds.
@@ -34,6 +24,8 @@ pub struct RuleEdit {
     pub original: Rule,
     /// Why Save would refuse, in the form's own words.
     pub error: Option<String>,
+    /// The menu that is open, if one is.
+    pub menu: Option<RuleMenu>,
 }
 
 impl RuleEdit {
@@ -44,6 +36,7 @@ impl RuleEdit {
             fields: BTreeMap::new(),
             original: rule.clone(),
             error: None,
+            menu: None,
         };
         edit.reseed();
         edit
@@ -65,6 +58,9 @@ impl RuleEdit {
     /// Builds the text fields for the draft as it stands now. Structural changes (a new matcher,
     /// another rule kind) shift the keys, so the fields are rebuilt from the draft.
     fn reseed(&mut self) {
+        // A structural change (another kind, a matcher added or dropped) leaves the open menu
+        // naming a control that no longer exists.
+        self.menu = None;
         self.fields.clear();
         let name = self.draft.name.clone().unwrap_or_default();
         self.fields.insert("name".to_owned(), TextEdit::new(name));
@@ -103,12 +99,6 @@ fn seed_matcher(
             put("extension", matcher.extension.clone().unwrap_or_default());
         }
     }
-}
-
-/// The next value of a property's cycle: unset, each value the file accepts, then `inherit`.
-fn cycle<T: Copy + PartialEq>(prop: Prop<T>, steps: &[Prop<T>]) -> Prop<T> {
-    let at = steps.iter().position(|step| *step == prop).unwrap_or(0);
-    steps[(at + 1) % steps.len()]
 }
 
 /// What the form cannot save as it stands: a matcher that names nothing (the file reads an
@@ -339,70 +329,48 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Advances one property through the values the file accepts.
-    pub fn cycle_rule_prop(&mut self, prop: RuleProp) {
+    /// Opens `menu`, or closes it when it is the one already open.
+    pub fn toggle_rule_menu(&mut self, menu: RuleMenu) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
         };
-        let props = &mut edit.draft.props;
-        match prop {
-            RuleProp::View => {
-                props.view = cycle(
-                    props.view,
-                    &[
-                        Prop::Unset,
-                        Prop::Set(ViewMode::List),
-                        Prop::Set(ViewMode::Grid),
-                        Prop::Inherit,
-                    ],
-                )
-            }
-            RuleProp::Sort => {
-                props.sort = cycle(
-                    props.sort,
-                    &[
-                        Prop::Unset,
-                        Prop::Set(SortKey::Name),
-                        Prop::Set(SortKey::Size),
-                        Prop::Set(SortKey::Modified),
-                        Prop::Inherit,
-                    ],
-                )
-            }
-            RuleProp::Direction => {
-                props.direction = cycle(
-                    props.direction,
-                    &[
-                        Prop::Unset,
-                        Prop::Set(SortDir::Ascending),
-                        Prop::Set(SortDir::Descending),
-                        Prop::Inherit,
-                    ],
-                )
-            }
-            RuleProp::ShowHidden => {
-                props.show_hidden = cycle(
-                    props.show_hidden,
-                    &[
-                        Prop::Unset,
-                        Prop::Set(true),
-                        Prop::Set(false),
-                        Prop::Inherit,
-                    ],
-                )
-            }
-            RuleProp::Hidden => {
-                props.hidden = cycle(
-                    props.hidden,
-                    &[
-                        Prop::Unset,
-                        Prop::Set(true),
-                        Prop::Set(false),
-                        Prop::Inherit,
-                    ],
-                )
-            }
+        let empty = menu == RuleMenu::AddProperty
+            && RuleProp::all(edit.draft.kind)
+                .iter()
+                .all(|prop| prop.is_set(&edit.draft.props));
+        edit.menu = if empty || edit.menu == Some(menu) {
+            None
+        } else {
+            Some(menu)
+        };
+    }
+
+    pub fn close_rule_menu(&mut self) {
+        if let Some(edit) = self.rule_edit.as_mut() {
+            edit.menu = None;
         }
+    }
+
+    /// Adds a property the rule does not set yet, with the value it starts at.
+    pub fn add_rule_prop(&mut self, name: &str) {
+        let Some(prop) = RuleProp::from_name(name) else {
+            return;
+        };
+        let Some(edit) = self.rule_edit.as_mut() else {
+            return;
+        };
+        prop.set(&mut edit.draft.props, prop.initial());
+        edit.menu = None;
+        self.apply_rule_fields();
+    }
+
+    /// Sets one property from the value its field offered.
+    pub fn set_rule_prop(&mut self, prop: RuleProp, value: &str) {
+        let Some(edit) = self.rule_edit.as_mut() else {
+            return;
+        };
+        prop.set(&mut edit.draft.props, value);
+        edit.menu = None;
         self.apply_rule_fields();
     }
 
@@ -419,11 +387,12 @@ impl App {
             RuleProp::ShowHidden => props.show_hidden = Prop::Unset,
             RuleProp::Hidden => props.hidden = Prop::Unset,
         }
+        edit.menu = None;
         self.apply_rule_fields();
     }
 
-    /// Advances a matcher's `kind` through any, file and folder.
-    pub fn cycle_matcher_kind(&mut self, exclude: bool, index: usize) {
+    /// Sets a matcher's `kind` from the value its field offered: `any`, `file` or `folder`.
+    pub fn set_matcher_kind(&mut self, exclude: bool, index: usize, value: &str) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
         };
@@ -435,11 +404,12 @@ impl App {
         let Some(matcher) = matchers.get_mut(index) else {
             return;
         };
-        matcher.kind = match matcher.kind {
-            None => Some(EntryKind::File),
-            Some(EntryKind::File) => Some(EntryKind::Folder),
-            Some(EntryKind::Folder) => None,
+        matcher.kind = match value {
+            "file" => Some(EntryKind::File),
+            "folder" => Some(EntryKind::Folder),
+            _ => None,
         };
+        edit.menu = None;
         self.apply_rule_fields();
     }
 
