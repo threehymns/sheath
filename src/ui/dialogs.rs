@@ -178,22 +178,13 @@ pub(super) fn error_text(k: &Kit, error: &str) -> El {
 pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>) {
     let count = s.selection_len();
     let many = count > 1;
-    // The menu offers the opposite of what the row is doing now, so it reads the same
-    // resolution the filter does: an entry rule's `hidden` first, then the entry's dot-name.
+    // The menu offers the opposite of what the row is doing now, so it asks the same
+    // question the filter does, through the same helper.
     let hidden = s
         .selected
         .as_ref()
         .and_then(|id| s.entries.iter().find(|entry| &entry.id == id))
-        .is_some_and(|entry| {
-            let path = entry.path.to_string_lossy();
-            s.rules
-                .hidden(&crate::rules::EntryRef {
-                    path: &path,
-                    name: &entry.name,
-                    is_dir: entry.is_dir,
-                })
-                .unwrap_or(entry.hidden())
-        });
+        .is_some_and(|entry| s.entry_hidden(entry));
     context_menu("row-menu", el(), Some(at))
         // The rule items name whole sentences, so the menu is wider than the kit's default.
         .min_width(240.0)

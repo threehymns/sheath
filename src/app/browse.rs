@@ -126,22 +126,33 @@ impl App {
         });
     }
 
+    /// Whether the rules or the folder's own policy hide `entry`: an entry rule's `hidden`
+    /// first, then the dot-name, which only counts while hidden files are off. The row menu
+    /// reads the same answer the filter does.
+    pub fn entry_hidden(&self, entry: &Entry) -> bool {
+        let path = entry.path.to_string_lossy();
+        let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
+            path: &path,
+            name: &entry.name,
+            is_dir: entry.is_dir,
+        });
+        rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
+    }
+
     /// Rebuilds the rows that pass the hidden-file and search filters.
     pub fn apply_filter(&mut self) {
         // Different rows: what the old ones were coasting toward no longer means anything.
         self.scroll.stop();
         let query = self.search.text.trim().to_lowercase();
+        let hidden: Vec<bool> = self
+            .entries
+            .iter()
+            .map(|entry| self.entry_hidden(entry))
+            .collect();
         self.visible = (0..self.entries.len())
             .filter(|&i| {
                 let entry = &self.entries[i];
-                let path = entry.path.to_string_lossy();
-                let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
-                    path: &path,
-                    name: &entry.name,
-                    is_dir: entry.is_dir,
-                });
-                let hidden = rule_hidden.unwrap_or(!self.show_hidden && entry.hidden());
-                !hidden && (query.is_empty() || entry.name.to_lowercase().contains(&query))
+                !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
             })
             .collect();
         // The hidden and filtered rows drop out of the selection with the row itself.
