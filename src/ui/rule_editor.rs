@@ -5,7 +5,7 @@
 
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
 use crate::rules::{EntryKind, Kind, Matcher};
-use rune::{El, TextEdit, Tx, col, row, text};
+use rune::{Color, El, Shadow, TextEdit, Tx, col, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select,
     SelectAppearance, TextInput,
@@ -71,11 +71,31 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
                 ),
         );
     }
+    // The form is cut into the card rather than laid on top of it: the row's full width, a fill a
+    // clear step darker than the card, and an inset shade along the top edge. The rule row above
+    // stays on the card, so it reads as the form's header with the form sunk beneath it.
     let mut form = col()
         .key(format!("rule-editor-{}", edit.index))
         .w_full()
         .px(SETTINGS_ROW_INSET)
         .py(10.0)
+        .fill(well(k))
+        .box_shadow(Shadow {
+            x: 0.0,
+            y: 1.0,
+            blur: 2.0,
+            spread: 0.0,
+            color: k.c.black.alpha(0.55),
+            inset: true,
+        })
+        .box_shadow(Shadow {
+            x: 0.0,
+            y: -1.0,
+            blur: 0.0,
+            spread: 0.0,
+            color: k.c.white.alpha(0.06),
+            inset: true,
+        })
         .gap(10.0)
         .child(head);
     if let Some(message) = &edit.error {
@@ -198,6 +218,13 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
             .build(k)
             .key(format!("remove-{prefix}")),
     )
+}
+
+/// What an open form is filled with: black laid straight over the card, so the form is a clear
+/// step darker than the rows above it in either appearance. A solved token would depend on what
+/// the kit blends over, which is not the card the form actually sits on.
+fn well(k: &Kit) -> Color {
+    k.c.black.alpha(if k.dark { 0.45 } else { 0.05 })
 }
 
 /// A section's line for when it holds nothing, in the same faded type as the rest.
