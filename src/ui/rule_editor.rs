@@ -1,5 +1,6 @@
 //! The rule form: the editor the Rules tab opens under a row. It lays out the draft's name,
-//! kind, matchers and properties; every control edits the draft, and Save writes it.
+//! kind, matches, excludes and properties, each under its own heading; every control edits the
+//! draft, and Save writes it.
 
 use crate::app::{App, RuleEdit, RuleProp};
 use crate::rules::{EntryKind, Kind, Matcher, Prop};
@@ -13,9 +14,10 @@ use std::collections::BTreeMap;
 use super::dialogs::error_text;
 use super::settings::SETTINGS_ROW_INSET;
 
-/// The open rule's form: its name and kind, a line per match and exclude, and a button per
-/// property that cycles through every value the file accepts, `inherit` included. It edits a
-/// draft; Save writes it and Cancel drops it.
+/// The open rule's form: its name and kind, a line per match and exclude, and a line per
+/// property, whose value button cycles through every value the file accepts, `inherit`
+/// included, beside a button that clears it. It edits a draft; Save writes it and Cancel drops
+/// it.
 pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
@@ -185,55 +187,112 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
     )
 }
 
-/// One button per property the rule's kind accepts; pressing one advances its value.
+/// The properties the rule's kind accepts, one row apiece, under their own heading: pressing a
+/// row's value advances it, and a property the rule sets can be cleared, so the rules above
+/// decide it instead.
 fn property_row(k: &Kit, edit: &RuleEdit) -> El {
-    let mut buttons = Vec::new();
+    let mut properties = Vec::new();
     match edit.draft.kind {
         Kind::Folder => {
-            buttons.push((
+            properties.push((
                 "view",
                 RuleProp::View,
                 describe(edit.draft.props.view, |view| {
                     if view.is_grid() { "grid" } else { "list" }
                 }),
+                edit.draft.props.view != Prop::Unset,
             ));
-            buttons.push((
+            properties.push((
                 "sort",
                 RuleProp::Sort,
                 describe(edit.draft.props.sort, |sort| sort.as_str()),
+                edit.draft.props.sort != Prop::Unset,
             ));
-            buttons.push((
+            properties.push((
                 "direction",
                 RuleProp::Direction,
                 describe(edit.draft.props.direction, |direction| match direction {
                     SortDir::Ascending => "ascending",
                     SortDir::Descending => "descending",
                 }),
+                edit.draft.props.direction != Prop::Unset,
             ));
-            buttons.push((
+            properties.push((
                 "show-hidden",
                 RuleProp::ShowHidden,
                 describe(edit.draft.props.show_hidden, |on| if on { "show" } else { "hide" }),
+                edit.draft.props.show_hidden != Prop::Unset,
             ));
         }
-        Kind::Entry => buttons.push((
+        Kind::Entry => properties.push((
             "hidden",
             RuleProp::Hidden,
             describe(edit.draft.props.hidden, |on| if on { "hide" } else { "show" }),
+            edit.draft.props.hidden != Prop::Unset,
         )),
     }
-    let mut line = row().w_full().gap(6.0);
-    for (name, prop, value) in buttons {
-        line = line.child(
-            Button::new(format!("{name}: {value}"))
-                .variant(ButtonVariant::Outline)
-                .control_size(ControlSize::Small)
-                .on_press(move |s: &mut App| s.cycle_rule_prop(prop))
-                .build(k)
-                .key(format!("prop-{name}")),
+    let mut section = col()
+        .key("rule-editor-properties")
+        .w_full()
+        .gap(6.0)
+        .child(
+            row()
+                .w_full()
+                .center_y()
+                .gap(8.0)
+                .child(
+                    text("Properties")
+                        .font(k.ty.caption())
+                        .color(k.c.text_muted)
+                        .grow(1.0),
+                ),
+        )
+        .child(
+            text("Press a value to change it. A property the rule leaves unset follows the rule above.")
+                .font(k.ty.small)
+                .color(k.c.text_faint)
+                .wrap(),
         );
+    for (name, prop, value, set) in properties {
+        let mut line = row()
+            .w_full()
+            .center_y()
+            .gap(6.0)
+            .child(
+                text(name)
+                    .font(k.ty.ui)
+                    .color(if set {
+                        k.c.text_base
+                    } else {
+                        k.c.text_muted
+                    })
+                    .w(96.0),
+            )
+            .child(
+                Button::new(if set { value } else { "not set".to_owned() })
+                    .variant(ButtonVariant::Outline)
+                    .control_size(ControlSize::Small)
+                    .on_press(move |s: &mut App| s.cycle_rule_prop(prop))
+                    .build(k)
+                    .key(format!("prop-{name}")),
+            );
+        if set {
+            line = line.child(
+                IconButton::new(&theme::icons::TRASH)
+                    .variant(IconButtonVariant::GhostMuted)
+                    .control_size(ControlSize::Small)
+                    .label(format!("Clear {name}"))
+                    .help(format!(
+                        "Take `{name}` out of the rule, so the rule above decides it"
+                    ))
+                    .on_press(move |s: &mut App| s.clear_rule_prop(prop))
+                    .build(k)
+                    .key(format!("clear-prop-{name}")),
+            );
+        }
+        section = section.child(line);
     }
-    line
+    section
 }
 
 fn describe<T: Copy>(prop: Prop<T>, label: impl Fn(T) -> &'static str) -> String {

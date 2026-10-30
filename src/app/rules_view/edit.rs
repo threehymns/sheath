@@ -406,6 +406,22 @@ impl App {
         self.apply_rule_fields();
     }
 
+    /// Takes one property out of the draft, so the rule leaves it to the rules above it.
+    pub fn clear_rule_prop(&mut self, prop: RuleProp) {
+        let Some(edit) = self.rule_edit.as_mut() else {
+            return;
+        };
+        let props = &mut edit.draft.props;
+        match prop {
+            RuleProp::View => props.view = Prop::Unset,
+            RuleProp::Sort => props.sort = Prop::Unset,
+            RuleProp::Direction => props.direction = Prop::Unset,
+            RuleProp::ShowHidden => props.show_hidden = Prop::Unset,
+            RuleProp::Hidden => props.hidden = Prop::Unset,
+        }
+        self.apply_rule_fields();
+    }
+
     /// Advances a matcher's `kind` through any, file and folder.
     pub fn cycle_matcher_kind(&mut self, exclude: bool, index: usize) {
         let Some(edit) = self.rule_edit.as_mut() else {

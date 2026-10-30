@@ -150,6 +150,48 @@ fn the_rule_editor_cycles_properties_and_the_rule_kind() {
 }
 
 #[test]
+fn the_rule_editor_clears_a_property() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n    sort size\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    click(&mut rt, "clear-prop-view");
+    assert_eq!(
+        rt.state
+            .rule_edit
+            .as_ref()
+            .expect("the form is open")
+            .draft
+            .props
+            .view,
+        crate::rules::Prop::Unset,
+        "clearing takes the property out of the draft"
+    );
+    assert!(
+        rt.find("clear-prop-view").is_none(),
+        "a property the rule no longer sets cannot be cleared again"
+    );
+
+    click(&mut rt, "rule-editor-save");
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(
+        !text.contains("view grid"),
+        "the property left the rule: {text}"
+    );
+    assert!(
+        text.contains("sort size"),
+        "the other property stays: {text}"
+    );
+}
+
+#[test]
 fn the_rule_editor_adds_and_removes_a_matcher() {
     let dir = fixture();
     fs::write(
