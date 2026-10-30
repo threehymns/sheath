@@ -43,16 +43,26 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .sidebar_header(text("Sheath").font(k.ty.ui_medium).color(k.c.text_muted))
         .build(k);
     let mut layers = Vec::new();
-    // The selection box a drag draws, over the rows and under any dialog.
+    // The selection box a drag draws, over the rows and under any dialog. It is clipped to the
+    // list, so the part a scroll carries past the viewport is cut off rather than painted over
+    // the window: the box is as tall as the rows it spans.
     if let Some(box_rect) = s.marquee_rect() {
+        let view = s.rows_view;
         layers.push(
-            el().key("marquee")
-                .absolute(box_rect[0], box_rect[1])
-                .w(box_rect[2])
-                .h(box_rect[3])
-                .radius(3.0)
-                .fill(k.alpha(k.c.text_accent, 0.12))
-                .border(1.0, k.alpha(k.c.text_accent, 0.55)),
+            el().key("marquee-clip")
+                .absolute(view[0], view[1])
+                .w(view[2])
+                .h(view[3])
+                .clip_rounded(0.0)
+                .child(
+                    el().key("marquee")
+                        .absolute(box_rect[0] - view[0], box_rect[1] - view[1])
+                        .w(box_rect[2])
+                        .h(box_rect[3])
+                        .radius(3.0)
+                        .fill(k.alpha(k.c.text_accent, 0.12))
+                        .border(1.0, k.alpha(k.c.text_accent, 0.55)),
+                ),
         );
     }
     // What a dragged selection is and where it is, following the pointer.

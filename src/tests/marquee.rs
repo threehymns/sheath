@@ -1,7 +1,7 @@
 //! The selection box a drag draws.
 
 use super::helpers::*;
-use rune::Mods;
+use rune::{Mods, PhysicalInput};
 
 #[test]
 fn dragging_a_box_selects_the_rows_it_covers() {
@@ -81,6 +81,106 @@ fn a_press_without_moving_is_still_a_click() {
     rt.frame(0.1);
     assert_eq!(rt.state.selected_ids(), ["f:file2.txt"]);
     assert!(rt.state.marquee.is_none());
+}
+
+#[test]
+fn a_box_held_at_the_edge_stays_on_the_rows_it_started_on() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    let [x, top, _, height] = rt.presented("files-table").expect("the list").0;
+    let (x, from) = (x + 40.0, top + 120.0);
+    let to = top + height - 4.0;
+    let at_press = scroll_offset(&rt);
+    // Option starts a box on the rows, where a plain press would drag a row instead.
+    rt.physical_input(PhysicalInput::Modifiers(Mods {
+        alt: true,
+        ..Mods::default()
+    }));
+    rt.pointer_down(x, from);
+    rt.frame(0.05);
+    rt.pointer_move(x, to);
+    rt.frame(0.05);
+
+    // Held against the edge, the rows scroll under the pointer. The corner is a point on the
+    // row it started on, so it moves up with them rather than staying on the screen.
+    let before = scroll_offset(&rt);
+    for _ in 0..2 {
+        rt.frame(1.0 / 60.0);
+    }
+    let scrolled = scroll_offset(&rt) - at_press;
+    assert!(
+        scroll_offset(&rt) > before + 10.0,
+        "the edge scrolled the rows: {before} -> {}",
+        scroll_offset(&rt)
+    );
+    let [_, box_top, _, _] = rt.state.marquee_rect().expect("the box is drawn");
+    let row_top = rt.presented("f:file04.txt").expect("the row").0[1];
+    assert!(
+        (box_top - row_top).abs() < 2.0,
+        "the box's corner stays on the row it started on: {box_top} vs {row_top} at {scrolled} points scrolled"
+    );
+    assert!(
+        rt.state.selection.contains("f:file04.txt"),
+        "the row the box started on is still swept"
+    );
+
+    rt.pointer_up(x, to);
+    rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
+    rt.frame(0.1);
+}
+
+#[test]
+fn a_box_that_scrolls_a_screen_keeps_the_rows_that_left_it() {
+    let dir = long_folder(60);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    let [x, top, _, height] = rt.presented("files-table").expect("the list").0;
+    let (x, from) = (x + 40.0, top + 120.0);
+    let to = top + height - 4.0;
+    rt.physical_input(PhysicalInput::Modifiers(Mods {
+        alt: true,
+        ..Mods::default()
+    }));
+    rt.pointer_down(x, from);
+    rt.frame(0.05);
+    rt.pointer_move(x, to);
+    rt.frame(0.05);
+
+    // Held at the edge long enough to scroll the rows up by more than a screen.
+    for _ in 0..40 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert!(
+        scroll_offset(&rt) > height,
+        "the rows scrolled past a screen: {}",
+        scroll_offset(&rt)
+    );
+    assert!(
+        rt.state.selection.contains("f:file04.txt"),
+        "the box still holds the row it started on, off screen"
+    );
+    assert!(
+        !rt.state.selection.contains("f:file03.txt"),
+        "the row above where the box started is not swept"
+    );
+    assert!(
+        rt.state.selection_len() > 30,
+        "the box swept more than one screen of rows: {}",
+        rt.state.selection_len()
+    );
+    let [_, _, _, box_height] = rt.state.marquee_rect().expect("the box is drawn");
+    assert!(
+        box_height > height,
+        "the box is as tall as the rows it spans, not the viewport it is clipped to: \
+         {box_height} vs {height}"
+    );
+
+    rt.pointer_up(x, to);
+    rt.physical_input(PhysicalInput::Modifiers(Mods::default()));
+    rt.frame(0.1);
 }
 
 #[test]

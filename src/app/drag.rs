@@ -41,6 +41,10 @@ pub struct FileDrag {
 pub struct Marquee {
     pub start: (f32, f32),
     pub current: (f32, f32),
+    /// How far the rows sat from the viewport's top when the press landed: the scroll less its
+    /// bounce. The corner is a point on the rows, so knowing where they were lets it move with
+    /// them when the list scrolls under the pointer.
+    rows_at: f32,
     /// The selection and anchor when the press landed, which Shift and Cmd/Ctrl build on.
     base: BTreeSet<String>,
     /// Cmd/Ctrl at the press: rows in the box toggle instead of replacing the selection.
@@ -106,6 +110,7 @@ impl App {
             self.marquee = Some(Marquee {
                 start: at,
                 current: at,
+                rows_at: self.rows_at(),
                 base: self.selection.clone(),
                 toggle: mods.cmd || mods.ctrl,
                 extend: mods.shift,
@@ -118,6 +123,7 @@ impl App {
             self.marquee = Some(Marquee {
                 start: at,
                 current: at,
+                rows_at: self.rows_at(),
                 base: self.selection.clone(),
                 toggle: mods.cmd || mods.ctrl,
                 extend: mods.shift,
@@ -187,7 +193,7 @@ impl App {
     /// Selects the rows a box covers, built on the selection it started from: Shift adds the
     /// box, Cmd/Ctrl toggles it, and a plain box replaces the selection with it.
     fn sweep_box(&mut self, marquee: &Marquee) {
-        let swept = self.rows_in_box(marquee.start, marquee.current);
+        let swept = self.rows_in_box(self.marquee_start(marquee), marquee.current);
         self.selection = if marquee.extend {
             marquee.base.union(&swept).cloned().collect()
         } else if marquee.toggle {
@@ -379,37 +385,35 @@ impl App {
         }
     }
 
-    /// The rows a box between two window points covers, limited to the rows on screen.
+    /// The rows a box between two window points covers, from the row it started on to the one
+    /// under the pointer. The box is measured on the rows they stand for, not on the screen:
+    /// the ones a drag has scrolled past stay swept, so a box can take in more than one
+    /// viewportful.
     fn rows_in_box(&self, a: (f32, f32), b: (f32, f32)) -> BTreeSet<String> {
         if self.visible.is_empty() {
             return BTreeSet::new();
         }
         let view = self.rows_view;
-        let (top, bottom) = (
-            a.1.min(b.1).max(view[1]),
-            a.1.max(b.1).min(view[1] + view[3]),
-        );
-        if bottom < top {
+        // The rows are where this frame is putting them, not where the last one drew them.
+        let offset = self.scroll.current() - self.overshoot();
+        let height = self.content_height();
+        let top = (a.1.min(b.1) - view[1] + offset).clamp(0.0, height);
+        let bottom = (a.1.max(b.1) - view[1] + offset).clamp(0.0, height);
+        // A box past the last row covers none, however its window points sit.
+        if top >= height {
             return BTreeSet::new();
         }
-        // The rows are where this frame is putting them, not where the last one drew them.
-        let scroll = self.scroll.current();
-        let offset = scroll - self.overshoot();
         let indices = if self.is_grid() {
             let (left, right) = (
                 a.0.min(b.0).max(view[0]) - view[0],
                 a.0.max(b.0).min(view[0] + view[2]) - view[0],
             );
-            self.grid_indices_in_rect(
-                left,
-                top - view[1] + offset,
-                right,
-                bottom - view[1] + offset,
-            )
+            self.grid_indices_in_rect(left, top, right, bottom)
         } else {
-            let row = |y: f32| self.index_at((0.0, y - view[1] + offset));
-            let first = row(top).unwrap_or(0);
-            let last = row(bottom).unwrap_or(self.visible.len().saturating_sub(1));
+            let first = self.index_at((0.0, top)).unwrap_or(0);
+            let last = self
+                .index_at((0.0, bottom))
+                .unwrap_or(self.visible.len().saturating_sub(1));
             (first..=last.min(self.visible.len() - 1)).collect()
         };
         indices
@@ -418,23 +422,34 @@ impl App {
             .collect()
     }
 
-    /// The box's rect in window points, while a drag is drawing one. A drag straight down (or
-    /// across) still draws: the box keeps a hairline on the side it has no extent on.
+    /// Where the box's corner sits in window points now: the point the press landed on, which
+    /// is a point on the rows, so it moves with them as the list scrolls or bounces under the
+    /// pointer.
+    fn marquee_start(&self, marquee: &Marquee) -> (f32, f32) {
+        let moved = self.rows_at() - marquee.rows_at;
+        (marquee.start.0, marquee.start.1 - moved)
+    }
+
+    /// How far the rows sit from the viewport's top right now: the scroll, less the bounce.
+    fn rows_at(&self) -> f32 {
+        self.scroll.current() - self.overshoot()
+    }
+
+    /// The box's rect in window points, while a drag is drawing one: the corner it started on
+    /// to the pointer, as tall as the rows it spans. The view clips it to the list, so a drag
+    /// that scrolls draws a box taller than the viewport. A drag straight down (or across)
+    /// still draws: the box keeps a hairline on the side it has no extent on.
     pub fn marquee_rect(&self) -> Option<[f32; 4]> {
         let marquee = self.marquee.as_ref().filter(|m| m.dragging)?;
-        let view = self.rows_view;
-        let left = marquee.start.0.min(marquee.current.0).max(view[0]);
-        let right = marquee
-            .start
-            .0
-            .max(marquee.current.0)
-            .min(view[0] + view[2]);
-        let top = marquee.start.1.min(marquee.current.1).max(view[1]);
-        let bottom = marquee
-            .start
-            .1
-            .max(marquee.current.1)
-            .min(view[1] + view[3]);
+        let start = self.marquee_start(marquee);
+        let (left, right) = (
+            start.0.min(marquee.current.0),
+            start.0.max(marquee.current.0),
+        );
+        let (top, bottom) = (
+            start.1.min(marquee.current.1),
+            start.1.max(marquee.current.1),
+        );
         let (width, height) = (right - left, bottom - top);
         if height <= 0.0 {
             return None;
