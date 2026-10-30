@@ -258,6 +258,16 @@ impl App {
     /// Applies a change made to the config folder from outside: the settings, the keybinds, the
     /// rules, and whatever the open folder now resolves to.
     pub fn apply_config(&mut self) {
+        // The form names its rule by position in the file. A file that changed on disk may
+        // hold a different rule there, so the draft would land on the wrong node.
+        if self.rule_edit.is_some() {
+            self.rule_edit = None;
+            self.rule_query = Some(
+                "The config file changed on disk, so the rule editor closed. Open the rule \
+                 again to keep editing."
+                    .to_owned(),
+            );
+        }
         self.config = Settings::from_doc(self.store.doc(config::CONFIG));
         self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();

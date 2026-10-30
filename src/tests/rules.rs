@@ -507,7 +507,7 @@ fn a_command_with_no_matching_rule_says_so_in_the_tab() {
 }
 
 /// Opens the first rule's editor in the Rules tab.
-fn open_rule_editor(rt: &mut rune::Runtime<crate::app::App>) {
+pub(super) fn open_rule_editor(rt: &mut rune::Runtime<crate::app::App>) {
     rt.frame(0.0);
     click(rt, "open-settings");
     click(rt, "settings-tab-rules");
