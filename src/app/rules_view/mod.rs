@@ -48,6 +48,12 @@ impl RuleDrag {
         self.from
     }
 
+    /// Whether dropping now would change the order: the row is in hand and the pointer is over
+    /// another place.
+    pub fn moves(&self) -> bool {
+        self.from.is_some_and(|from| from != self.to)
+    }
+
     /// The pointer moved `dy` since the press on row `index`, which is `h` tall; `gap` is the
     /// hairline between two rows, which one step carries the rows across too.
     pub fn follow(&mut self, index: usize, count: usize, dy: f32, h: f32, gap: f32) {

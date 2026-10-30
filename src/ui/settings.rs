@@ -162,8 +162,10 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .fill(k.c.bg_deep)
             .border(1.0, k.c.border_muted)
             .clip_rounded(SETTINGS_RADIUS)
-            // A modal, so Escape closes it and focus stays inside while it is up.
-            .modal(true, |s: &mut App| s.close_settings())
+            // A modal, so Escape closes it and focus stays inside while it is up; the Rules
+            // tab's open form takes the key first, so Escape closes the form rather than the
+            // panel behind it.
+            .modal(true, |s: &mut App| s.dismiss_settings())
             .on_press(|_: &mut App| {})
             .child(sidebar)
             .child(panel)

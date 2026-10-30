@@ -90,8 +90,24 @@ impl App {
         }
     }
 
+    /// Asks before removing a rule: the row turns into a question until the second press.
+    pub fn ask_delete_rule(&mut self, index: usize) {
+        // The list on screen came from the last file that parsed, so its positions mean nothing
+        // against a document that has not.
+        if self.rule_error.is_some() {
+            return;
+        }
+        self.rule_delete_ask = Some(index);
+    }
+
+    pub fn cancel_delete_rule(&mut self) {
+        self.rule_delete_ask = None;
+    }
+
     /// Removes the rule at `index` in the tab's order.
     pub fn delete_rule(&mut self, index: usize) {
+        // The confirmed press leaves no question behind, whichever way it got here.
+        self.rule_delete_ask = None;
         // The list on screen came from the last file that parsed, so its positions mean nothing
         // against a document that has not.
         if self.rule_error.is_some() {

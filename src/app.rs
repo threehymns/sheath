@@ -113,6 +113,10 @@ pub struct App {
     pub rule_query: Option<String>,
     /// The rule open in the tab's editor, while the form is up.
     pub rule_edit: Option<RuleEdit>,
+    /// The rule whose delete is waiting on a second press, while the row asks.
+    pub rule_delete_ask: Option<usize>,
+    /// Whether the rule press in flight became a drag, so its release does not open the form.
+    pub rule_dragged: bool,
     /// A presentation the user chose for this visit, over what the rules say. Cleared on every
     /// navigation, so a rule wins again the next time the folder opens.
     pub visit: Resolved,
@@ -220,6 +224,8 @@ impl App {
             rule_reveal: None,
             rule_query: None,
             rule_edit: None,
+            rule_delete_ask: None,
+            rule_dragged: false,
             visit: Resolved::default(),
             views: Views::default(),
             keybinds,
@@ -267,6 +273,8 @@ impl App {
                     .to_owned(),
             );
         }
+        // The question names a rule by the same position, so it is stale for the same reason.
+        self.rule_delete_ask = None;
         self.config = Settings::from_doc(self.store.doc(config::CONFIG));
         self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();

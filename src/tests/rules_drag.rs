@@ -150,6 +150,10 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
 
     rt.pointer_up(x, y + 60.0);
     rt.frame(0.05);
+    assert!(
+        rt.state.rule_edit.is_some(),
+        "the release does not read as a click on the row and close the form"
+    );
     assert_eq!(
         fs::read_to_string(dir.path().join("config.kdl")).unwrap(),
         original,

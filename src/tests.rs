@@ -11,6 +11,7 @@ mod menu;
 mod rules;
 mod rules_drag;
 mod rules_editor;
+mod rules_list;
 mod scroll;
 mod selection;
 mod settings;

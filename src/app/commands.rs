@@ -129,15 +129,27 @@ impl App {
     pub fn open_tab(&mut self, tab: SettingsTab) {
         self.rule_query = None;
         self.rule_reveal = None;
+        self.rule_delete_ask = None;
         if tab != SettingsTab::Rules {
             self.rule_edit = None;
         }
         self.settings = Some(tab);
     }
 
+    /// Escape out of the settings panel. The Rules tab's open form takes it first, so the form
+    /// closes and the panel behind it stays: the work in it is not lost with the panel.
+    pub fn dismiss_settings(&mut self) {
+        if self.settings == Some(SettingsTab::Rules) && self.rule_edit.is_some() {
+            self.discard_rule_edit();
+            return;
+        }
+        self.close_settings();
+    }
+
     pub fn close_settings(&mut self) {
         self.settings = None;
         self.rule_edit = None;
+        self.rule_delete_ask = None;
         // A drag left half-done would keep its rows shifted the next time the tab opens.
         self.rule_drag = Default::default();
         self.rule_query = None;
