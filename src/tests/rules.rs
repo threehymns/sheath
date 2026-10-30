@@ -343,13 +343,16 @@ fn a_file_that_breaks_after_it_loaded_is_never_written_back() {
 #[test]
 fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
     let dir = fixture();
-    let odd = dir.path().join("odd \"name\" \\ here");
-    if fs::create_dir(&odd).is_err() {
-        return;
-    }
     let (mut app, _path) = app_in_config_dir(&dir);
-    app.navigate(odd);
     app.save_view_rule();
+    assert_eq!(app.rules.rules.len(), 1, "the tab wrote a rule");
+    app.open_rule_edit(0);
+    app.rule_fields_mut()
+        .get_mut("name")
+        .expect("the name field")
+        .text = "odd \"name\" \\ here".to_owned();
+    app.apply_rule_fields();
+    app.save_rule_edit();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     let doc: kdl::KdlDocument = text.parse().expect("the file still parses");
@@ -366,7 +369,7 @@ fn saving_the_view_as_a_rule_writes_one_that_applies() {
     app.save_view_rule();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("folder-rule"), "{text}");
+    assert!(text.contains("folder-rule {"), "the rule is unnamed: {text}");
     assert!(text.contains("view grid"), "{text}");
     assert!(!app.rules.rules.is_empty(), "the rule is live");
     assert!(app.is_grid());
@@ -381,7 +384,7 @@ fn pinning_an_entry_writes_an_entry_rule_that_applies() {
     app.reload();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("entry-rule"), "{text}");
+    assert!(text.contains("entry-rule {"), "the rule is unnamed: {text}");
     assert!(text.contains("hidden #false"), "{text}");
     assert!(names(&app).contains(&".secret"), "the pinned entry shows");
 }

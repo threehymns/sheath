@@ -27,14 +27,10 @@ impl App {
     }
 
     /// "Save this view as a rule": pins the current folder's view, sort, direction, and hidden
-    /// policy in a new folder rule, appended so it applies immediately.
+    /// policy in a new folder rule, appended so it applies immediately. The rule goes unnamed:
+    /// its matcher already names it, and a name is the user's to give.
     pub fn save_view_rule(&mut self) {
         let pattern = App::short_path(&self.cwd);
-        let name = self
-            .cwd
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "folder".to_owned());
         let view = if self.view.is_grid() { "grid" } else { "list" };
         let direction = match self.sort.1 {
             SortDir::Ascending => "ascending",
@@ -42,8 +38,7 @@ impl App {
         };
         let hidden = if self.show_hidden { "true" } else { "false" };
         let text = format!(
-            "folder-rule {} {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
-            crate::rules::quote(&name),
+            "folder-rule {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
             crate::rules::quote(&pattern),
             SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name).as_str(),
         );
@@ -59,11 +54,9 @@ impl App {
             return;
         };
         let pattern = App::short_path(&entry.path);
-        let name = entry.name.clone();
         let hidden = if hidden { "true" } else { "false" };
         let text = format!(
-            "entry-rule {} {{\n    match path={}\n    hidden #{hidden}\n}}\n",
-            crate::rules::quote(&name),
+            "entry-rule {{\n    match path={}\n    hidden #{hidden}\n}}\n",
             crate::rules::quote(&pattern),
         );
         self.append_rule(&text);
