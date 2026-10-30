@@ -264,7 +264,15 @@ fn the_picker_lists_every_rule_and_jumps_to_one() {
 
     click(&mut rt, "rule-picker-1");
     assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
-    assert_eq!(rt.state.rule_focus, Some(1), "the second rule is on screen");
+    assert_eq!(
+        rt.state.rule_edit.as_ref().map(|edit| edit.index),
+        Some(1),
+        "choosing a rule opens it"
+    );
+    assert!(
+        rt.find("rule-editor-1").is_some(),
+        "the chosen rule's form is on screen"
+    );
     assert!(rt.find("rule-picker").is_none(), "choosing closes the picker");
 }
 
@@ -446,10 +454,6 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     assert!(text.contains("folder-rule"), "{text}");
     assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
     assert_eq!(
-        rt.state.rule_focus, None,
-        "a rule the user just added is not picked out"
-    );
-    assert_eq!(
         rt.state.rule_reveal,
         Some((0, 1)),
         "the tab scrolls to the rule it just wrote"
@@ -476,7 +480,6 @@ fn a_command_with_no_matching_rule_says_so_in_the_tab() {
     rt.frame(0.05);
 
     assert!(rt.find("rules-no-match").is_some(), "the tab says nothing matched");
-    assert_eq!(rt.state.rule_focus, None, "no rule is singled out");
     assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
 }
 

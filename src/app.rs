@@ -101,8 +101,6 @@ pub struct App {
     pub rules: Rules,
     /// Why the rules could not be read, for the Rules tab.
     pub rule_error: Option<String>,
-    /// The rule the Rules tab should show first, after a command asked for it.
-    pub rule_focus: Option<usize>,
     /// The rule drag in the tab's list: the row in hand, the place it would land in, and how
     /// far the rows have moved aside for it.
     pub rule_drag: RuleDrag,
@@ -216,7 +214,6 @@ impl App {
             config,
             rules: Rules::default(),
             rule_error: None,
-            rule_focus: None,
             rule_drag: RuleDrag::default(),
             rule_picker: None,
             rule_reveal: None,

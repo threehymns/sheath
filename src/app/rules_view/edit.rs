@@ -167,6 +167,13 @@ fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) -> Option<Str
 }
 
 impl App {
+    /// Opens the editor on `index`, in place of whatever form was open.
+    pub fn open_rule_edit(&mut self, index: usize) {
+        if let Some(rule) = self.rules.rules.get(index) {
+            self.rule_edit = Some(RuleEdit::new(index, rule));
+        }
+    }
+
     /// Opens the editor on `index`, or closes it when it is already open on that rule.
     pub fn toggle_rule_edit(&mut self, index: usize) {
         if self
@@ -177,9 +184,7 @@ impl App {
             self.rule_edit = None;
             return;
         }
-        if let Some(rule) = self.rules.rules.get(index) {
-            self.rule_edit = Some(RuleEdit::new(index, rule));
-        }
+        self.open_rule_edit(index);
     }
 
     pub fn close_rule_edit(&mut self) {

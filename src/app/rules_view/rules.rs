@@ -152,14 +152,14 @@ impl App {
         self.rule_picker = Some((at + delta).clamp(0, count as isize - 1) as usize);
     }
 
-    /// Jumps from the picker to a rule's definition in the Rules tab.
+    /// Jumps from the picker to a rule: the Rules tab opens with that rule's form up.
     pub fn choose_rule(&mut self, index: usize) {
         self.rule_picker = None;
         if index < self.rules.rules.len() {
-            self.rule_focus = Some(index);
             self.rule_reveal = Some((index, 1));
             self.rule_query = None;
             self.settings = Some(SettingsTab::Rules);
+            self.open_rule_edit(index);
         }
     }
 
@@ -173,7 +173,6 @@ impl App {
     pub fn show_folder_rules(&mut self) {
         let count = self.entries.len();
         let focus = self.rules.first_folder(&self.cwd, count);
-        self.rule_focus = focus;
         self.rule_reveal = focus.map(|index| (index, 1));
         self.rule_query = focus
             .is_none()
@@ -192,7 +191,6 @@ impl App {
                 is_dir: entry.is_dir,
             })
         });
-        self.rule_focus = focus;
         self.rule_reveal = focus.map(|index| (index, 1));
         self.rule_query = focus
             .is_none()

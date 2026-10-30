@@ -117,7 +117,6 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
     let Some(rule) = s.rules.rules.get(index) else {
         return row();
     };
-    let focused = s.rule_focus == Some(index);
     let mut line = row()
         .key(key)
         .role("listitem")
@@ -207,9 +206,6 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
                     .build(k)
                     .key(format!("delete-rule-{index}")),
             );
-    }
-    if focused {
-        line = line.fill(k.c.layer_02);
     }
     // The row in hand lifts above the rest and follows the pointer, and the rows it passes
     // step aside, so the gap it would drop into is the order it would land in.
