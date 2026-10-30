@@ -72,6 +72,16 @@ impl App {
             self.apply_config();
             redraw = true;
         }
+        // The rule form's Save follows the draft one frame behind a keystroke: typing lands at
+        // once, so the catch-up here is a commit of its own, which can animate. Every other
+        // control settles the form in the commit its press causes.
+        if let Some(edit) = self.rule_edit.as_mut() {
+            let dirty = edit.dirty();
+            if edit.shown_dirty != dirty {
+                edit.shown_dirty = dirty;
+                redraw = true;
+            }
+        }
         // A command asked for a rule: wait one frame so the tab's rows are laid out, then put
         // the rule just under the viewport's top.
         if let Some((key, wait)) = self.rule_reveal.clone() {

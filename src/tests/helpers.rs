@@ -92,6 +92,14 @@ pub(super) fn runtime(app: App) -> Runtime<App> {
     rt
 }
 
+/// Opens the first rule's editor in the Rules tab: the row a fixture writes is named "here".
+pub(super) fn open_rule_editor(rt: &mut Runtime<App>) {
+    rt.frame(0.0);
+    click(rt, "open-settings");
+    click(rt, "settings-tab-rules");
+    click(rt, "rule-here-0");
+}
+
 pub(super) fn right_click(rt: &mut Runtime<App>, key: &str) {
     let (x, y) = rt.find(key).expect("the row is on screen");
     rt.secondary_down(x, y);

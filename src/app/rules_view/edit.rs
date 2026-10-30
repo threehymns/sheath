@@ -24,6 +24,10 @@ pub struct RuleEdit {
     pub original: Rule,
     /// Why Save would refuse, in the form's own words.
     pub error: Option<String>,
+    /// Whether the form last drew itself with something to save. Typing lands at once, so the
+    /// frame after it catches this up: Save then arrives or leaves on an animated commit
+    /// instead of snapping with the keystroke.
+    pub shown_dirty: bool,
     /// The menu that is open, if one is.
     pub menu: Option<RuleMenu>,
 }
@@ -36,6 +40,7 @@ impl RuleEdit {
             fields: BTreeMap::new(),
             original: rule.clone(),
             error: None,
+            shown_dirty: false,
             menu: None,
         };
         edit.reseed();
@@ -271,6 +276,7 @@ impl App {
             }
         }
         edit.error = form_problem(draft, fields);
+        edit.shown_dirty = edit.dirty();
     }
 
     /// Appends an empty `match` or `exclude` directive, which the fields then fill in.

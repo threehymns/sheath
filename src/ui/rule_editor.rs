@@ -4,6 +4,7 @@
 //! the file, so a form opened on a rule has nothing to press.
 
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
+use crate::corner::CornerCut;
 use crate::rules::{EntryKind, Kind, Matcher};
 use rune::{Color, El, Shadow, TextEdit, Tx, col, row, text};
 use rune_kit::{
@@ -14,12 +15,27 @@ use rune_theme_opencode as theme;
 use std::collections::BTreeMap;
 
 use super::dialogs::error_text;
-use super::settings::SETTINGS_ROW_INSET;
+use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 
 /// The width of a property's field, and of the two menus that are not properties.
 const PROP_WIDTH: f32 = 150.0;
 const ADD_WIDTH: f32 = 140.0;
 const KIND_WIDTH: f32 = 110.0;
+
+/// The form's actions: each button's width, the space between them, the small control's height
+/// (20 points), and the card kept around them. The bite is cut to whichever are up, so it never
+/// leaves more card around them than the gap.
+const CANCEL_WIDTH: f32 = 66.0;
+const SAVE_WIDTH: f32 = 52.0;
+const ACTIONS_HEIGHT: f32 = 20.0;
+const ACTIONS_SPACING: f32 = 6.0;
+const ACTIONS_GAP: f32 = 8.0;
+
+/// The sliver of card kept around the form, whose corners the form's are set concentric with.
+const WELL_MARGIN: f32 = 4.0;
+
+/// The form's width: the card's, less the sliver on either side.
+const WELL_WIDTH: f32 = SETTINGS_CARD_WIDTH - 2.0 * WELL_MARGIN;
 
 /// What an entry matcher's `kind` accepts, as its field lists them.
 const KINDS: &[&str] = &["any", "file", "folder"];
@@ -46,40 +62,19 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             .build(k)
             .key("rule-editor-kind"),
         );
-    let mut head = head;
-    if edit.dirty() {
-        head = head.child(
-            row()
-                .grow(1.0)
-                .justify_end()
-                .gap(6.0)
-                .child(
-                    Button::new("Discard Changes")
-                        .variant(ButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Small)
-                        .on_press(|s: &mut App| s.discard_rule_edit())
-                        .build(k)
-                        .key("rule-editor-cancel"),
-                )
-                .child(
-                    Button::new("Save")
-                        .variant(ButtonVariant::Contrast)
-                        .control_size(ControlSize::Small)
-                        .on_press(|s: &mut App| s.save_rule_edit())
-                        .build(k)
-                        .key("rule-editor-save"),
-                ),
-        );
-    }
-    // The form is cut into the card rather than laid on top of it: the row's full width, a fill a
-    // clear step darker than the card, and an inset shade along the top edge. The rule row above
-    // stays on the card, so it reads as the form's header with the form sunk beneath it.
+    // The form is cut into the card rather than laid on top of it: a sliver of card around it,
+    // corners concentric with the card's, a fill a clear step darker, and an inset shade along
+    // the top edge.
     let mut form = col()
         .key(format!("rule-editor-{}", edit.index))
-        .w_full()
-        .px(SETTINGS_ROW_INSET)
+        .w(WELL_WIDTH)
+        .mx(WELL_MARGIN)
+        .my(WELL_MARGIN)
+        .px(SETTINGS_ROW_INSET - WELL_MARGIN)
         .py(10.0)
+        .radius(well_radius(k))
         .fill(well(k))
+        .border(1.0, k.c.border_muted)
         .box_shadow(Shadow {
             x: 0.0,
             y: 1.0,
@@ -93,7 +88,7 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             y: -1.0,
             blur: 0.0,
             spread: 0.0,
-            color: k.c.white.alpha(0.06),
+            color: k.c.black.alpha(0.45),
             inset: true,
         })
         .gap(10.0)
@@ -147,7 +142,75 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             );
         }
     }
-    form.child(properties(k, edit))
+    let mut form = form.child(properties(k, edit));
+    for corner in actions(k, edit) {
+        form = form.child(corner);
+    }
+    form
+}
+
+/// The form's actions in a bite out of its top-right corner, on the card rather than in the
+/// form: the cut is painted over the corner first, so the buttons look set into the card beside
+/// it, as a dialog's Done sits outside its panel. The gap around them is the same on every side
+/// — the bite is the buttons plus a gap all round — and the rounded corners stay concentric:
+/// the buttons' radius is the form's less the gap, and the bite's inner corner is a gap wider
+/// than theirs, so both arcs share a centre. Cancel is always there, so a form with nothing to
+/// write can still be closed, and Save is the form's primary action, up once there is something
+/// to write.
+fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
+    let mut buttons = row()
+        .key("rule-editor-actions")
+        .justify_end()
+        .items_center()
+        .gap(ACTIONS_SPACING)
+        .child(
+            Button::new("Cancel")
+                .variant(ButtonVariant::Neutral)
+                .control_size(ControlSize::Small)
+                .on_press(|s: &mut App| s.discard_rule_edit())
+                .build(k)
+                .key("rule-editor-cancel")
+                .w(CANCEL_WIDTH),
+        );
+    let mut width = CANCEL_WIDTH;
+    if edit.shown_dirty {
+        buttons = buttons.child(
+            Button::new("Save")
+                .variant(ButtonVariant::Contrast)
+                .control_size(ControlSize::Small)
+                .on_press(|s: &mut App| s.save_rule_edit())
+                .build(k)
+                .key("rule-editor-save")
+                .w(SAVE_WIDTH),
+        );
+        width += ACTIONS_SPACING + SAVE_WIDTH;
+    }
+    let form_radius = well_radius(k);
+    let actions_radius = (form_radius - ACTIONS_GAP).max(0.0);
+    let cut = CornerCut::new(
+        (
+            width + 2.0 * ACTIONS_GAP,
+            ACTIONS_HEIGHT + 2.0 * ACTIONS_GAP,
+        ),
+        form_radius,
+        ACTIONS_GAP + actions_radius,
+    );
+    vec![
+        cut.build(k.c.bg_base, k.c.border_muted)
+            .absolute(WELL_WIDTH - cut.bounds().0, 0.0)
+            .key("rule-editor-corner"),
+        buttons
+            .absolute(WELL_WIDTH - ACTIONS_GAP - width, ACTIONS_GAP)
+            .w(width)
+            .h(ACTIONS_HEIGHT)
+            .radius(actions_radius),
+    ]
+}
+
+/// The form's corner radius: the card's less the sliver kept around it, so the two curves are
+/// concentric.
+fn well_radius(k: &Kit) -> f32 {
+    (k.radius.lg - WELL_MARGIN).max(0.0)
 }
 
 /// One `match` or `exclude` directive: a field per key the rule's kind accepts, and a button
@@ -155,13 +218,18 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
 fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index: usize) -> El {
     let list = if exclude { "x" } else { "m" };
     let prefix = format!("{list}{index}");
-    let mut line = row().w_full().gap(6.0).center_y().child(rule_field(
-        k,
-        &edit.fields,
-        &format!("{prefix}.path"),
-        "path glob",
-        190.0,
-    ));
+    let mut line = row()
+        .w_full()
+        .gap(6.0)
+        .center_y()
+        .hover_group()
+        .child(rule_field(
+            k,
+            &edit.fields,
+            &format!("{prefix}.path"),
+            "path glob",
+            190.0,
+        ));
     match edit.draft.kind {
         Kind::Folder => {
             line = line
@@ -216,7 +284,9 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
             .label("Remove matcher")
             .on_press(move |s: &mut App| s.remove_matcher(exclude, index))
             .build(k)
-            .key(format!("remove-{prefix}")),
+            .key(format!("remove-{prefix}"))
+            // The line is the group: the button is found once the pointer rests on it.
+            .group_opacity(0.0, 1.0),
     )
 }
 
@@ -229,10 +299,7 @@ fn well(k: &Kit) -> Color {
 
 /// A section's line for when it holds nothing, in the same faded type as the rest.
 fn empty_line(k: &Kit, message: &str) -> El {
-    text(message)
-        .font(k.ty.small)
-        .color(k.c.text_faint)
-        .wrap()
+    text(message).font(k.ty.small).color(k.c.text_faint).wrap()
 }
 
 /// The kind a field lists, as the file's `kind` words it.
@@ -255,32 +322,28 @@ fn properties(k: &Kit, edit: &RuleEdit) -> El {
         .filter(|prop| !prop.is_set(&edit.draft.props))
         .map(RuleProp::name)
         .collect();
-    let mut section = col()
-        .key("rule-editor-properties")
-        .w_full()
-        .gap(6.0)
-        .child(
-            row()
-                .w_full()
-                .center_y()
-                .gap(8.0)
-                .child(
-                    text("Properties")
-                        .font(k.ty.caption())
-                        .color(k.c.text_muted)
-                        .grow(1.0),
-                )
-                .child(
-                    Select::new("add-property", &unset)
-                        .placeholder("Add Property")
-                        .appearance(SelectAppearance::Field)
-                        .width(ADD_WIDTH)
-                        .open(edit.menu == Some(RuleMenu::AddProperty))
-                        .disabled(unset.is_empty())
-                        .on_toggle(|s: &mut App| s.toggle_rule_menu(RuleMenu::AddProperty))
-                        .trigger(k),
-                ),
-        );
+    let mut section = col().key("rule-editor-properties").w_full().gap(6.0).child(
+        row()
+            .w_full()
+            .center_y()
+            .gap(8.0)
+            .child(
+                text("Properties")
+                    .font(k.ty.caption())
+                    .color(k.c.text_muted)
+                    .grow(1.0),
+            )
+            .child(
+                Select::new("add-property", &unset)
+                    .placeholder("Add Property")
+                    .appearance(SelectAppearance::Field)
+                    .width(ADD_WIDTH)
+                    .open(edit.menu == Some(RuleMenu::AddProperty))
+                    .disabled(unset.is_empty())
+                    .on_toggle(|s: &mut App| s.toggle_rule_menu(RuleMenu::AddProperty))
+                    .trigger(k),
+            ),
+    );
     let set: Vec<RuleProp> = RuleProp::all(edit.draft.kind)
         .iter()
         .copied()
@@ -364,9 +427,7 @@ pub(super) fn rule_editor_layers(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .width(PROP_WIDTH)
                 .open(true)
                 .on_close(|s: &mut App| s.close_rule_menu())
-                .on_choose(move |s: &mut App, value: &str, _: &mut Tx| {
-                    s.set_rule_prop(prop, value)
-                })
+                .on_choose(move |s: &mut App, value: &str, _: &mut Tx| s.set_rule_prop(prop, value))
                 .build(k, layers);
         }
         RuleMenu::Matcher { exclude, index } => {
@@ -410,7 +471,20 @@ fn rule_field(
                 .get_mut(&target)
                 .expect("the editor seeds every field")
         })
-        .on_change(|s: &mut App, _: &mut Tx| s.apply_rule_fields())
+        .on_change(|s: &mut App, tx: &mut Tx| {
+            // A keystroke is the user's own hand, so its commit lands at once and cannot
+            // animate. Save is drawn from `shown_dirty`, left as it was here: the next frame
+            // catches it up, and that commit is the one that animates. Nothing else would ask
+            // for that frame once the key is drawn, so this does.
+            let shown = s.rule_edit.as_ref().map(|edit| edit.shown_dirty);
+            s.apply_rule_fields();
+            if let (Some(shown), Some(edit)) = (shown, s.rule_edit.as_mut()) {
+                if edit.dirty() != shown {
+                    tx.wake_after(std::time::Duration::ZERO);
+                }
+                edit.shown_dirty = shown;
+            }
+        })
         .build(k)
         .key(format!("rule-field-{id}"))
 }

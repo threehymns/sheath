@@ -20,6 +20,13 @@ fn clicking_a_rule_opens_its_editor() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
+
+    let (row, _) = rt.presented("rule-first-0").expect("the row is drawn");
+    assert!(
+        (row[3] - 48.0).abs() < 0.5,
+        "a row is 48 points tall: {}",
+        row[3]
+    );
     click(&mut rt, "rule-second-0");
 
     assert_eq!(
@@ -46,6 +53,10 @@ fn deleting_a_rule_asks_first() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
+    // The row's delete is drawn while the pointer is over the row.
+    let (x, y) = rt.find("rule-first-0").expect("the row is on screen");
+    rt.pointer_move(x, y);
+    rt.frame(0.1);
     click(&mut rt, "delete-rule-0");
     assert_eq!(
         fs::read_to_string(dir.path().join("config.kdl")).unwrap(),
@@ -68,6 +79,9 @@ fn deleting_a_rule_asks_first() {
         "Cancel closes the question"
     );
 
+    let (x, y) = rt.find("rule-first-0").expect("the row is on screen");
+    rt.pointer_move(x, y);
+    rt.frame(0.1);
     click(&mut rt, "delete-rule-0");
     click(&mut rt, "confirm-delete-rule-0");
 
@@ -93,7 +107,7 @@ fn escape_closes_the_rule_editor_before_the_panel() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-first-0");
     assert!(rt.state.rule_edit.is_some(), "the form is open");
 
     rt.key(KeyEvent {
@@ -107,36 +121,5 @@ fn escape_closes_the_rule_editor_before_the_panel() {
         rt.state.settings,
         Some(crate::app::SettingsTab::Rules),
         "and leaves the panel open on the Rules tab behind it"
-    );
-}
-
-#[test]
-fn the_rules_tab_explains_the_order_rules_apply_in() {
-    let dir = fixture();
-    fs::write(
-        dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n",
-    )
-    .unwrap();
-
-    let (app, _path) = app_in_config_dir(&dir);
-    let mut rt = runtime(app);
-    rt.frame(0.0);
-    click(&mut rt, "open-settings");
-    click(&mut rt, "settings-tab-rules");
-    assert!(
-        rt.find("rules-help").is_some(),
-        "the tab says how rules combine"
-    );
-
-    fs::remove_file(dir.path().join("config.kdl")).unwrap();
-    let (app, _path) = app_in_config_dir(&dir);
-    let mut rt = runtime(app);
-    rt.frame(0.0);
-    click(&mut rt, "open-settings");
-    click(&mut rt, "settings-tab-rules");
-    assert!(
-        rt.find("rules-help").is_none(),
-        "the empty state speaks for itself"
     );
 }

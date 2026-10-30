@@ -2,17 +2,27 @@
 
 use crate::app::{App, RULE_ROW_HEIGHT, RuleDrag, rule_key};
 use crate::config;
-use rune::{Anim, Cursor, Drag, El, Phase, Tx, col, icon, row, text};
+use crate::icons;
+use rune::{Anim, Drag, El, Phase, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_theme_opencode as theme;
 
 use super::dialogs::error_text;
 use super::rule_editor::rule_editor;
-use super::settings::{SETTINGS_ROW_INSET, settings_section};
+use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET, settings_section};
 
-/// The hairline `settings_section` draws between two rules: a row stepping aside by its height
-/// plus this lands where the next row was, which is the gap a drop goes into.
-const RULE_ROW_GAP: f32 = 1.0;
+/// The space between two rules: the hairline `settings_section` draws between them, plus the
+/// sliver kept above and below each row. A row stepping aside by its height plus this lands
+/// where the next row was, which is the gap a drop goes into.
+const RULE_ROW_GAP: f32 = 1.0 + 2.0 * ROW_PAD;
+
+/// The sliver of card kept around a rule's row, which its hover fill is rounded to: the row's
+/// radius is the card's less this, so the two curves are concentric.
+const ROW_MARGIN: f32 = 4.0;
+
+/// The card kept above and below a row's hover fill, so the shade neither touches the hairline
+/// over it nor the card's edge at either end of the list.
+const ROW_PAD: f32 = 4.0;
 
 /// A file that does not parse is shown as an error and left alone.
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
@@ -85,26 +95,21 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
             .wrap(),
         );
     }
-    // A list with rules in it says how they combine; the empty state already says what a rule
-    // is, so nothing is added there.
-    page = page.child(
-        text(
-            "Every matching rule applies in file order, later rules winning property by \
-             property. Drag a rule to change the order.",
-        )
-        .key("rules-help")
-        .font(k.ty.caption())
-        .color(k.c.text_muted)
-        .mx(SETTINGS_ROW_INSET)
-        .wrap(),
-    );
     let mut rows = Vec::new();
     for index in 0..s.rules.rules.len() {
         let key = rule_key(&s.rules.rules, index).expect("every index names a rule");
-        rows.push(rule_row(s, k, index, read_only, &key));
-        if !read_only && let Some(edit) = s.rule_edit.as_ref().filter(|edit| edit.index == index) {
-            rows.push(rule_editor(k, edit));
-        }
+        // An open form takes the row's place instead of unfolding under it: the row's summary
+        // and kind are the form's own fields, so the header would only repeat them.
+        let editing = if read_only {
+            None
+        } else {
+            s.rule_edit.as_ref().filter(|edit| edit.index == index)
+        };
+        let row = match editing {
+            Some(edit) => rule_editor(k, edit),
+            None => rule_row(s, k, index, read_only, &key),
+        };
+        rows.push(col().w_full().child(row));
     }
     page.child(settings_section(
         k,
@@ -125,13 +130,21 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
         .key(key)
         .role("listitem")
         .label(rule.summary())
-        .w_full()
+        .w(SETTINGS_CARD_WIDTH - 2.0 * ROW_MARGIN)
+        .mx(ROW_MARGIN)
+        .my(ROW_PAD)
         .min_h(RULE_ROW_HEIGHT)
-        .px(SETTINGS_ROW_INSET)
-        .py(8.0)
+        .px(SETTINGS_ROW_INSET - ROW_MARGIN)
+        // The name and the line under it come to 38 points; with this they sit in the row's 48.
+        .py(5.0)
         .gap(12.0)
         .center_y()
-        .child(icon(&theme::icons::EDIT, 14.0).color(k.c.icon_faint))
+        // A row is a press target, so it takes the kit's hover shade; its corners are the card's
+        // less the sliver it keeps, which is what makes the two curves concentric.
+        .radius(k.radius.lg - ROW_MARGIN)
+        .hover(k.c.hover)
+        .hover_group()
+        .child(icon(&icons::GRIP, 14.0).color(k.c.icon_faint))
         .child(
             col()
                 .grow(1.0)
@@ -175,16 +188,10 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
                     .build(k)
                     .key(format!("confirm-delete-rule-{index}")),
             );
-    } else {
-        line = line.child(
-            text(rule.kind_label())
-                .font(k.ty.caption())
-                .color(k.c.text_muted),
-        );
-        if !read_only {
-            line = line
-                .cursor(Cursor::Pointer)
-                .on_drag(move |s: &mut App, drag: &mut Drag, tx: &mut Tx| match drag.phase {
+    } else if !read_only {
+        line = line
+            .on_drag(
+                move |s: &mut App, drag: &mut Drag, tx: &mut Tx| match drag.phase {
                     // A press is not yet a drag: the row opens its editor on a click, so nothing
                     // moves until the pointer has travelled far enough to mean a move.
                     Phase::Down => s.rule_dragged = false,
@@ -228,33 +235,27 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
                             s.move_rule(from, to);
                         }
                     }
-                })
-                .on_press(move |s: &mut App| {
-                    // A press on the row opens the rule's form, whether it lands on the name or
-                    // on the space beside it.
-                    if !s.rule_dragged {
-                        s.toggle_rule_edit(index);
-                    }
-                })
-                .child(
-                    IconButton::new(&theme::icons::EDIT)
-                        .variant(IconButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Small)
-                        .label(format!("Edit {}", rule.summary()))
-                        .on_press(move |s: &mut App| s.toggle_rule_edit(index))
-                        .build(k)
-                        .key(format!("edit-rule-{index}")),
-                )
-                .child(
-                    IconButton::new(&theme::icons::TRASH)
-                        .variant(IconButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Small)
-                        .label(format!("Delete {}", rule.summary()))
-                        .on_press(move |s: &mut App| s.ask_delete_rule(index))
-                        .build(k)
-                        .key(format!("delete-rule-{index}")),
-                );
-        }
+                },
+            )
+            .on_press(move |s: &mut App| {
+                // A press on the row opens the rule's form, whether it lands on the name or
+                // on the space beside it.
+                if !s.rule_dragged {
+                    s.toggle_rule_edit(index);
+                }
+            })
+            .child(
+                IconButton::new(&theme::icons::TRASH)
+                    .variant(IconButtonVariant::GhostMuted)
+                    .control_size(ControlSize::Small)
+                    .label(format!("Delete {}", rule.summary()))
+                    .on_press(move |s: &mut App| s.ask_delete_rule(index))
+                    .build(k)
+                    .key(format!("delete-rule-{index}"))
+                    // The row is the group: the button is found once the pointer rests on
+                    // the row, and out of the way the rest of the time.
+                    .group_opacity(0.0, 1.0),
+            );
     }
     // The row in hand lifts above the rest and follows the pointer, and the rows it passes
     // step aside, so the gap it would drop into is the order it would land in.

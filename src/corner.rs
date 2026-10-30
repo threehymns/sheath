@@ -62,14 +62,15 @@ impl CornerCut {
     /// [`bounds`](Self::bounds)'s width plus the notch's width; see
     /// [`CornerControl`], which places it for you.
     pub fn build(&self, backdrop: Color, edge: Color) -> El {
-        let shape = Shape::new().fill(self.outline(), backdrop).stroke_with(
-            self.edge(),
-            false,
-            BORDER_WIDTH,
-            LineCap::Butt,
-            edge,
-        );
         let (width, height) = self.bounds();
+        let shape = Shape::new()
+            .fill(self.outline(), backdrop)
+            .stroke_with(self.edge(), false, BORDER_WIDTH, LineCap::Butt, edge)
+            // The bite is measured from the corner it cuts, so its right and top edges hold
+            // still while the panel is laid out around it; stretching the drawing to the
+            // element's box keeps those edges on the panel's while the rest of it grows or
+            // shrinks into place.
+            .view_box(width, height);
         canvas(shape).size(width, height)
     }
 

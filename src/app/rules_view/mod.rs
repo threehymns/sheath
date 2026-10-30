@@ -17,7 +17,7 @@ pub use edit::RuleEdit;
 pub use prop::{RuleMenu, RuleProp};
 
 /// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
-pub const RULE_ROW_HEIGHT: f32 = 56.0;
+pub const RULE_ROW_HEIGHT: f32 = 48.0;
 
 /// Points the pointer travels from a press before it means a drag rather than a click.
 const DRAG_SLOP: f32 = 4.0;

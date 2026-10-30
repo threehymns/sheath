@@ -12,35 +12,16 @@ use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
     shortcut_error_message,
 };
+
 use rune_theme_opencode as theme;
 use std::path::PathBuf;
 
 use super::dialogs::error_text;
 use super::palette::action_icon;
 
-/// Hex's settings metrics: a 220 pt navigation rail, a 32 pt page gutter, cards hanging 16 pt
-/// past it so their rows' text lands on the gutter, and 48 pt rows.
-const SETTINGS_RAIL: f32 = 220.0;
+mod metrics;
 
-const SETTINGS_GUTTER: f32 = 32.0;
-
-pub(super) const SETTINGS_ROW_INSET: f32 = 16.0;
-
-const SETTINGS_ROW_HEIGHT: f32 = 48.0;
-
-/// The dialog's radius, rounder than the kit's own so the panel inside it keeps a visible curve.
-const SETTINGS_RADIUS: f32 = 16.0;
-
-/// How far the panel is set in from the dialog's edges, which is how much comes off the radius so
-/// the two corners stay concentric.
-const SETTINGS_INSET: f32 = 8.0;
-
-/// Done, in the dialog's top-right corner: the panel is cut away around it, so it is on the
-/// dialog's surface rather than in the pane.
-const DONE_SIZE: (f32, f32) = (76.0, 26.0);
-
-/// Panel left around Done's left and bottom edges.
-const DONE_GAP: f32 = 8.0;
+pub(super) use metrics::*;
 
 /// Settings after Hex's, as a modal: a dialog over the browser holding navigation on its
 /// background and the chosen page in a raised panel beside it, with Done in the dialog's
@@ -146,7 +127,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 ),
         );
     let done = CornerControl {
-        dialog_width: 880.0,
+        dialog_width: SETTINGS_DIALOG_WIDTH,
         dialog_radius: SETTINGS_RADIUS,
         inset: SETTINGS_INSET,
         size: DONE_SIZE,

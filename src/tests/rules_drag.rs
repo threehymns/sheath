@@ -127,7 +127,7 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-first-0");
     rt.state
         .rule_fields_mut()
         .get_mut("m0.path")
@@ -136,14 +136,16 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
     rt.state.apply_rule_fields();
     rt.frame(0.05);
 
-    let (x, y) = rt.find("rule-first-0").expect("the first rule is on screen");
+    // The open form takes its row's place, so the drag starts on the rule below it.
+    let (x, y) = rt.find("rule-second-0").expect("the second rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, y + 60.0);
     rt.frame(0.05);
 
-    assert!(
-        rt.state.rule_edit.is_some(),
+    assert_eq!(
+        rt.state.rule_edit.as_ref().map(|edit| edit.index),
+        Some(0),
         "the form stays open, so its changes are not lost to a drag"
     );
     assert_eq!(rt.state.rule_drag.dragging(), None, "the drag did not start");
@@ -176,19 +178,20 @@ fn a_drag_closes_a_clean_editor_before_reordering() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-first-0");
     assert!(rt.state.rule_edit.is_some(), "the form is open");
 
-    let (x, y) = rt.find("rule-first-0").expect("the first rule is on screen");
+    // The open form takes its row's place, so the drag starts on the rule below it.
+    let (x, y) = rt.find("rule-second-0").expect("the second rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
-    rt.pointer_move(x, y + 60.0);
+    rt.pointer_move(x, y - 60.0);
     rt.frame(0.05);
     assert!(
         rt.state.rule_edit.is_none(),
         "the clean form closes so every row is the same height"
     );
-    rt.pointer_up(x, y + 60.0);
+    rt.pointer_up(x, y - 60.0);
     rt.frame(0.05);
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();

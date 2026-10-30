@@ -3,14 +3,6 @@
 use super::helpers::*;
 use std::fs;
 
-/// Opens the first rule's editor in the Rules tab.
-fn open_rule_editor(rt: &mut rune::Runtime<crate::app::App>) {
-    rt.frame(0.0);
-    click(rt, "open-settings");
-    click(rt, "settings-tab-rules");
-    click(rt, "edit-rule-0");
-}
-
 #[test]
 fn an_editor_closes_when_the_config_file_changes_under_it() {
     let dir = fixture();
@@ -22,7 +14,11 @@ fn an_editor_closes_when_the_config_file_changes_under_it() {
 
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
-    open_rule_editor(&mut rt);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+    // This rule is named "first", so its row is keyed by that name.
+    click(&mut rt, "rule-first-0");
 
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     rt.state.store.watch(wake);
@@ -120,11 +116,7 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     // The field beside `view` lists the values the file accepts: list, grid, inherit.
     click(&mut rt, "prop-select-view-trigger");
     assert_eq!(
-        rt.state
-            .rule_edit
-            .as_ref()
-            .expect("the form is open")
-            .menu,
+        rt.state.rule_edit.as_ref().expect("the form is open").menu,
         Some(crate::app::RuleMenu::Prop(crate::app::RuleProp::View)),
         "the field opens the property's list"
     );
@@ -151,7 +143,7 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     assert!(text.contains("view grid"), "{text}");
 
     // The rule's kind is still a press of its own, and an entry rule takes no view.
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-here-0");
     click(&mut rt, "rule-editor-kind");
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
@@ -191,10 +183,7 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
         crate::rules::Prop::Unset,
         "removing takes the property out of the draft"
     );
-    assert!(
-        rt.find("prop-view").is_none(),
-        "and its line off the form"
-    );
+    assert!(rt.find("prop-view").is_none(), "and its line off the form");
     assert!(
         rt.find("clear-prop-view").is_none(),
         "a property the rule no longer sets has nothing to remove"
@@ -232,11 +221,7 @@ fn the_rule_editor_adds_a_property_from_the_menu() {
     // Add Property lists what the rule does not set yet: view, sort, direction, show-hidden.
     click(&mut rt, "add-property-trigger");
     assert_eq!(
-        rt.state
-            .rule_edit
-            .as_ref()
-            .expect("the form is open")
-            .menu,
+        rt.state.rule_edit.as_ref().expect("the form is open").menu,
         Some(crate::app::RuleMenu::AddProperty),
         "the button opens the menu of properties"
     );
@@ -303,7 +288,13 @@ fn the_rule_editor_adds_and_removes_a_matcher() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("path=\"~/second\""), "{text}");
 
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-here-0");
+    // The matcher's line reveals its remove button while the pointer rests on it.
+    let (x, y) = rt
+        .find("rule-field-m1.path")
+        .expect("the matcher has a line");
+    rt.pointer_move(x, y);
+    rt.frame(0.1);
     click(&mut rt, "remove-m1");
     assert_eq!(
         rt.state
@@ -331,8 +322,12 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
     assert!(
-        rt.find("rule-editor-save").is_none() && rt.find("rule-editor-cancel").is_none(),
-        "a form with no changes offers nothing to save or drop"
+        rt.find("rule-editor-save").is_none(),
+        "a form with no changes has nothing to save"
+    );
+    assert!(
+        rt.find("rule-editor-cancel").is_some(),
+        "and Cancel is there to close it"
     );
 
     rt.state
@@ -363,8 +358,8 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
         "the draft differs from the rule as it opened"
     );
     assert!(
-        rt.find("rule-editor-save").is_some() && rt.find("rule-editor-cancel").is_some(),
-        "the form offers Save and Discard Changes once it has changes"
+        rt.find("rule-editor-save").is_some(),
+        "the form offers Save once it has changes"
     );
 }
 
@@ -396,7 +391,8 @@ fn the_rule_editor_refuses_a_match_that_names_nothing() {
 #[test]
 fn the_rule_editor_refuses_a_count_that_is_not_a_number() {
     let dir = fixture();
-    let original = "folder-rule \"here\" {\n    match path=\"/old\" min-items=2\n    view grid\n}\n";
+    let original =
+        "folder-rule \"here\" {\n    match path=\"/old\" min-items=2\n    view grid\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -450,10 +446,13 @@ fn cancelling_the_rule_editor_leaves_the_file_alone() {
     );
     assert!(rt.state.rule_edit.is_none(), "Cancel closes the form");
 
-    click(&mut rt, "edit-rule-0");
+    click(&mut rt, "rule-here-0");
     let reopened = rt.state.rule_edit.as_ref().expect("the form is open");
     assert_eq!(
-        reopened.fields.get("m0.path").map(|field| field.text.as_str()),
+        reopened
+            .fields
+            .get("m0.path")
+            .map(|field| field.text.as_str()),
         Some("/old"),
         "the form opens on the rule as it was"
     );
@@ -469,9 +468,18 @@ fn the_rule_editor_says_which_sections_are_empty() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
 
-    assert!(rt.find("no-matches").is_some(), "the match section says it is empty");
-    assert!(rt.find("no-excludes").is_some(), "and so does the exclude section");
-    assert!(rt.find("no-properties").is_some(), "and the properties section");
+    assert!(
+        rt.find("no-matches").is_some(),
+        "the match section says it is empty"
+    );
+    assert!(
+        rt.find("no-excludes").is_some(),
+        "and so does the exclude section"
+    );
+    assert!(
+        rt.find("no-properties").is_some(),
+        "and the properties section"
+    );
 
     click(&mut rt, "add-match");
     assert!(
