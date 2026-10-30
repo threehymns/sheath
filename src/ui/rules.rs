@@ -185,7 +185,8 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
 }
 
 /// The open rule's form: its name and kind, a line per match and exclude, and a button per
-/// property that cycles through every value the file accepts, `inherit` included.
+/// property that cycles through every value the file accepts, `inherit` included. It edits a
+/// draft; Save writes it and Cancel drops it.
 fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
@@ -202,17 +203,33 @@ fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             .on_press(|s: &mut App| s.cycle_rule_kind())
             .build(k)
             .key("rule-editor-kind"),
-        )
-        .child(
-            row().grow(1.0).justify_end().child(
-                Button::new("Done")
-                    .variant(ButtonVariant::Outline)
-                    .control_size(ControlSize::Small)
-                    .on_press(|s: &mut App| s.close_rule_edit())
-                    .build(k)
-                    .key("rule-editor-done"),
-            ),
         );
+    let head = head.child(
+        row()
+            .grow(1.0)
+            .justify_end()
+            .gap(6.0)
+            .child(
+                Button::new(if edit.dirty() {
+                    "Discard Changes"
+                } else {
+                    "Cancel"
+                })
+                .variant(ButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .on_press(|s: &mut App| s.discard_rule_edit())
+                .build(k)
+                .key("rule-editor-cancel"),
+            )
+            .child(
+                Button::new("Save")
+                    .variant(ButtonVariant::Contrast)
+                    .control_size(ControlSize::Small)
+                    .on_press(|s: &mut App| s.save_rule_edit())
+                    .build(k)
+                    .key("rule-editor-save"),
+            ),
+    );
     let mut form = col()
         .key(format!("rule-editor-{}", edit.index))
         .w_full()
@@ -220,6 +237,18 @@ fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
         .py(10.0)
         .gap(10.0)
         .child(head);
+    if edit.dirty() {
+        form = form.child(
+            text("Unsaved changes")
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .wrap()
+                .key("rule-editor-dirty"),
+        );
+    }
+    if let Some(message) = &edit.error {
+        form = form.child(error_text(k, message).key("rule-editor-error"));
+    }
     for (exclude, title, add) in [
         (false, "Match", "add-match"),
         (true, "Exclude", "add-exclude"),
@@ -386,7 +415,8 @@ fn describe<T: Copy>(prop: Prop<T>, label: impl Fn(T) -> &'static str) -> String
     }
 }
 
-/// One text field of the editor, wired back to the draft through the store.
+/// One text field of the editor, wired back to the draft. Typing only changes the draft; the
+/// file is written when the form is saved.
 fn rule_field(
     k: &Kit,
     fields: &BTreeMap<String, TextEdit>,

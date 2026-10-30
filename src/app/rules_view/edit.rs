@@ -1,18 +1,15 @@
-//! The Rules tab's editing: turning what is on screen into a rule, deleting one, and moving one
-//! in the file's order. Every change goes through the config store, so the rest of the file
-//! keeps its comments and layout.
+//! The rule form: the draft every control edits, the fields it holds, and the Save, Cancel, and
+//! cycles that act on it. Nothing here writes the file until Save is pressed.
 
-use crate::app::{App, SettingsTab, ViewMode};
+use crate::app::{App, ViewMode};
 use crate::config;
-use crate::rules::{EntryKind, EntryRef, Kind, Matcher, Prop, Rule, SortKey};
-use kdl::{KdlDocument, KdlNode};
+use crate::rules::{EntryKind, Kind, Matcher, Prop, Rule, SortKey};
+use kdl::KdlNode;
 use rune::TextEdit;
 use rune_kit::SortDir;
 use std::collections::BTreeMap;
-use std::path::Path;
 
-/// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
-pub const RULE_ROW_HEIGHT: f32 = 56.0;
+use super::rule_positions;
 
 /// One property the editor can change, in the button that cycles it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,10 +26,14 @@ pub enum RuleProp {
 pub struct RuleEdit {
     /// The rule's position in the file's order.
     pub index: usize,
-    /// The rule as the controls have left it; written on every change.
+    /// The rule as the controls have left it; written only when Save is pressed.
     pub draft: Rule,
     /// The text fields, keyed by the part of the rule they hold (`name`, `m0.path`, …).
     pub fields: BTreeMap<String, TextEdit>,
+    /// The rule as it was when the form opened, so Cancel can be honest about losing work.
+    pub original: Rule,
+    /// Why Save would refuse, in the form's own words.
+    pub error: Option<String>,
 }
 
 impl RuleEdit {
@@ -41,9 +42,24 @@ impl RuleEdit {
             index,
             draft: rule.clone(),
             fields: BTreeMap::new(),
+            original: rule.clone(),
+            error: None,
         };
         edit.reseed();
         edit
+    }
+
+    /// Whether the form holds changes the file does not. The written form is compared because
+    /// `Rule` carries no equality of its own.
+    pub fn dirty(&self) -> bool {
+        self.draft.to_kdl() != self.original.to_kdl()
+    }
+
+    /// Drops what the form holds and goes back to the rule as it was opened.
+    pub fn discard(&mut self) {
+        self.draft = self.original.clone();
+        self.error = None;
+        self.reseed();
     }
 
     /// Builds the text fields for the draft as it stands now. Structural changes (a new matcher,
@@ -95,64 +111,62 @@ fn cycle<T: Copy + PartialEq>(prop: Prop<T>, steps: &[Prop<T>]) -> Prop<T> {
     steps[(at + 1) % steps.len()]
 }
 
-impl App {
-    /// A path with the home folder written as `~`, so a rule travels between machines.
-    pub fn short_path(path: &Path) -> String {
-        let text = path.to_string_lossy();
-        let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
-            return text.into_owned();
-        };
-        let home = home.to_string_lossy();
-        let home = home.trim_end_matches(['/', '\\']);
-        match text.strip_prefix(home) {
-            Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => format!("~{rest}"),
-            _ => text.into_owned(),
+/// What the form cannot save as it stands: a matcher that names nothing (the file reads an
+/// empty `match` as matching every folder, and an empty `exclude` as vetoing the rule
+/// everywhere), and a count that is not a whole number.
+fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) -> Option<String> {
+    let names_nothing = |matcher: &Matcher| {
+        matcher.path.is_none()
+            && matcher.name.is_none()
+            && matcher.kind.is_none()
+            && matcher.extension.is_none()
+            && matcher.min_items.is_none()
+            && matcher.max_items.is_none()
+    };
+    if draft.matches.iter().any(names_nothing) {
+        return Some(
+            "A match with no fields matches every folder. Fill in a path or remove the match."
+                .to_owned(),
+        );
+    }
+    if draft.excludes.iter().any(names_nothing) {
+        return Some(
+            "An exclude with no fields vetoes the rule in every folder. Fill in a path or remove \
+             the exclude."
+                .to_owned(),
+        );
+    }
+    // A count the draft could not take lives only in the text, so the fields are checked too.
+    for (list, matchers) in [("m", &draft.matches), ("x", &draft.excludes)] {
+        for (index, _) in matchers.iter().enumerate() {
+            for (key, label) in [("min-items", "min items"), ("max-items", "max items")] {
+                let Some(field) = fields.get(&format!("{list}{index}.{key}")) else {
+                    continue;
+                };
+                let text = field.text.trim();
+                if text.is_empty() || text.parse::<usize>().is_ok() {
+                    continue;
+                }
+                return Some(format!("`{label}` needs a whole number, not `{text}`."));
+            }
         }
     }
-
-    /// "Save this view as a rule": pins the current folder's view, sort, direction, and hidden
-    /// policy in a new folder rule, appended so it applies immediately.
-    pub fn save_view_rule(&mut self) {
-        let pattern = App::short_path(&self.cwd);
-        let name = self
-            .cwd
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "folder".to_owned());
-        let view = if self.view.is_grid() { "grid" } else { "list" };
-        let direction = match self.sort.1 {
-            SortDir::Ascending => "ascending",
-            SortDir::Descending => "descending",
-        };
-        let hidden = if self.show_hidden { "true" } else { "false" };
-        let text = format!(
-            "folder-rule {} {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
-            crate::rules::quote(&name),
-            crate::rules::quote(&pattern),
-            SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name).as_str(),
-        );
-        self.append_rule(&text);
+    for matchers in [&draft.matches, &draft.excludes] {
+        for matcher in matchers {
+            if let (Some(min), Some(max)) = (matcher.min_items, matcher.max_items)
+                && min > max
+            {
+                return Some(
+                    "`min items` is larger than `max items`, so the rule can never match."
+                        .to_owned(),
+                );
+            }
+        }
     }
+    None
+}
 
-    /// "Always show this entry" or "Always hide this entry", for the selected row.
-    pub fn pin_entry(&mut self, hidden: bool) {
-        let Some(id) = self.selected.clone() else {
-            return;
-        };
-        let Some(entry) = self.entries.iter().find(|entry| entry.id == id) else {
-            return;
-        };
-        let pattern = App::short_path(&entry.path);
-        let name = entry.name.clone();
-        let hidden = if hidden { "true" } else { "false" };
-        let text = format!(
-            "entry-rule {} {{\n    match path={}\n    hidden #{hidden}\n}}\n",
-            crate::rules::quote(&name),
-            crate::rules::quote(&pattern),
-        );
-        self.append_rule(&text);
-    }
-
+impl App {
     /// Opens the editor on `index`, or closes it when it is already open on that rule.
     pub fn toggle_rule_edit(&mut self, index: usize) {
         if self
@@ -172,6 +186,30 @@ impl App {
         self.rule_edit = None;
     }
 
+    /// Writes the form's draft over the rule and closes the form. A draft the file cannot hold
+    /// is refused, and the form says why.
+    pub fn save_rule_edit(&mut self) {
+        let Some(edit) = self.rule_edit.as_mut() else {
+            return;
+        };
+        edit.error = form_problem(&edit.draft, &edit.fields);
+        if edit.error.is_some() {
+            return;
+        }
+        let index = edit.index;
+        self.write_rule_edit();
+        self.rule_edit = None;
+        self.rule_focus = Some(index);
+    }
+
+    /// Closes the form, dropping whatever it holds.
+    pub fn discard_rule_edit(&mut self) {
+        if let Some(edit) = self.rule_edit.as_mut() {
+            edit.discard();
+        }
+        self.rule_edit = None;
+    }
+
     /// The editor's text fields, for `TextInput::on_edit`.
     pub fn rule_fields_mut(&mut self) -> &mut BTreeMap<String, TextEdit> {
         &mut self
@@ -181,7 +219,8 @@ impl App {
             .fields
     }
 
-    /// Reads every text field back into the draft and writes it.
+    /// Reads every text field back into the draft and notes what would stop it being saved.
+    /// Nothing is written here: the file changes when the form is saved.
     pub fn apply_rule_fields(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -220,7 +259,7 @@ impl App {
                 }
             }
         }
-        self.write_rule_edit();
+        edit.error = form_problem(draft, fields);
     }
 
     /// Appends an empty `match` or `exclude` directive, which the fields then fill in.
@@ -235,7 +274,7 @@ impl App {
         };
         matchers.push(Matcher::default());
         edit.reseed();
-        self.write_rule_edit();
+        self.apply_rule_fields();
     }
 
     pub fn remove_matcher(&mut self, exclude: bool, index: usize) {
@@ -251,7 +290,7 @@ impl App {
             matchers.remove(index);
         }
         edit.reseed();
-        self.write_rule_edit();
+        self.apply_rule_fields();
     }
 
     /// Turns the rule into the other kind, taking the parts that kind cannot hold with it.
@@ -292,7 +331,7 @@ impl App {
             }
         }
         edit.reseed();
-        self.write_rule_edit();
+        self.apply_rule_fields();
     }
 
     /// Advances one property through the values the file accepts.
@@ -359,7 +398,7 @@ impl App {
                 )
             }
         }
-        self.write_rule_edit();
+        self.apply_rule_fields();
     }
 
     /// Advances a matcher's `kind` through any, file and folder.
@@ -380,7 +419,7 @@ impl App {
             Some(EntryKind::File) => Some(EntryKind::Folder),
             Some(EntryKind::Folder) => None,
         };
-        self.write_rule_edit();
+        self.apply_rule_fields();
     }
 
     /// Writes the draft over the rule's node, keeping that node's leading comment and the rest
@@ -408,154 +447,4 @@ impl App {
             self.rule_error = Some(err);
         }
     }
-
-    /// Adds a rule node at the end of the document, so it wins over every rule above it.
-    fn append_rule(&mut self, text: &str) {
-        let written = match text.parse::<KdlNode>() {
-            Ok(node) => self.store.edit(config::CONFIG, |doc| {
-                doc.nodes_mut().push(node.clone());
-            }),
-            Err(err) => Err(format!("Couldn’t write the rule: {err}")),
-        };
-        let appended = written.is_ok();
-        self.after_rule_change();
-        // Set after the reload, which clears it whenever the file reads back cleanly.
-        if let Err(err) = written {
-            self.rule_error = Some(err);
-        } else if appended && self.settings == Some(SettingsTab::Rules) {
-            // The new rule is the last one, so the tab shows what the action just wrote.
-            let index = self.rules.rules.len().saturating_sub(1);
-            self.rule_focus = Some(index);
-            self.rule_reveal = Some((index, 1));
-            self.rule_query = None;
-        }
-    }
-
-    /// Removes the rule at `index` in the tab's order.
-    pub fn delete_rule(&mut self, index: usize) {
-        // The list on screen came from the last file that parsed, so its positions mean nothing
-        // against a document that has not.
-        if self.rule_error.is_some() {
-            return;
-        }
-        // The editor's indices would name the wrong rule after this.
-        self.rule_edit = None;
-        let _ = self.store.edit(config::CONFIG, |doc| {
-            if let Some(&at) = rule_positions(doc).get(index) {
-                doc.nodes_mut().remove(at);
-            }
-        });
-        self.after_rule_change();
-    }
-
-    /// Moves the rule at `from` to `to`, rewriting the order of the rule nodes only.
-    pub fn move_rule(&mut self, from: usize, to: usize) {
-        if from == to || self.rule_error.is_some() {
-            return;
-        }
-        // The editor's indices would name the wrong rule after this.
-        self.rule_edit = None;
-        let _ = self.store.edit(config::CONFIG, |doc| {
-            let positions = rule_positions(doc);
-            if from >= positions.len() || to >= positions.len() {
-                return;
-            }
-            let mut rules: Vec<KdlNode> = positions
-                .iter()
-                .map(|&at| doc.nodes()[at].clone())
-                .collect();
-            let moved = rules.remove(from);
-            rules.insert(to, moved);
-            for (at, node) in positions.into_iter().zip(rules) {
-                doc.nodes_mut()[at] = node;
-            }
-        });
-        self.after_rule_change();
-    }
-
-    /// Opens the picker that lists every rule by its matcher.
-    pub fn open_rule_picker(&mut self) {
-        self.rule_picker = Some(0);
-    }
-
-    pub fn close_rule_picker(&mut self) {
-        self.rule_picker = None;
-    }
-
-    /// Moves the picker's highlight, stopping at the ends.
-    pub fn rule_picker_move(&mut self, delta: isize) {
-        let count = self.rules.rules.len();
-        if count == 0 {
-            return;
-        }
-        let at = self.rule_picker.unwrap_or(0) as isize;
-        self.rule_picker = Some((at + delta).clamp(0, count as isize - 1) as usize);
-    }
-
-    /// Jumps from the picker to a rule's definition in the Rules tab.
-    pub fn choose_rule(&mut self, index: usize) {
-        self.rule_picker = None;
-        if index < self.rules.rules.len() {
-            self.rule_focus = Some(index);
-            self.rule_reveal = Some((index, 1));
-            self.rule_query = None;
-            self.settings = Some(SettingsTab::Rules);
-        }
-    }
-
-    pub fn confirm_rule_picker(&mut self) {
-        if let Some(index) = self.rule_picker {
-            self.choose_rule(index);
-        }
-    }
-
-    /// Opens the Rules tab at the first rule matching the folder on screen.
-    pub fn show_folder_rules(&mut self) {
-        let count = self.entries.len();
-        let focus = self.rules.first_folder(&self.cwd, count);
-        self.rule_focus = focus;
-        self.rule_reveal = focus.map(|index| (index, 1));
-        self.rule_query = focus
-            .is_none()
-            .then(|| "No rule matches this folder.".to_owned());
-        self.settings = Some(SettingsTab::Rules);
-    }
-
-    /// Opens the Rules tab at the first rule matching the selected entry.
-    pub fn show_entry_rules(&mut self) {
-        let focus = self.selected.as_ref().and_then(|id| {
-            let entry = self.entries.iter().find(|entry| &entry.id == id)?;
-            let path = entry.path.to_string_lossy();
-            self.rules.first_entry(&EntryRef {
-                path: &path,
-                name: &entry.name,
-                is_dir: entry.is_dir,
-            })
-        });
-        self.rule_focus = focus;
-        self.rule_reveal = focus.map(|index| (index, 1));
-        self.rule_query = focus
-            .is_none()
-            .then(|| "No rule matches the selected entry.".to_owned());
-        self.settings = Some(SettingsTab::Rules);
-    }
-
-    /// Re-reads the rules and the folder after the document changed.
-    fn after_rule_change(&mut self) {
-        self.reload_rules();
-        self.visit = Default::default();
-        self.reload();
-    }
-}
-
-/// The document positions of the rule nodes, in file order.
-fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
-    doc.nodes()
-        .iter()
-        .enumerate()
-        .filter(|(_, node)| {
-            matches!(node.name().value(), "folder-rule" | "entry-rule")
-        })
-        .map(|(at, _)| at)
-        .collect()
 }
