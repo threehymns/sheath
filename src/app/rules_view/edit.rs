@@ -22,7 +22,7 @@ pub struct RuleEdit {
     pub fields: BTreeMap<String, TextEdit>,
     /// The rule as it was when the form opened, so Cancel can be honest about losing work.
     pub original: Rule,
-    /// Why Save would refuse, in the form's own words.
+    /// Why the last Save was refused, in the form's own words; the next edit takes it away.
     pub error: Option<String>,
     /// Whether the form last drew itself with something to save. Typing lands at once, so the
     /// frame after it catches this up: Save then arrives or leaves on an animated commit
@@ -235,7 +235,8 @@ impl App {
             .fields
     }
 
-    /// Reads every text field back into the draft and notes what would stop it being saved.
+    /// Reads every text field back into the draft, taking down the last refusal. What would
+    /// stop the draft being saved is judged when Save is pressed, not while it is typed.
     /// Nothing is written here: the file changes when the form is saved.
     pub fn apply_rule_fields(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
@@ -275,7 +276,10 @@ impl App {
                 }
             }
         }
-        edit.error = form_problem(draft, fields);
+        // Reading the fields is the user still working, so a refusal that no longer describes
+        // the form goes away here rather than at the next Save: nothing is judged until the
+        // form is handed in, so the sections never shift under a pointer that is typing.
+        edit.error = None;
         edit.shown_dirty = edit.dirty();
     }
 

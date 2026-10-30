@@ -14,7 +14,6 @@ use rune_kit::{
 use rune_theme_opencode as theme;
 use std::collections::BTreeMap;
 
-use super::dialogs::error_text;
 use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 
 /// The width of a property's field, and of the two menus that are not properties.
@@ -32,6 +31,11 @@ const ACTIONS_GAP: f32 = 8.0;
 
 /// The sliver of card kept around the form, whose corners the form's are set concentric with.
 const WELL_MARGIN: f32 = 4.0;
+
+/// The height of the line under the form's head that a refused Save explains itself on. The
+/// line is always in the layout at this height, empty or not, so a message arriving or leaving
+/// cannot move the sections under it; it is one line tall, so a longer sentence cannot either.
+const PROBLEM_HEIGHT: f32 = 16.0;
 
 /// The form's width: the card's, less the sliver on either side.
 const WELL_WIDTH: f32 = SETTINGS_CARD_WIDTH - 2.0 * WELL_MARGIN;
@@ -91,10 +95,8 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             inset: true,
         })
         .gap(10.0)
-        .child(head);
-    if let Some(message) = &edit.error {
-        form = form.child(error_text(k, message).key("rule-editor-error"));
-    }
+        .child(head)
+        .child(problem_line(k, edit.error.as_deref()));
     for (exclude, title, add) in [
         (false, "Match", "add-match"),
         (true, "Exclude", "add-exclude"),
@@ -287,6 +289,28 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
             // The line is the group: the button is found once the pointer rests on it.
             .group_opacity(0.0, 1.0),
     )
+}
+
+/// The form's line for what Save refused, in the form's own words. It is drawn whether or not
+/// there is anything to say — an empty one shows nothing — so pressing Save, and typing the
+/// refusal away again, leaves every row under it where it was.
+fn problem_line(k: &Kit, problem: Option<&str>) -> El {
+    let mut line = row()
+        .key("rule-editor-problem")
+        .w_full()
+        .h(PROBLEM_HEIGHT)
+        .items_center();
+    if let Some(problem) = problem {
+        line = line.child(
+            text(problem.to_owned())
+                .key("rule-editor-error")
+                .font(k.ty.caption().lh(PROBLEM_HEIGHT))
+                .color(k.c.danger.fg)
+                .max_lines(1)
+                .w_full(),
+        );
+    }
+    line
 }
 
 /// What an open form is filled with: black laid straight over the card, so the form is a clear

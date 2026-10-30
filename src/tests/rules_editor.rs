@@ -406,6 +406,10 @@ fn the_rule_editor_refuses_a_count_that_is_not_a_number() {
         .text = "abc".to_owned();
     rt.state.apply_rule_fields();
     click(&mut rt, "rule-field-name");
+    assert!(
+        rt.find("rule-editor-error").is_none(),
+        "a draft is not judged while it is typed"
+    );
     click(&mut rt, "rule-editor-save");
 
     assert_eq!(
@@ -417,6 +421,54 @@ fn the_rule_editor_refuses_a_count_that_is_not_a_number() {
     assert!(
         rt.find("rule-editor-error").is_some(),
         "the form says the count needs a whole number"
+    );
+}
+
+#[test]
+fn a_refused_save_says_why_without_moving_the_form() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    // A match that names nothing is the longest sentence the form refuses with.
+    click(&mut rt, "add-match");
+    assert!(
+        rt.find("rule-editor-error").is_none(),
+        "adding a match says nothing until Save is pressed"
+    );
+    let (before, _) = rt
+        .presented("rule-field-m0.path")
+        .expect("the first matcher's line is drawn");
+    let (slot, _) = rt
+        .presented("rule-editor-problem")
+        .expect("the line for a refusal keeps its place");
+
+    click(&mut rt, "rule-editor-save");
+
+    let (message, _) = rt
+        .presented("rule-editor-error")
+        .expect("the form says why it refused");
+    assert!(
+        message[3] <= slot[3] + 0.5,
+        "the message is one line in the line kept for it: {message:?} in {slot:?}"
+    );
+    assert!(
+        message[0] + message[2] <= slot[0] + slot[2] + 0.5,
+        "and fits across it, so nothing of it is cut off: {message:?} in {slot:?}"
+    );
+    let (after, _) = rt
+        .presented("rule-field-m0.path")
+        .expect("the first matcher's line is still drawn");
+    assert!(
+        (before[1] - after[1]).abs() < 0.5,
+        "the rows under the message stayed where they were: {before:?} then {after:?}"
     );
 }
 
