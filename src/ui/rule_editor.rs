@@ -19,7 +19,6 @@ use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 
 /// The width of a property's field, and of the two menus that are not properties.
 const PROP_WIDTH: f32 = 150.0;
-const ADD_WIDTH: f32 = 140.0;
 const KIND_WIDTH: f32 = 110.0;
 
 /// The form's actions: each button's width, the space between them, the small control's height
@@ -334,14 +333,14 @@ fn properties(k: &Kit, edit: &RuleEdit) -> El {
                     .grow(1.0),
             )
             .child(
-                Select::new("add-property", &unset)
-                    .placeholder("Add Property")
-                    .appearance(SelectAppearance::Field)
-                    .width(ADD_WIDTH)
-                    .open(edit.menu == Some(RuleMenu::AddProperty))
+                // The menu hangs off this key, so the button is the list's trigger.
+                Button::new("Add Property")
+                    .variant(ButtonVariant::Outline)
+                    .control_size(ControlSize::Small)
                     .disabled(unset.is_empty())
-                    .on_toggle(|s: &mut App| s.toggle_rule_menu(RuleMenu::AddProperty))
-                    .trigger(k),
+                    .on_press(|s: &mut App| s.toggle_rule_menu(RuleMenu::AddProperty))
+                    .build(k)
+                    .key("add-property-trigger"),
             ),
     );
     let set: Vec<RuleProp> = RuleProp::all(edit.draft.kind)
@@ -414,7 +413,6 @@ pub(super) fn rule_editor_layers(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .collect();
             let _ = Select::new("add-property", &unset)
                 .appearance(SelectAppearance::Field)
-                .width(ADD_WIDTH)
                 .open(true)
                 .on_close(|s: &mut App| s.close_rule_menu())
                 .on_choose(|s: &mut App, name: &str, _: &mut Tx| s.add_rule_prop(name))
