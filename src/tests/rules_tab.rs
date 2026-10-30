@@ -190,6 +190,46 @@ fn the_entry_sections_add_rule_is_live_with_nothing_selected() {
 }
 
 #[test]
+fn each_sections_add_rule_is_inset_like_its_label() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/a\"\n    view grid\n}\n\
+         entry-rule \"logs\" {\n    match name=\"*.log\"\n    hidden #true\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+
+    for (label, card, button) in [
+        (
+            "settings-folder-rules-label",
+            "settings-folder-rules-card",
+            "add-folder-rule",
+        ),
+        (
+            "settings-entry-rules-label",
+            "settings-entry-rules-card",
+            "add-entry-rule",
+        ),
+    ] {
+        let (label, _) = rt.presented(label).expect("the section's label is drawn");
+        let (card, _) = rt.presented(card).expect("the section's card is drawn");
+        let (button, _) = rt.presented(button).expect("the section's action is drawn");
+        let left = label[0] - card[0];
+        let right = (card[0] + card[2]) - (button[0] + button[2]);
+        assert!(
+            (left - right).abs() < 0.5,
+            "the action is inset like the label: {right} from the card's edge against {left}"
+        );
+    }
+}
+
+#[test]
 fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let dir = fixture();
     let (app, _path) = app_in_config_dir(&dir);

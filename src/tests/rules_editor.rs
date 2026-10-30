@@ -202,6 +202,9 @@ fn the_rule_editor_adds_a_property_from_the_menu() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
+    // The card grows to hold the form on a spring, so the section under it lands a frame or two
+    // later; the press waits for the page to settle.
+    rt.frame(0.3);
 
     assert!(
         rt.find("prop-sort").is_none(),
