@@ -269,36 +269,6 @@ fn the_picker_lists_every_rule_and_jumps_to_one() {
 }
 
 #[test]
-fn dragging_a_rule_rewrites_the_file_order() {
-    let dir = fixture();
-    fs::write(
-        dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
-    )
-    .unwrap();
-
-    let (app, _path) = app_in_config_dir(&dir);
-    let mut rt = runtime(app);
-    rt.frame(0.0);
-    click(&mut rt, "open-settings");
-    click(&mut rt, "settings-tab-rules");
-
-    let (x, y) = rt.find("rule-0").expect("the first rule is on screen");
-    rt.pointer_down(x, y);
-    rt.frame(0.02);
-    rt.pointer_move(x, y + 60.0);
-    rt.frame(0.02);
-    rt.pointer_up(x, y + 60.0);
-    rt.frame(0.02);
-
-    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    let first = text.find("first").expect("the first rule is still there");
-    let second = text.find("second").expect("the second rule is still there");
-    assert!(second < first, "the dragged rule moved above the other: {text}");
-}
-
-#[test]
 fn the_store_notices_a_file_changed_by_someone_else() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("config.kdl");

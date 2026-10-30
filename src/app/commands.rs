@@ -138,6 +138,8 @@ impl App {
     pub fn close_settings(&mut self) {
         self.settings = None;
         self.rule_edit = None;
+        // A drag left half-done would keep its rows shifted the next time the tab opens.
+        self.rule_drag = Default::default();
         self.rule_query = None;
         self.rule_reveal = None;
     }

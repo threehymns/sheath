@@ -28,7 +28,7 @@ pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
-pub use rules_view::{RULE_ROW_HEIGHT, RuleEdit, RuleProp};
+pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
 
@@ -103,8 +103,9 @@ pub struct App {
     pub rule_error: Option<String>,
     /// The rule the Rules tab should show first, after a command asked for it.
     pub rule_focus: Option<usize>,
-    /// The rule being dragged and the position it would land in.
-    pub rule_drag: Option<(usize, usize)>,
+    /// The rule drag in the tab's list: the row in hand, the place it would land in, and how
+    /// far the rows have moved aside for it.
+    pub rule_drag: RuleDrag,
     /// The rule picker's highlighted row, while it is up.
     pub rule_picker: Option<usize>,
     /// The rule the tab should scroll to once its row is laid out, and the frames left to wait.
@@ -216,7 +217,7 @@ impl App {
             rules: Rules::default(),
             rule_error: None,
             rule_focus: None,
-            rule_drag: None,
+            rule_drag: RuleDrag::default(),
             rule_picker: None,
             rule_reveal: None,
             rule_query: None,

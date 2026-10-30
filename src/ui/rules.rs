@@ -1,9 +1,9 @@
 //! The Rules category: every rule in file order, with its matcher, draggable, and deletable.
 
-use crate::app::{App, RULE_ROW_HEIGHT, RuleEdit, RuleProp};
+use crate::app::{App, RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp};
 use crate::config;
 use crate::rules::{EntryKind, Kind, Matcher, Prop};
-use rune::{Cursor, Drag, El, Phase, TextEdit, Tx, col, icon, row, text};
+use rune::{Anim, Cursor, Drag, El, Phase, TextEdit, Tx, col, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SortDir, TextInput,
 };
@@ -12,6 +12,10 @@ use std::collections::BTreeMap;
 
 use super::dialogs::error_text;
 use super::settings::{SETTINGS_ROW_INSET, settings_section};
+
+/// The hairline `settings_section` draws between two rules: a row stepping aside by its height
+/// plus this lands where the next row was, which is the gap a drop goes into.
+const RULE_ROW_GAP: f32 = 1.0;
 
 /// A file that does not parse is shown as an error and left alone.
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
@@ -141,24 +145,39 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
                 .color(k.c.text_muted),
         );
     if !read_only {
-        line = line
-            .cursor(Cursor::Pointer)
-            .on_drag(move |s: &mut App, drag: &mut Drag, _: &mut Tx| match drag.phase {
-                Phase::Down => s.rule_drag = Some((index, index)),
+        line = line.cursor(Cursor::Pointer).on_drag(
+            move |s: &mut App, drag: &mut Drag, tx: &mut Tx| match drag.phase {
+                // A press is not yet a drag: the row opens its editor on a click, so nothing
+                // moves until the pointer has travelled far enough to mean a move.
+                Phase::Down => {}
                 Phase::Move => {
-                    if let Some((from, _)) = s.rule_drag {
-                        let step = (drag.y / RULE_ROW_HEIGHT).round() as isize;
-                        let last = s.rules.rules.len().saturating_sub(1) as isize;
-                        let to = (from as isize + step).clamp(0, last) as usize;
-                        s.rule_drag = Some((from, to));
+                    // The form sits between two rows, so the list only has one row height
+                    // while no form is open. A clean form closes when the drag really starts;
+                    // one holding changes stays, and the drag does not start.
+                    if s.rule_edit.is_some() {
+                        if s.rule_edit.as_ref().is_some_and(|edit| edit.dirty())
+                            || !RuleDrag::travelled(drag.dy)
+                        {
+                            return;
+                        }
+                        s.close_rule_edit();
                     }
+                    // The rows the drag passes spring aside; the row in hand follows the
+                    // pointer exactly, which is why the travel is measured on the screen and
+                    // not on the row the pointer is dragging.
+                    tx.animated();
+                    let count = s.rules.rules.len();
+                    s.rule_drag
+                        .follow(index, count, drag.dy, drag.h, RULE_ROW_GAP);
                 }
                 Phase::Up => {
-                    if let Some((from, to)) = s.rule_drag.take() {
+                    // Escape, or the window losing focus, puts the row back where it was.
+                    if let Some((from, to)) = s.rule_drag.end(drag.cancelled()) {
                         s.move_rule(from, to);
                     }
                 }
-            })
+            },
+        )
             .child(
                 IconButton::new(&theme::icons::EDIT)
                     .variant(IconButtonVariant::GhostMuted)
@@ -180,6 +199,20 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
     }
     if focused {
         line = line.fill(k.c.layer_02);
+    }
+    // The row in hand lifts above the rest and follows the pointer, and the rows it passes
+    // step aside, so the gap it would drop into is the order it would land in.
+    line = line.offset(0.0, s.rule_drag.shift(index));
+    if s.rule_drag.dragging() == Some(index) {
+        // Opaque on its own shadow, so the rows it passes do not show through, and instant so
+        // it tracks the pointer rather than springing after it.
+        line = k.elevate(
+            line.raise()
+                .offset_motion(Anim::INSTANT)
+                .fill(k.c.layer_02)
+                .border(1.0, k.c.border_focus),
+            &k.elevation.raised,
+        );
     }
     line
 }
