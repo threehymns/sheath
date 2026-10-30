@@ -104,6 +104,8 @@ pub struct App {
     pub rule_focus: Option<usize>,
     /// The rule being dragged and the position it would land in.
     pub rule_drag: Option<(usize, usize)>,
+    /// The rule picker's highlighted row, while it is up.
+    pub rule_picker: Option<usize>,
     /// The Rules tab's list rect in window points, from the last layout.
     pub rules_view: [f32; 4],
     /// A presentation the user chose for this visit, over what the rules say. Cleared on every
@@ -209,6 +211,7 @@ impl App {
             rule_error: None,
             rule_focus: None,
             rule_drag: None,
+            rule_picker: None,
             rules_view: [0.0; 4],
             visit: Resolved::default(),
             views: Views::default(),

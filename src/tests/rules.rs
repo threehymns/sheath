@@ -227,6 +227,85 @@ fn an_entry_rule_reveals_a_hidden_folder() {
 }
 
 #[test]
+fn the_picker_lists_every_rule_and_jumps_to_one() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    rt.state.open_rule_picker();
+    rt.frame(0.1);
+    assert!(rt.find("rule-picker").is_some(), "the picker is up");
+
+    click(&mut rt, "rule-picker-1");
+    assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
+    assert_eq!(rt.state.rule_focus, Some(1), "the second rule is on screen");
+    assert!(rt.find("rule-picker").is_none(), "choosing closes the picker");
+}
+
+#[test]
+fn dragging_a_rule_rewrites_the_file_order() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+
+    let (x, y) = rt.find("rule-0").expect("the first rule is on screen");
+    rt.pointer_down(x, y);
+    rt.frame(0.02);
+    rt.pointer_move(x, y + 60.0);
+    rt.frame(0.02);
+    rt.pointer_up(x, y + 60.0);
+    rt.frame(0.02);
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    let first = text.find("first").expect("the first rule is still there");
+    let second = text.find("second").expect("the second rule is still there");
+    assert!(second < first, "the dragged rule moved above the other: {text}");
+}
+
+#[test]
+fn the_store_notices_a_file_changed_by_someone_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    show-hidden #false\n}\n").unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    store.watch(wake);
+    fs::write(&path, "settings {\n    show-hidden #true\n}\n").unwrap();
+
+    let mut changed = false;
+    for _ in 0..100 {
+        if store.poll() {
+            changed = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(changed, "the watcher reported the change");
+    assert!(
+        Settings::from_doc(store.doc(config::CONFIG)).show_hidden,
+        "the changed setting is read"
+    );
+}
+
+#[test]
 fn saving_the_view_as_a_rule_writes_one_that_applies() {
     let dir = fixture();
     let (mut app, _path) = app_in_config_dir(&dir);

@@ -178,6 +178,11 @@ pub(super) fn error_text(k: &Kit, error: &str) -> El {
 pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>) {
     let count = s.selection_len();
     let many = count > 1;
+    let hidden = s
+        .selected
+        .as_ref()
+        .and_then(|id| s.entries.iter().find(|entry| &entry.id == id))
+        .is_some_and(|entry| entry.hidden());
     context_menu("row-menu", el(), Some(at))
         .item(
             // One name at a time: the sheet renames a single row.
@@ -215,6 +220,36 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
             .on_select(|s: &mut App| {
                 s.close_menu();
                 s.begin_trash();
+            }),
+        )
+        .separator()
+        .item(
+            MenuItem::new("Save This View as a Rule")
+                .icon(&theme::icons::EDIT)
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.save_view_rule();
+                }),
+        )
+        .item(
+            MenuItem::new("Show All Rules")
+                .icon(&glyphs::KEYBOARD)
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.open_rule_picker();
+                }),
+        )
+        .item(
+            MenuItem::new(if hidden {
+                "Always Show This Entry"
+            } else {
+                "Always Hide This Entry"
+            })
+            .icon(k.glyph.eye)
+            .disabled(many)
+            .on_select(move |s: &mut App| {
+                s.close_menu();
+                s.pin_entry(!hidden);
             }),
         )
         .on_close(|s: &mut App| s.close_menu())

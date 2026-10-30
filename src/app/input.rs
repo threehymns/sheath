@@ -26,6 +26,18 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
+    // The rule picker takes the keys its list needs: Escape closes it, the arrows move, and
+    // Return jumps to the highlighted rule.
+    if s.rule_picker.is_some() {
+        match event.key {
+            Key::Escape => s.close_rule_picker(),
+            Key::Down => s.rule_picker_move(1),
+            Key::Up => s.rule_picker_move(-1),
+            Key::Enter => s.confirm_rule_picker(),
+            _ => return false,
+        }
+        return true;
+    }
     // The sheet, the row menu and the settings own the keyboard while open: their fields and
     // rows handle Return, Escape, the arrows and the focus trap.
     if s.sheet.is_some() || s.menu.is_some() || s.settings.is_some() {

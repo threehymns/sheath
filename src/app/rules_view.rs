@@ -107,6 +107,40 @@ impl App {
         self.after_rule_change();
     }
 
+    /// Opens the picker that lists every rule by its matcher.
+    pub fn open_rule_picker(&mut self) {
+        self.rule_picker = Some(0);
+    }
+
+    pub fn close_rule_picker(&mut self) {
+        self.rule_picker = None;
+    }
+
+    /// Moves the picker's highlight, stopping at the ends.
+    pub fn rule_picker_move(&mut self, delta: isize) {
+        let count = self.rules.rules.len();
+        if count == 0 {
+            return;
+        }
+        let at = self.rule_picker.unwrap_or(0) as isize;
+        self.rule_picker = Some((at + delta).clamp(0, count as isize - 1) as usize);
+    }
+
+    /// Jumps from the picker to a rule's definition in the Rules tab.
+    pub fn choose_rule(&mut self, index: usize) {
+        self.rule_picker = None;
+        if index < self.rules.rules.len() {
+            self.rule_focus = Some(index);
+            self.settings = Some(SettingsTab::Rules);
+        }
+    }
+
+    pub fn confirm_rule_picker(&mut self) {
+        if let Some(index) = self.rule_picker {
+            self.choose_rule(index);
+        }
+    }
+
     /// Opens the Rules tab at the first rule matching the folder on screen.
     pub fn show_folder_rules(&mut self) {
         let count = self.entries.len();

@@ -31,11 +31,12 @@ pub enum Action {
     SaveViewRule,
     ShowEntry,
     HideEntry,
+    PickRule,
 }
 
 impl Action {
     /// Every action, in the order the settings dialog lists them.
-    pub const ALL: [Action; 20] = [
+    pub const ALL: [Action; 21] = [
         Action::CommandBar,
         Action::OpenSettings,
         Action::Back,
@@ -56,6 +57,7 @@ impl Action {
         Action::SaveViewRule,
         Action::ShowEntry,
         Action::HideEntry,
+        Action::PickRule,
     ];
 
     /// Whether Shift is ignored when matching this action, as editor command bars treat
@@ -87,6 +89,7 @@ impl Action {
             Action::SaveViewRule => "save-view-rule",
             Action::ShowEntry => "show-entry",
             Action::HideEntry => "hide-entry",
+            Action::PickRule => "pick-rule",
         }
     }
 
@@ -113,6 +116,7 @@ impl Action {
             Action::SaveViewRule => "Save This View as a Rule",
             Action::ShowEntry => "Always Show This Entry",
             Action::HideEntry => "Always Hide This Entry",
+            Action::PickRule => "Show All Rules",
         }
     }
 
@@ -127,7 +131,8 @@ impl Action {
             | Action::ViewEntryRules
             | Action::SaveViewRule
             | Action::ShowEntry
-            | Action::HideEntry => None,
+            | Action::HideEntry
+            | Action::PickRule => None,
             _ => Some(self.builtin_chord()),
         }
     }

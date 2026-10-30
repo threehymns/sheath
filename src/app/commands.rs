@@ -235,6 +235,7 @@ impl App {
             Action::SaveViewRule => self.save_view_rule(),
             Action::ShowEntry => self.pin_entry(false),
             Action::HideEntry => self.pin_entry(true),
+            Action::PickRule => self.open_rule_picker(),
         }
     }
 }

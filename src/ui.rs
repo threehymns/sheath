@@ -6,6 +6,7 @@ mod grid;
 mod inspector;
 mod palette;
 mod path_bar;
+mod rule_picker;
 mod rules;
 mod settings;
 mod sidebar;
@@ -86,6 +87,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     if s.palette.is_some() {
         palette_layer(s, k, &mut layers);
+    }
+    if s.rule_picker.is_some() {
+        rule_picker::rule_picker_layer(s, k, &mut layers);
     }
     if let Some(at) = s.menu {
         row_menu(s, k, at, &mut layers);
