@@ -30,8 +30,10 @@ const DRAG_SLOP: f32 = 4.0;
 /// the gap it would drop into is the order it would land in.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RuleDrag {
-    /// The row in hand, once the pointer has travelled far enough to mean a move.
-    from: Option<usize>,
+    /// The row in hand, once the pointer has travelled far enough to mean a move: the kind of
+    /// section it belongs to and its place in that section. The two sections number their rows
+    /// separately, so the kind is what tells their first rows apart.
+    from: Option<(Kind, usize)>,
     /// Where that row would land if it were dropped now.
     to: usize,
     /// How far the pointer has travelled since the press.
@@ -46,25 +48,26 @@ impl RuleDrag {
         dy.abs() >= DRAG_SLOP
     }
 
-    /// The row being dragged, once the gesture has outgrown a click.
-    pub fn dragging(&self) -> Option<usize> {
+    /// The row being dragged, once the gesture has outgrown a click: its section's kind and its
+    /// place in that section.
+    pub fn dragging(&self) -> Option<(Kind, usize)> {
         self.from
     }
 
     /// Whether dropping now would change the order: the row is in hand and the pointer is over
     /// another place.
     pub fn moves(&self) -> bool {
-        self.from.is_some_and(|from| from != self.to)
+        self.from.is_some_and(|(_, from)| from != self.to)
     }
 
-    /// The pointer moved `dy` since the press on row `index`, which is `h` tall; `gap` is the
-    /// hairline between two rows, which one step carries the rows across too.
-    pub fn follow(&mut self, index: usize, count: usize, dy: f32, h: f32, gap: f32) {
+    /// The pointer moved `dy` since the press on row `index` of section `kind`, which is `h`
+    /// tall; `gap` is the hairline between two rows, which one step carries the rows across too.
+    pub fn follow(&mut self, kind: Kind, index: usize, count: usize, dy: f32, h: f32, gap: f32) {
         if self.from.is_none() {
             if !Self::travelled(dy) {
                 return;
             }
-            self.from = Some(index);
+            self.from = Some((kind, index));
             self.pitch = (h + gap).max(1.0);
         }
         self.dy = dy;
@@ -75,17 +78,21 @@ impl RuleDrag {
     /// The gesture ended: `(from, to)` for a drop that reorders, `None` for a cancel, a drop in
     /// place, or a press that never moved.
     pub fn end(&mut self, cancelled: bool) -> Option<(usize, usize)> {
-        let from = self.from.take()?;
+        let (_, from) = self.from.take()?;
         self.dy = 0.0;
         (!cancelled && from != self.to).then_some((from, self.to))
     }
 
-    /// How far row `index` sits from its place: the row in hand follows the pointer exactly, and
-    /// the rows between its place and its target step toward the gap it left.
-    pub fn shift(&self, index: usize) -> f32 {
-        let Some(from) = self.from else {
+    /// How far row `index` of section `kind` sits from its place: the row in hand follows the
+    /// pointer exactly, and the rows between its place and its target step toward the gap it
+    /// left. A row of the other section never moves for this gesture.
+    pub fn shift(&self, kind: Kind, index: usize) -> f32 {
+        let Some((from_kind, from)) = self.from else {
             return 0.0;
         };
+        if from_kind != kind {
+            return 0.0;
+        }
         if index == from {
             self.dy
         } else if from < index && index <= self.to {

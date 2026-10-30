@@ -290,7 +290,7 @@ fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: 
                         tx.animated();
                         let count = s.rules.rules.iter().filter(|rule| rule.kind == kind).count();
                         s.rule_drag
-                            .follow(slot, count, drag.dy, drag.h, RULE_ROW_GAP);
+                            .follow(kind, slot, count, drag.dy, drag.h, RULE_ROW_GAP);
                         // A release over the row arrives as a press too, so a gesture that
                         // passed over another place must not open the row's form.
                         if s.rule_drag.moves() {
@@ -336,8 +336,8 @@ fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: 
     }
     // The row in hand lifts above the rest and follows the pointer, and the rows it passes
     // step aside, so the gap it would drop into is the order it would land in.
-    line = line.offset(0.0, s.rule_drag.shift(slot));
-    if s.rule_drag.dragging() == Some(slot) {
+    line = line.offset(0.0, s.rule_drag.shift(kind, slot));
+    if s.rule_drag.dragging() == Some((kind, slot)) {
         // Opaque on its own shadow, so the rows it passes do not show through, and instant so
         // it tracks the pointer rather than springing after it.
         line = k.elevate(
