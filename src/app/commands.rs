@@ -134,6 +134,13 @@ impl App {
         self.settings = None;
     }
 
+    /// Opens `config.kdl` in the system's editor, from the Rules tab's error banner.
+    pub fn open_config_in_editor(&mut self) {
+        if let Some(path) = self.store.path(crate::config::CONFIG) {
+            let _ = super::paths::open_external(&path);
+        }
+    }
+
     /// A recorder proposed `shortcut` for `action`: refuse a chord another action uses, and
     /// save the change. The error words itself on the recorder's field.
     pub fn set_binding(

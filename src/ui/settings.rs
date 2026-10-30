@@ -409,6 +409,9 @@ fn general_settings(s: &App, k: &Kit) -> El {
     if let Some(error) = s.store.error(config::CONFIG) {
         page = page.child(error_text(k, error));
     }
+    if let Some(error) = &s.store.write_error {
+        page = page.child(error_text(k, error));
+    }
     page
 }
 

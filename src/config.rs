@@ -130,6 +130,8 @@ pub struct Store {
     files: BTreeMap<&'static str, Loaded>,
     changes: Option<Receiver<()>>,
     _watcher: Option<notify::RecommendedWatcher>,
+    /// Why the last save could not be written, for the panels that show it.
+    pub write_error: Option<String>,
 }
 
 impl Store {
@@ -159,6 +161,7 @@ impl Store {
             files,
             changes: None,
             _watcher: None,
+            write_error: None,
         }
     }
 
@@ -221,7 +224,11 @@ impl Store {
         let mut doc = doc;
         edit(&mut doc);
         let text = doc.to_string();
-        write_atomic(&path, &text)?;
+        if let Err(err) = write_atomic(&path, &text) {
+            self.write_error = Some(err.clone());
+            return Err(err);
+        }
+        self.write_error = None;
         if let Some(file) = self.files.get_mut(name) {
             file.doc = Some(doc);
             file.stamp = stamp_of(&path);

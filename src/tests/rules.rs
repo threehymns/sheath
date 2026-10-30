@@ -227,6 +227,25 @@ fn an_entry_rule_reveals_a_hidden_folder() {
 }
 
 #[test]
+fn a_broken_config_shows_a_read_only_banner_with_an_open_action() {
+    let dir = fixture();
+    fs::write(dir.path().join("config.kdl"), "settings {\n    show-hidden #true\n")
+        .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+
+    assert!(rt.find("rules-error").is_some(), "the tab says what is wrong");
+    assert!(
+        rt.find("open-config-editor").is_some(),
+        "the banner offers to open the file"
+    );
+}
+
+#[test]
 fn the_picker_lists_every_rule_and_jumps_to_one() {
     let dir = fixture();
     fs::write(

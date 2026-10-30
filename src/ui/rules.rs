@@ -3,7 +3,7 @@
 use crate::app::App;
 use crate::config;
 use rune::{Cursor, Drag, El, Phase, Tx, col, icon, row, text};
-use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
+use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_theme_opencode as theme;
 
 use super::dialogs::error_text;
@@ -12,7 +12,12 @@ use super::settings::{SETTINGS_ROW_INSET, settings_section};
 /// A file that does not parse is shown as an error and left alone.
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
     let mut page = col().key("settings-rules").w_full().gap(24.0);
-    if let Some(error) = s.store.error(config::CONFIG).or(s.rule_error.as_deref()) {
+    if let Some(error) = s
+        .store
+        .error(config::CONFIG)
+        .or(s.store.write_error.as_deref())
+        .or(s.rule_error.as_deref())
+    {
         page = page.child(
             col()
                 .key("rules-error")
@@ -25,6 +30,16 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
                         .color(k.c.text_muted)
                         .mx(SETTINGS_ROW_INSET)
                         .wrap(),
+                )
+                .child(
+                    row().gap(8.0).child(
+                        Button::new("Open in Editor")
+                            .variant(ButtonVariant::Outline)
+                            .control_size(ControlSize::Small)
+                            .on_press(|s: &mut App| s.open_config_in_editor())
+                            .build(k)
+                            .key("open-config-editor"),
+                    ),
                 ),
         );
     }
