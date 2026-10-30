@@ -317,7 +317,6 @@ impl Keybinds {
             None => self.chords.remove(&action),
         };
     }
-
 }
 
 fn default_chords() -> BTreeMap<Action, Shortcut> {

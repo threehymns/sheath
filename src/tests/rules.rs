@@ -17,9 +17,7 @@ fn rules(text: &str) -> Rules {
 
 #[test]
 fn a_rule_covers_the_folder_and_everything_under_it() {
-    let rules = rules(
-        "folder-rule \"tree\" {\n    match path=\"/work/**\"\n    view grid\n}\n",
-    );
+    let rules = rules("folder-rule \"tree\" {\n    match path=\"/work/**\"\n    view grid\n}\n");
     for path in ["/work", "/work/projects", "/work/projects/deep"] {
         assert_eq!(
             rules.resolve(Path::new(path), 0).view,
@@ -319,7 +317,10 @@ fn saving_the_view_as_a_rule_writes_one_that_applies() {
     app.save_view_rule();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("folder-rule {"), "the rule is unnamed: {text}");
+    assert!(
+        text.contains("folder-rule {"),
+        "the rule is unnamed: {text}"
+    );
     assert!(text.contains("view grid"), "{text}");
     assert!(!app.rules.rules.is_empty(), "the rule is live");
     assert!(app.is_grid());
@@ -379,15 +380,17 @@ fn resetting_a_setting_leaves_a_ruled_folder_alone() {
     let (mut app, _path) = app_in_config_dir(&dir);
     assert!(app.is_grid());
     app.reset_setting(Setting::ScrollInertia);
-    assert!(app.is_grid(), "the rule still decides the view after a reset");
+    assert!(
+        app.is_grid(),
+        "the rule still decides the view after a reset"
+    );
 }
 
 #[test]
 fn an_entry_rule_cannot_name_a_count() {
-    let doc: kdl::KdlDocument =
-        "entry-rule \"x\" {\n    match min-items=3\n    hidden #true\n}\n"
-            .parse()
-            .unwrap();
+    let doc: kdl::KdlDocument = "entry-rule \"x\" {\n    match min-items=3\n    hidden #true\n}\n"
+        .parse()
+        .unwrap();
     let error = Rules::parse(&doc).expect_err("min-items is a folder matcher");
     assert!(error.contains("min-items"), "{error}");
     assert!(error.contains("folder rules"), "{error}");
@@ -406,6 +409,8 @@ fn a_rule_reads_back_from_the_text_the_editor_writes() {
     assert_eq!(again.rules.len(), 2);
     assert_eq!(again.rules[0].props.view, rules.rules[0].props.view);
     assert_eq!(again.rules[1].matches[0].name.as_deref(), Some("*.log"));
-    assert_eq!(again.rules[1].excludes[0].path.as_deref(), Some("/w/keep.log"));
+    assert_eq!(
+        again.rules[1].excludes[0].path.as_deref(),
+        Some("/w/keep.log")
+    );
 }
-

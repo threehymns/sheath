@@ -9,14 +9,19 @@ pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         return;
     };
     let panel = if k.dark { k.c.bg_base } else { k.c.layer_02 };
-    let mut list = col().key("rule-picker-list").w_full().gap(1.0).px(6.0).py(6.0);
+    let mut list = col()
+        .key("rule-picker-list")
+        .w_full()
+        .gap(1.0)
+        .px(6.0)
+        .py(6.0);
     if s.rules.rules.is_empty() {
         list = list.child(
-            row().key("rule-picker-none").px(12.0).py(14.0).child(
-                text("No rules yet")
-                    .font(k.ty.ui)
-                    .color(k.c.text_faint),
-            ),
+            row()
+                .key("rule-picker-none")
+                .px(12.0)
+                .py(14.0)
+                .child(text("No rules yet").font(k.ty.ui).color(k.c.text_faint)),
         );
     }
     for (index, rule) in s.rules.rules.iter().enumerate() {
@@ -67,11 +72,10 @@ pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .clip_rounded(10.0)
         .modal(true, |s: &mut App| s.close_rule_picker())
         .child(
-            row().px(10.0).py(8.0).child(
-                text("Rules")
-                    .font(k.ty.ui_medium)
-                    .color(k.c.text_muted),
-            ),
+            row()
+                .px(10.0)
+                .py(8.0)
+                .child(text("Rules").font(k.ty.ui_medium).color(k.c.text_muted)),
         )
         .child(
             el().key("rule-picker-rule")

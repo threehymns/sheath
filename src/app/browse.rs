@@ -243,9 +243,9 @@ impl App {
     /// now too.
     pub fn reset_setting(&mut self, setting: Setting) {
         self.config.reset(setting);
-        let _ = self
-            .store
-            .edit(crate::config::CONFIG, |doc| crate::settings::Settings::clear(doc, setting));
+        let _ = self.store.edit(crate::config::CONFIG, |doc| {
+            crate::settings::Settings::clear(doc, setting)
+        });
         // A rule or a remembered visit still outranks the global default, so the open folder
         // is resolved again rather than forced back to the setting just reset.
         self.apply_rules();

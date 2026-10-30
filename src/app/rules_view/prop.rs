@@ -77,7 +77,10 @@ impl RuleProp {
     /// What the rule holds for it, as one of `options`; `None` when the rule leaves it unset.
     pub fn label(self, props: &Props) -> Option<&'static str> {
         match self {
-            RuleProp::View => held(props.view, |view| if view.is_grid() { "grid" } else { "list" }),
+            RuleProp::View => held(
+                props.view,
+                |view| if view.is_grid() { "grid" } else { "list" },
+            ),
             RuleProp::Sort => held(props.sort, SortKey::as_str),
             RuleProp::Direction => held(props.direction, |direction| match direction {
                 SortDir::Ascending => "ascending",

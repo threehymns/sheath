@@ -15,7 +15,8 @@ impl App {
     /// A path with the home folder written as `~`, so a rule travels between machines.
     pub fn short_path(path: &Path) -> String {
         let text = path.to_string_lossy();
-        let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+        let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
+        else {
             return text.into_owned();
         };
         let home = home.to_string_lossy();
@@ -40,7 +41,9 @@ impl App {
         let text = format!(
             "folder-rule {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
             crate::rules::quote(&pattern),
-            SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name).as_str(),
+            SortKey::from_column(&self.sort.0)
+                .unwrap_or(SortKey::Name)
+                .as_str(),
         );
         self.append_rule(Kind::Folder, &text);
     }

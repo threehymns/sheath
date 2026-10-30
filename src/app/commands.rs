@@ -15,8 +15,11 @@ pub enum SettingsTab {
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 3] =
-        [SettingsTab::General, SettingsTab::Rules, SettingsTab::Keybinds];
+    pub const ALL: [SettingsTab; 3] = [
+        SettingsTab::General,
+        SettingsTab::Rules,
+        SettingsTab::Keybinds,
+    ];
 
     /// The stable name the element keys use.
     pub fn id(self) -> &'static str {
@@ -171,9 +174,9 @@ impl App {
         shortcut: Option<&Shortcut>,
     ) -> Result<(), ShortcutError> {
         self.keybinds.set(action, shortcut)?;
-        let _ = self
-            .store
-            .edit(crate::config::KEYBINDS, |doc| self.keybinds.write(doc, action));
+        let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
+            self.keybinds.write(doc, action)
+        });
         Ok(())
     }
 
@@ -207,9 +210,9 @@ impl App {
     /// the field back to rest.
     pub fn reset_binding(&mut self, action: Action) {
         self.keybinds.reset(action);
-        let _ = self
-            .store
-            .edit(crate::config::KEYBINDS, |doc| self.keybinds.write(doc, action));
+        let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
+            self.keybinds.write(doc, action)
+        });
         self.recorders.insert(action, Recorder::default());
     }
 

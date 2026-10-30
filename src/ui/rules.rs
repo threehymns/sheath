@@ -177,23 +177,27 @@ fn section_indices(s: &App, kind: Kind) -> Vec<usize> {
 
 /// A section's line for when it holds no rules yet, where a row would be.
 fn empty_note(k: &Kit, message: &str) -> El {
-    row()
-        .w_full()
-        .px(SETTINGS_ROW_INSET)
-        .py(10.0)
-        .child(
-            text(message)
-                .font(k.ty.caption())
-                .color(k.c.text_muted)
-                .wrap(),
-        )
+    row().w_full().px(SETTINGS_ROW_INSET).py(10.0).child(
+        text(message)
+            .font(k.ty.caption())
+            .color(k.c.text_muted)
+            .wrap(),
+    )
 }
 
 /// One rule: its matcher, the kind of rule it is, and the controls for it. A press anywhere on
 /// the row opens the rule's form; dragging rewrites the order of the rule nodes, and the rule's
 /// comments travel with it. Delete asks in the row before it removes anything. `slot` is the
 /// row's place in its section, which is what the drag counts in.
-fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: bool, key: &str) -> El {
+fn rule_row(
+    s: &App,
+    k: &Kit,
+    index: usize,
+    slot: usize,
+    kind: Kind,
+    read_only: bool,
+    key: &str,
+) -> El {
     let Some(rule) = s.rules.rules.get(index) else {
         return row();
     };
@@ -288,7 +292,12 @@ fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: 
                         // and not on the row the pointer is dragging. The drag counts in the
                         // section's own places, so a rule never passes one of the other kind.
                         tx.animated();
-                        let count = s.rules.rules.iter().filter(|rule| rule.kind == kind).count();
+                        let count = s
+                            .rules
+                            .rules
+                            .iter()
+                            .filter(|rule| rule.kind == kind)
+                            .count();
                         s.rule_drag
                             .follow(kind, slot, count, drag.dy, drag.h, RULE_ROW_GAP);
                         // A release over the row arrives as a press too, so a gesture that
@@ -304,9 +313,7 @@ fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: 
                         // started in.
                         if let Some((from, to)) = s.rule_drag.end(drag.cancelled()) {
                             let members = section_indices(s, kind);
-                            if let (Some(&from), Some(&to)) =
-                                (members.get(from), members.get(to))
-                            {
+                            if let (Some(&from), Some(&to)) = (members.get(from), members.get(to)) {
                                 tx.instant();
                                 s.move_rule(from, to);
                             }

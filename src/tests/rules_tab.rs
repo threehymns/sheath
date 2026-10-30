@@ -7,8 +7,11 @@ use std::fs;
 #[test]
 fn a_broken_config_shows_a_read_only_banner_with_an_open_action() {
     let dir = fixture();
-    fs::write(dir.path().join("config.kdl"), "settings {\n    show-hidden #true\n")
-        .unwrap();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    show-hidden #true\n",
+    )
+    .unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
@@ -16,7 +19,10 @@ fn a_broken_config_shows_a_read_only_banner_with_an_open_action() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
-    assert!(rt.find("rules-error").is_some(), "the tab says what is wrong");
+    assert!(
+        rt.find("rules-error").is_some(),
+        "the tab says what is wrong"
+    );
     assert!(
         rt.find("open-config-editor").is_some(),
         "the banner offers to open the file"
@@ -51,7 +57,10 @@ fn the_picker_lists_every_rule_and_jumps_to_one() {
         rt.find("rule-editor-1").is_some(),
         "the chosen rule's form is on screen"
     );
-    assert!(rt.find("rule-picker").is_none(), "choosing closes the picker");
+    assert!(
+        rt.find("rule-picker").is_none(),
+        "choosing closes the picker"
+    );
 }
 
 #[test]
@@ -71,21 +80,28 @@ fn the_rules_tab_gives_each_kind_its_own_section_and_add_rule() {
     click(&mut rt, "settings-tab-rules");
 
     assert!(
-        rt.find("settings-folder-rules").is_some()
-            && rt.find("settings-entry-rules").is_some(),
+        rt.find("settings-folder-rules").is_some() && rt.find("settings-entry-rules").is_some(),
         "the page has a section per kind"
     );
     assert!(
         rt.find("rule-here-0").is_some() && rt.find("rule-logs-0").is_some(),
         "each rule is on the page"
     );
-    let (_, entry_title) = rt.find("settings-entry-rules").expect("the entry section is on screen");
+    let (_, entry_title) = rt
+        .find("settings-entry-rules")
+        .expect("the entry section is on screen");
     assert!(
-        rt.find("rule-here-0").expect("the folder rule is on screen").1 < entry_title,
+        rt.find("rule-here-0")
+            .expect("the folder rule is on screen")
+            .1
+            < entry_title,
         "the folder rule sits above the entry section"
     );
     assert!(
-        rt.find("rule-logs-0").expect("the entry rule is on screen").1 > entry_title,
+        rt.find("rule-logs-0")
+            .expect("the entry rule is on screen")
+            .1
+            > entry_title,
         "the entry rule sits under it"
     );
     assert!(
@@ -119,7 +135,10 @@ fn the_entry_sections_add_rule_starts_a_rule_for_the_selected_entry() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("entry-rule {"), "{text}");
     assert!(text.contains("hidden #false"), "{text}");
-    assert!(text.contains(".secret"), "the selected entry is the match: {text}");
+    assert!(
+        text.contains(".secret"),
+        "the selected entry is the match: {text}"
+    );
     assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
     assert!(rt.state.rule_edit.is_none(), "saving closes the form");
 }
@@ -259,7 +278,10 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let key = format!("rule-{}-0", rt.state.rules.rules[0].summary());
 
     rt.frame(0.1);
-    assert!(rt.find(&key).is_some(), "the new rule is on screen as {key}");
+    assert!(
+        rt.find(&key).is_some(),
+        "the new rule is on screen as {key}"
+    );
 }
 
 #[test]
@@ -277,7 +299,9 @@ fn a_command_with_no_matching_rule_says_so_in_the_tab() {
     rt.state.show_folder_rules();
     rt.frame(0.05);
 
-    assert!(rt.find("rules-no-match").is_some(), "the tab says nothing matched");
+    assert!(
+        rt.find("rules-no-match").is_some(),
+        "the tab says nothing matched"
+    );
     assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
 }
-

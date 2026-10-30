@@ -68,8 +68,7 @@ pub fn state_dir() -> Option<PathBuf> {
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
             .or_else(|| {
-                std::env::var_os("HOME")
-                    .map(|home| PathBuf::from(home).join(".local/state"))
+                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
             })
             .map(|dir| dir.join("sheath"))
     }
@@ -239,20 +238,18 @@ impl Store {
         // A first run has no config folder yet, and there is nothing to watch until it exists.
         let _ = fs::create_dir_all(&dir);
         let (tx, rx) = mpsc::channel();
-        let watcher = notify::recommended_watcher(
-            move |event: notify::Result<notify::Event>| {
-                let Ok(event) = event else {
-                    return;
-                };
-                let ours = event.paths.iter().any(|path| {
-                    path.file_name()
-                        .is_some_and(|name| name == CONFIG || name == KEYBINDS)
-                });
-                if ours && tx.send(()).is_ok() {
-                    wake();
-                }
-            },
-        );
+        let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+            let Ok(event) = event else {
+                return;
+            };
+            let ours = event.paths.iter().any(|path| {
+                path.file_name()
+                    .is_some_and(|name| name == CONFIG || name == KEYBINDS)
+            });
+            if ours && tx.send(()).is_ok() {
+                wake();
+            }
+        });
         let Ok(mut watcher) = watcher else {
             return;
         };
@@ -293,7 +290,9 @@ impl Store {
                     Some(format!("Couldn’t read {}: {err}", path.display())),
                 ),
             },
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => (Some(KdlDocument::new()), None),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                (Some(KdlDocument::new()), None)
+            }
             Err(err) => (
                 self.files.get(name).and_then(|file| file.doc.clone()),
                 Some(format!("Couldn’t read {}: {err}", path.display())),

@@ -95,14 +95,17 @@ impl Matcher {
         self.path
             .as_ref()
             .is_none_or(|pattern| path_match(pattern, entry.path))
-            && self.name.as_ref().is_none_or(|pattern| glob(pattern, entry.name))
+            && self
+                .name
+                .as_ref()
+                .is_none_or(|pattern| glob(pattern, entry.name))
             && self
                 .extension
                 .as_ref()
                 .is_none_or(|pattern| glob(pattern, entry.extension()))
-            && self.kind.is_none_or(|kind| {
-                (kind == EntryKind::Folder) == entry.is_dir
-            })
+            && self
+                .kind
+                .is_none_or(|kind| (kind == EntryKind::Folder) == entry.is_dir)
     }
 
     /// The directive as the Rules tab prints it.
@@ -175,7 +178,8 @@ impl Rule {
         if self.kind != Kind::Folder {
             return false;
         }
-        let matched = self.matches.is_empty() || self.matches.iter().any(|m| m.matches_folder(path, count));
+        let matched =
+            self.matches.is_empty() || self.matches.iter().any(|m| m.matches_folder(path, count));
         matched && !self.excludes.iter().any(|m| m.matches_folder(path, count))
     }
 
@@ -183,7 +187,8 @@ impl Rule {
         if self.kind != Kind::Entry {
             return false;
         }
-        let matched = self.matches.is_empty() || self.matches.iter().any(|m| m.matches_entry(entry));
+        let matched =
+            self.matches.is_empty() || self.matches.iter().any(|m| m.matches_entry(entry));
         matched && !self.excludes.iter().any(|m| m.matches_entry(entry))
     }
 
@@ -439,7 +444,10 @@ impl Rules {
 }
 
 fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
-    let name = node.get(0).and_then(|entry| entry.as_string()).map(str::to_owned);
+    let name = node
+        .get(0)
+        .and_then(|entry| entry.as_string())
+        .map(str::to_owned);
     let mut rule = Rule {
         name,
         kind,
@@ -456,10 +464,12 @@ fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
             "exclude" => rule.excludes.push(parse_matcher(child, kind)?),
             "view" => rule.props.view = parse_prop(child, "view", Kind::Folder, kind, parse_view)?,
             "sort" => {
-                rule.props.sort = parse_prop(child, "sort", Kind::Folder, kind, SortKey::from_column)?
+                rule.props.sort =
+                    parse_prop(child, "sort", Kind::Folder, kind, SortKey::from_column)?
             }
             "direction" => {
-                rule.props.direction = parse_prop(child, "direction", Kind::Folder, kind, parse_direction)?
+                rule.props.direction =
+                    parse_prop(child, "direction", Kind::Folder, kind, parse_direction)?
             }
             "show-hidden" => {
                 rule.props.show_hidden =
@@ -569,7 +579,9 @@ fn parse_matcher(node: &KdlNode, kind: Kind) -> Result<Matcher, String> {
             other => return Err(format!("unknown matcher `{other}`")),
         }
     }
-    if kind == Kind::Folder && (matcher.name.is_some() || matcher.kind.is_some() || matcher.extension.is_some()) {
+    if kind == Kind::Folder
+        && (matcher.name.is_some() || matcher.kind.is_some() || matcher.extension.is_some())
+    {
         return Err(
             "folder rules match path, min-items, and max-items; name, kind, and extension are \
              for entry rules"

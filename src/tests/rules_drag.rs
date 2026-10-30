@@ -20,8 +20,12 @@ fn dragging_a_rule_rewrites_the_file_order() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
-    let (x, y) = rt.find("rule-first-0").expect("the first rule is on screen");
-    let (_, below) = rt.find("rule-second-0").expect("the second rule is on screen");
+    let (x, y) = rt
+        .find("rule-first-0")
+        .expect("the first rule is on screen");
+    let (_, below) = rt
+        .find("rule-second-0")
+        .expect("the second rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, y + 60.0);
@@ -30,24 +34,33 @@ fn dragging_a_rule_rewrites_the_file_order() {
         rt.frame(0.05);
     }
 
-    let (_, lifted) = rt.find("rule-first-0").expect("the dragged row is on screen");
+    let (_, lifted) = rt
+        .find("rule-first-0")
+        .expect("the dragged row is on screen");
     assert!(
         lifted > y + 40.0,
         "the row in hand follows the pointer: {lifted} from {y}"
     );
-    let (_, stepped) = rt.find("rule-second-0").expect("the row below is on screen");
+    let (_, stepped) = rt
+        .find("rule-second-0")
+        .expect("the row below is on screen");
     assert!(
         stepped < below - 20.0,
         "the row it passes steps up into the gap it left: {stepped} from {below}"
     );
     let midway = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     let first = midway.find("first").expect("the first rule is still there");
-    let second = midway.find("second").expect("the second rule is still there");
+    let second = midway
+        .find("second")
+        .expect("the second rule is still there");
     assert!(
         first < second,
         "nothing is written until the pointer is released: {midway}"
     );
-    assert!(rt.state.rule_edit.is_none(), "the drag did not open the editor");
+    assert!(
+        rt.state.rule_edit.is_none(),
+        "the drag did not open the editor"
+    );
 
     rt.pointer_up(x, y + 60.0);
     rt.frame(0.02);
@@ -55,16 +68,15 @@ fn dragging_a_rule_rewrites_the_file_order() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     let first = text.find("first").expect("the first rule is still there");
     let second = text.find("second").expect("the second rule is still there");
-    assert!(second < first, "the dragged rule moved above the other: {text}");
+    assert!(
+        second < first,
+        "the dragged rule moved above the other: {text}"
+    );
     assert!(
         rt.find("rule-first-0").is_some() && rt.find("rule-second-0").is_some(),
         "the rows keep their keys, so the drop lands where the drag showed it"
     );
-    assert_eq!(
-        rt.state.rule_drag.dragging(),
-        None,
-        "the gesture is over"
-    );
+    assert_eq!(rt.state.rule_drag.dragging(), None, "the gesture is over");
 }
 
 #[test]
@@ -83,7 +95,9 @@ fn a_press_without_movement_leaves_the_order_alone() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
-    let (x, y) = rt.find("rule-first-0").expect("the first rule is on screen");
+    let (x, y) = rt
+        .find("rule-first-0")
+        .expect("the first rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_up(x, y);
@@ -151,7 +165,9 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
     rt.frame(0.05);
 
     // The open form takes its row's place, so the drag starts on the rule below it.
-    let (x, y) = rt.find("rule-second-0").expect("the second rule is on screen");
+    let (x, y) = rt
+        .find("rule-second-0")
+        .expect("the second rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, y + 60.0);
@@ -162,7 +178,11 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
         Some(0),
         "the form stays open, so its changes are not lost to a drag"
     );
-    assert_eq!(rt.state.rule_drag.dragging(), None, "the drag did not start");
+    assert_eq!(
+        rt.state.rule_drag.dragging(),
+        None,
+        "the drag did not start"
+    );
 
     rt.pointer_up(x, y + 60.0);
     rt.frame(0.05);
@@ -196,7 +216,9 @@ fn a_drag_closes_a_clean_editor_before_reordering() {
     assert!(rt.state.rule_edit.is_some(), "the form is open");
 
     // The open form takes its row's place, so the drag starts on the rule below it.
-    let (x, y) = rt.find("rule-second-0").expect("the second rule is on screen");
+    let (x, y) = rt
+        .find("rule-second-0")
+        .expect("the second rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, y - 60.0);
@@ -231,7 +253,9 @@ fn dragging_a_rule_leaves_the_other_sections_rows_still() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
-    let (x, y) = rt.find("rule-first-0").expect("the first rule is on screen");
+    let (x, y) = rt
+        .find("rule-first-0")
+        .expect("the first rule is on screen");
     let (_, entry_before) = rt.find("rule-logs-0").expect("the entry rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
@@ -240,7 +264,9 @@ fn dragging_a_rule_leaves_the_other_sections_rows_still() {
         rt.frame(0.05);
     }
 
-    let (_, lifted) = rt.find("rule-first-0").expect("the dragged row is on screen");
+    let (_, lifted) = rt
+        .find("rule-first-0")
+        .expect("the dragged row is on screen");
     assert!(
         lifted > y + 40.0,
         "the row in hand follows the pointer: {lifted} from {y}"
@@ -254,4 +280,3 @@ fn dragging_a_rule_leaves_the_other_sections_rows_still() {
     rt.pointer_up(x, y + 60.0);
     rt.frame(0.05);
 }
-

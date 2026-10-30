@@ -166,7 +166,11 @@ impl Settings {
         let body = format!(
             "{} {}",
             setting.name(),
-            if setting.value(self) { "#true" } else { "#false" }
+            if setting.value(self) {
+                "#true"
+            } else {
+                "#false"
+            }
         );
         write_child(doc, "settings", setting.name(), &body);
     }
@@ -262,6 +266,8 @@ pub fn remove_child(doc: &mut KdlDocument, parent: &str, name: &str) {
         return;
     };
     if let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() {
-        children.nodes_mut().retain(|node| node.name().value() != name);
+        children
+            .nodes_mut()
+            .retain(|node| node.name().value() != name);
     }
 }

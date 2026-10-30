@@ -238,29 +238,19 @@ pub(super) fn settings_section_action(
     // The inset sits on the label and the action, not on the row: margins on a full-width row
     // widen it past the page's edge, leaving the action flush. Each label carries its section's
     // key, so no two sections share one.
-    let mut label = row()
-        .w_full()
-        .min_h(20.0)
-        .gap(8.0)
-        .center_y()
-        .child(
-            text(title)
-                .key(format!("{key}-label"))
-                .font(k.ty.ui_medium.lh(16.0))
-                .color(k.c.text_muted)
-                .mx(SETTINGS_ROW_INSET)
-                .grow(1.0)
-                .truncate(),
-        );
+    let mut label = row().w_full().min_h(20.0).gap(8.0).center_y().child(
+        text(title)
+            .key(format!("{key}-label"))
+            .font(k.ty.ui_medium.lh(16.0))
+            .color(k.c.text_muted)
+            .mx(SETTINGS_ROW_INSET)
+            .grow(1.0)
+            .truncate(),
+    );
     if let Some(action) = action {
         label = label.child(action.mr(SETTINGS_ROW_INSET));
     }
-    col()
-        .key(key)
-        .w_full()
-        .gap(8.0)
-        .child(label)
-        .child(card)
+    col().key(key).w_full().gap(8.0).child(label).child(card)
 }
 
 /// A hairline between two rows, inset from the card's edges.
