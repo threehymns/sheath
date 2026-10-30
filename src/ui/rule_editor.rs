@@ -1,6 +1,7 @@
 //! The rule form: the editor the Rules tab opens under a row. It lays out the draft's name,
 //! kind, matches, excludes and properties, each under its own heading; every control edits the
-//! draft, and Save writes it.
+//! draft, and Save writes it. Save and Discard Changes are up only while the draft differs from
+//! the file, so a form opened on a rule has nothing to press.
 
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
 use crate::rules::{EntryKind, Kind, Matcher};
@@ -26,7 +27,8 @@ const KINDS: &[&str] = &["any", "file", "folder"];
 /// The open rule's form: its name and kind, a line per match and exclude, and a line per
 /// property the rule sets. A property's field lists every value the file accepts, `inherit`
 /// included, and the button beside it takes the property back out; Add Property offers the
-/// properties the rule does not set yet. It edits a draft; Save writes it and Cancel drops it.
+/// properties the rule does not set yet. It edits a draft; Save writes it and Discard Changes
+/// drops it.
 pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
@@ -44,32 +46,31 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
             .build(k)
             .key("rule-editor-kind"),
         );
-    let head = head.child(
-        row()
-            .grow(1.0)
-            .justify_end()
-            .gap(6.0)
-            .child(
-                Button::new(if edit.dirty() {
-                    "Discard Changes"
-                } else {
-                    "Cancel"
-                })
-                .variant(ButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .on_press(|s: &mut App| s.discard_rule_edit())
-                .build(k)
-                .key("rule-editor-cancel"),
-            )
-            .child(
-                Button::new("Save")
-                    .variant(ButtonVariant::Contrast)
-                    .control_size(ControlSize::Small)
-                    .on_press(|s: &mut App| s.save_rule_edit())
-                    .build(k)
-                    .key("rule-editor-save"),
-            ),
-    );
+    let mut head = head;
+    if edit.dirty() {
+        head = head.child(
+            row()
+                .grow(1.0)
+                .justify_end()
+                .gap(6.0)
+                .child(
+                    Button::new("Discard Changes")
+                        .variant(ButtonVariant::GhostMuted)
+                        .control_size(ControlSize::Small)
+                        .on_press(|s: &mut App| s.discard_rule_edit())
+                        .build(k)
+                        .key("rule-editor-cancel"),
+                )
+                .child(
+                    Button::new("Save")
+                        .variant(ButtonVariant::Contrast)
+                        .control_size(ControlSize::Small)
+                        .on_press(|s: &mut App| s.save_rule_edit())
+                        .build(k)
+                        .key("rule-editor-save"),
+                ),
+        );
+    }
     let mut form = col()
         .key(format!("rule-editor-{}", edit.index))
         .w_full()
@@ -77,15 +78,6 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
         .py(10.0)
         .gap(10.0)
         .child(head);
-    if edit.dirty() {
-        form = form.child(
-            text("Unsaved changes")
-                .font(k.ty.caption())
-                .color(k.c.text_muted)
-                .wrap()
-                .key("rule-editor-dirty"),
-        );
-    }
     if let Some(message) = &edit.error {
         form = form.child(error_text(k, message).key("rule-editor-error"));
     }

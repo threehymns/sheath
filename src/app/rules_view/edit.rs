@@ -42,10 +42,21 @@ impl RuleEdit {
         edit
     }
 
-    /// Whether the form holds changes the file does not. The written form is compared because
-    /// `Rule` carries no equality of its own.
+    /// Whether the form holds changes the file does not: the draft differs from the rule as it
+    /// opened, or a field holds text the draft could not take (a count that is not a number),
+    /// which Save would refuse. The written form is compared because `Rule` carries no equality
+    /// of its own.
     pub fn dirty(&self) -> bool {
-        self.draft.to_kdl() != self.original.to_kdl()
+        if self.draft.to_kdl() != self.original.to_kdl() {
+            return true;
+        }
+        let mut seeded = BTreeMap::new();
+        seed(&mut seeded, &self.draft);
+        seeded.iter().any(|(key, seeded)| {
+            self.fields
+                .get(key)
+                .is_none_or(|field| field.text != seeded.text)
+        })
     }
 
     /// Drops what the form holds and goes back to the rule as it was opened.
@@ -61,13 +72,18 @@ impl RuleEdit {
         // A structural change (another kind, a matcher added or dropped) leaves the open menu
         // naming a control that no longer exists.
         self.menu = None;
-        self.fields.clear();
-        let name = self.draft.name.clone().unwrap_or_default();
-        self.fields.insert("name".to_owned(), TextEdit::new(name));
-        for (list, matchers) in [("m", &self.draft.matches), ("x", &self.draft.excludes)] {
-            for (index, matcher) in matchers.iter().enumerate() {
-                seed_matcher(&mut self.fields, list, index, matcher, self.draft.kind);
-            }
+        seed(&mut self.fields, &self.draft);
+    }
+}
+
+/// Builds the text fields `rule` asks for: its name, and the keys each matcher holds.
+fn seed(fields: &mut BTreeMap<String, TextEdit>, rule: &Rule) {
+    fields.clear();
+    let name = rule.name.clone().unwrap_or_default();
+    fields.insert("name".to_owned(), TextEdit::new(name));
+    for (list, matchers) in [("m", &rule.matches), ("x", &rule.excludes)] {
+        for (index, matcher) in matchers.iter().enumerate() {
+            seed_matcher(fields, list, index, matcher, rule.kind);
         }
     }
 }

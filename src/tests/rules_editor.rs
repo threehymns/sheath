@@ -82,6 +82,9 @@ fn the_rules_tab_edits_a_rule_in_place() {
         .expect("the matcher's path field")
         .text = "/edited/**".to_owned();
     rt.state.apply_rule_fields();
+    // A click redraws the form from the state the test just changed by hand, which is what puts
+    // Save up for the draft it now holds.
+    click(&mut rt, "rule-field-name");
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(
@@ -327,6 +330,10 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
+    assert!(
+        rt.find("rule-editor-save").is_none() && rt.find("rule-editor-cancel").is_none(),
+        "a form with no changes offers nothing to save or drop"
+    );
 
     rt.state
         .rule_fields_mut()
@@ -356,8 +363,8 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
         "the draft differs from the rule as it opened"
     );
     assert!(
-        rt.find("rule-editor-dirty").is_some(),
-        "the form says it has unsaved changes"
+        rt.find("rule-editor-save").is_some() && rt.find("rule-editor-cancel").is_some(),
+        "the form offers Save and Discard Changes once it has changes"
     );
 }
 
@@ -402,6 +409,7 @@ fn the_rule_editor_refuses_a_count_that_is_not_a_number() {
         .expect("the matcher's min-items field")
         .text = "abc".to_owned();
     rt.state.apply_rule_fields();
+    click(&mut rt, "rule-field-name");
     click(&mut rt, "rule-editor-save");
 
     assert_eq!(
@@ -432,6 +440,7 @@ fn cancelling_the_rule_editor_leaves_the_file_alone() {
         .expect("the matcher's path field")
         .text = "/changed".to_owned();
     rt.state.apply_rule_fields();
+    click(&mut rt, "rule-field-name");
     click(&mut rt, "rule-editor-cancel");
 
     assert_eq!(
