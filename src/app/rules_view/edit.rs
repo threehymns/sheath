@@ -196,10 +196,10 @@ impl App {
         if edit.error.is_some() {
             return;
         }
-        let index = edit.index;
         self.write_rule_edit();
         self.rule_edit = None;
-        self.rule_focus = Some(index);
+        // The row is left unfocused: the focused fill answers a command that singles a rule
+        // out, and saving one the user was already looking at is not that.
     }
 
     /// Closes the form, dropping whatever it holds.
