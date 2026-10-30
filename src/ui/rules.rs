@@ -1,6 +1,6 @@
 //! The Rules category: every rule in file order, with its matcher, draggable, and deletable.
 
-use crate::app::{App, RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp};
+use crate::app::{App, RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp, rule_key};
 use crate::config;
 use crate::rules::{EntryKind, Kind, Matcher, Prop};
 use rune::{Anim, Cursor, Drag, El, Phase, TextEdit, Tx, col, icon, row, text};
@@ -89,15 +89,8 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
         );
     }
     let mut rows = Vec::new();
-    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     for index in 0..s.rules.rules.len() {
-        let summary = s.rules.rules[index].summary();
-        let occurrence = seen.entry(summary.clone()).or_insert(0);
-        // The key follows the rule, not its place in the list. Keyed by index, a reorder would
-        // leave the rows where they are and swap the text between them, so the drop would
-        // animate from the order the drag started in.
-        let key = format!("rule-{summary}-{occurrence}");
-        *occurrence += 1;
+        let key = rule_key(&s.rules.rules, index).expect("every index names a rule");
         rows.push(rule_row(s, k, index, read_only, &key));
         if !read_only && let Some(edit) = s.rule_edit.as_ref().filter(|edit| edit.index == index) {
             rows.push(rule_editor(k, edit));

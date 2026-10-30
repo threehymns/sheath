@@ -28,7 +28,7 @@ pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
-pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp};
+pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleProp, rule_key};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
 
@@ -106,8 +106,9 @@ pub struct App {
     pub rule_drag: RuleDrag,
     /// The rule picker's highlighted row, while it is up.
     pub rule_picker: Option<usize>,
-    /// The rule the tab should scroll to once its row is laid out, and the frames left to wait.
-    pub rule_reveal: Option<(usize, u8)>,
+    /// The key of the rule the tab should scroll to once its row is laid out, and the frames
+    /// left to wait.
+    pub rule_reveal: Option<(String, u8)>,
     /// What a command asked about that no rule matches, so the tab can say so.
     pub rule_query: Option<String>,
     /// The rule open in the tab's editor, while the form is up.

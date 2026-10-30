@@ -9,7 +9,7 @@ use kdl::KdlNode;
 use rune_kit::SortDir;
 use std::path::Path;
 
-use super::rule_positions;
+use super::{rule_key, rule_positions};
 
 impl App {
     /// A path with the home folder written as `~`, so a rule travels between machines.
@@ -83,10 +83,9 @@ impl App {
         if let Err(err) = written {
             self.rule_error = Some(err);
         } else if appended && self.settings == Some(SettingsTab::Rules) {
-            // The new rule is the last one, so the tab reveals what the action just wrote. It
-            // is not focused: the focused fill answers a command that asked which rule applies,
-            // and a row the user has only just added should not look singled out.
-            self.rule_reveal = Some((self.rules.rules.len().saturating_sub(1), 1));
+            // The new rule is the last one, so the tab scrolls to what the action just wrote.
+            let index = self.rules.rules.len().saturating_sub(1);
+            self.rule_reveal = rule_key(&self.rules.rules, index).map(|key| (key, 1));
             self.rule_query = None;
         }
     }
@@ -156,7 +155,7 @@ impl App {
     pub fn choose_rule(&mut self, index: usize) {
         self.rule_picker = None;
         if index < self.rules.rules.len() {
-            self.rule_reveal = Some((index, 1));
+            self.rule_reveal = rule_key(&self.rules.rules, index).map(|key| (key, 1));
             self.rule_query = None;
             self.settings = Some(SettingsTab::Rules);
             self.open_rule_edit(index);
@@ -173,7 +172,9 @@ impl App {
     pub fn show_folder_rules(&mut self) {
         let count = self.entries.len();
         let focus = self.rules.first_folder(&self.cwd, count);
-        self.rule_reveal = focus.map(|index| (index, 1));
+        self.rule_reveal = focus
+            .and_then(|index| rule_key(&self.rules.rules, index))
+            .map(|key| (key, 1));
         self.rule_query = focus
             .is_none()
             .then(|| "No rule matches this folder.".to_owned());
@@ -191,7 +192,9 @@ impl App {
                 is_dir: entry.is_dir,
             })
         });
-        self.rule_reveal = focus.map(|index| (index, 1));
+        self.rule_reveal = focus
+            .and_then(|index| rule_key(&self.rules.rules, index))
+            .map(|key| (key, 1));
         self.rule_query = focus
             .is_none()
             .then(|| "No rule matches the selected entry.".to_owned());

@@ -453,14 +453,14 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("folder-rule"), "{text}");
     assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
+    let key = format!("rule-{}-0", rt.state.rules.rules[0].summary());
     assert_eq!(
         rt.state.rule_reveal,
-        Some((0, 1)),
+        Some((key.clone(), 1)),
         "the tab scrolls to the rule it just wrote"
     );
 
     rt.frame(0.1);
-    let key = format!("rule-{}-0", rt.state.rules.rules[0].summary());
     assert!(rt.find(&key).is_some(), "the new rule is on screen as {key}");
 }
 

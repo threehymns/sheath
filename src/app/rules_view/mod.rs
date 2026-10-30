@@ -9,6 +9,7 @@ mod edit;
 mod rules;
 
 use crate::app::App;
+use crate::rules::Rule;
 use kdl::KdlDocument;
 
 pub use edit::{RuleEdit, RuleProp};
@@ -95,6 +96,19 @@ impl App {
         self.visit = Default::default();
         self.reload();
     }
+}
+
+/// The key the Rules tab draws the rule at `index` with. It follows the rule, not its place,
+/// so a reorder moves the rows Rune is already drawing instead of swapping the text between
+/// them; the count separates two rules that share a summary.
+pub fn rule_key(rules: &[Rule], index: usize) -> Option<String> {
+    let rule = rules.get(index)?;
+    let summary = rule.summary();
+    let occurrence = rules[..index]
+        .iter()
+        .filter(|other| other.summary() == summary)
+        .count();
+    Some(format!("rule-{summary}-{occurrence}"))
 }
 
 /// The document positions of the rule nodes, in file order.

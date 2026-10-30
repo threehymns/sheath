@@ -74,14 +74,14 @@ impl App {
         }
         // A command asked for a rule: wait one frame so the tab's rows are laid out, then put
         // the rule just under the viewport's top.
-        if let Some((index, wait)) = self.rule_reveal {
+        if let Some((key, wait)) = self.rule_reveal.clone() {
             if wait == 0 {
                 self.rule_reveal = None;
                 if self.settings == Some(SettingsTab::Rules) {
-                    tx.scroll_key_to(format!("rule-{index}"), 8.0);
+                    tx.scroll_key_to(key, 8.0);
                 }
             } else {
-                self.rule_reveal = Some((index, wait - 1));
+                self.rule_reveal = Some((key, wait - 1));
                 redraw = true;
             }
         }
