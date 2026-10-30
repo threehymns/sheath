@@ -1,188 +1,75 @@
-//! The rule form: the draft every control edits, the fields it holds, and the Save, Cancel, and
-//! menus that act on it. Nothing here writes the file until Save is pressed.
+//! The rule form's actions: opening a rule as a draft, reading its fields back, saving or
+//! discarding it, and the menus and properties that edit it. The draft itself lives in `draft`;
+//! nothing here writes the file until Save is pressed.
 
 use crate::app::App;
 use crate::config;
-use crate::rules::{EntryKind, Kind, Matcher, Prop, Rule};
+use crate::rules::{EntryKind, Kind, Matcher, Prop, Props, Rule, SortKey};
 use kdl::KdlNode;
 use rune::TextEdit;
 use std::collections::BTreeMap;
 
+use super::draft::{RuleEdit, form_problem};
 use super::prop::{RuleMenu, RuleProp};
 use super::rule_positions;
-
-/// The rule open in the tab's editor: the draft every control edits, and one text field per
-/// string the draft holds.
-pub struct RuleEdit {
-    /// The rule's position in the file's order.
-    pub index: usize,
-    /// The rule as the controls have left it; written only when Save is pressed.
-    pub draft: Rule,
-    /// The text fields, keyed by the part of the rule they hold (`name`, `m0.path`, …).
-    pub fields: BTreeMap<String, TextEdit>,
-    /// The rule as it was when the form opened, so Cancel can be honest about losing work.
-    pub original: Rule,
-    /// Why the last Save was refused, in the form's own words; the next edit takes it away.
-    pub error: Option<String>,
-    /// Whether the form last drew itself with something to save. Typing lands at once, so the
-    /// frame after it catches this up: Save then arrives or leaves on an animated commit
-    /// instead of snapping with the keystroke.
-    pub shown_dirty: bool,
-    /// The menu that is open, if one is.
-    pub menu: Option<RuleMenu>,
-}
-
-impl RuleEdit {
-    fn new(index: usize, rule: &Rule) -> RuleEdit {
-        let mut edit = RuleEdit {
-            index,
-            draft: rule.clone(),
-            fields: BTreeMap::new(),
-            original: rule.clone(),
-            error: None,
-            shown_dirty: false,
-            menu: None,
-        };
-        edit.reseed();
-        edit
-    }
-
-    /// Whether the form holds changes the file does not: the draft differs from the rule as it
-    /// opened, or a field holds text the draft could not take (a count that is not a number),
-    /// which Save would refuse. The written form is compared because `Rule` carries no equality
-    /// of its own.
-    pub fn dirty(&self) -> bool {
-        if self.draft.to_kdl() != self.original.to_kdl() {
-            return true;
-        }
-        let mut seeded = BTreeMap::new();
-        seed(&mut seeded, &self.draft);
-        seeded.iter().any(|(key, seeded)| {
-            self.fields
-                .get(key)
-                .is_none_or(|field| field.text != seeded.text)
-        })
-    }
-
-    /// Drops what the form holds and goes back to the rule as it was opened.
-    pub fn discard(&mut self) {
-        self.draft = self.original.clone();
-        self.error = None;
-        self.reseed();
-    }
-
-    /// Builds the text fields for the draft as it stands now. Structural changes (a new matcher,
-    /// another rule kind) shift the keys, so the fields are rebuilt from the draft.
-    fn reseed(&mut self) {
-        // A structural change (another kind, a matcher added or dropped) leaves the open menu
-        // naming a control that no longer exists.
-        self.menu = None;
-        seed(&mut self.fields, &self.draft);
-    }
-}
-
-/// Builds the text fields `rule` asks for: its name, and the keys each matcher holds.
-fn seed(fields: &mut BTreeMap<String, TextEdit>, rule: &Rule) {
-    fields.clear();
-    let name = rule.name.clone().unwrap_or_default();
-    fields.insert("name".to_owned(), TextEdit::new(name));
-    for (list, matchers) in [("m", &rule.matches), ("x", &rule.excludes)] {
-        for (index, matcher) in matchers.iter().enumerate() {
-            seed_matcher(fields, list, index, matcher, rule.kind);
-        }
-    }
-}
-
-fn seed_matcher(
-    fields: &mut BTreeMap<String, TextEdit>,
-    list: &str,
-    index: usize,
-    matcher: &Matcher,
-    kind: Kind,
-) {
-    let mut put = |key: &str, value: String| {
-        fields.insert(format!("{list}{index}.{key}"), TextEdit::new(value));
-    };
-    put("path", matcher.path.clone().unwrap_or_default());
-    match kind {
-        Kind::Folder => {
-            put(
-                "min-items",
-                matcher.min_items.map(|n| n.to_string()).unwrap_or_default(),
-            );
-            put(
-                "max-items",
-                matcher.max_items.map(|n| n.to_string()).unwrap_or_default(),
-            );
-        }
-        Kind::Entry => {
-            put("name", matcher.name.clone().unwrap_or_default());
-            put("extension", matcher.extension.clone().unwrap_or_default());
-        }
-    }
-}
-
-/// What the form cannot save as it stands: a matcher that names nothing (the file reads an
-/// empty `match` as matching every folder, and an empty `exclude` as vetoing the rule
-/// everywhere), and a count that is not a whole number.
-fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) -> Option<String> {
-    let names_nothing = |matcher: &Matcher| {
-        matcher.path.is_none()
-            && matcher.name.is_none()
-            && matcher.kind.is_none()
-            && matcher.extension.is_none()
-            && matcher.min_items.is_none()
-            && matcher.max_items.is_none()
-    };
-    if draft.matches.iter().any(names_nothing) {
-        return Some(
-            "A match with no fields matches every folder. Fill in a path or remove the match."
-                .to_owned(),
-        );
-    }
-    if draft.excludes.iter().any(names_nothing) {
-        return Some(
-            "An exclude with no fields vetoes the rule in every folder. Fill in a path or remove \
-             the exclude."
-                .to_owned(),
-        );
-    }
-    // A count the draft could not take lives only in the text, so the fields are checked too.
-    for (list, matchers) in [("m", &draft.matches), ("x", &draft.excludes)] {
-        for (index, _) in matchers.iter().enumerate() {
-            for (key, label) in [("min-items", "min items"), ("max-items", "max items")] {
-                let Some(field) = fields.get(&format!("{list}{index}.{key}")) else {
-                    continue;
-                };
-                let text = field.text.trim();
-                if text.is_empty() || text.parse::<usize>().is_ok() {
-                    continue;
-                }
-                return Some(format!("`{label}` needs a whole number, not `{text}`."));
-            }
-        }
-    }
-    for matchers in [&draft.matches, &draft.excludes] {
-        for matcher in matchers {
-            if let (Some(min), Some(max)) = (matcher.min_items, matcher.max_items)
-                && min > max
-            {
-                return Some(
-                    "`min items` is larger than `max items`, so the rule can never match."
-                        .to_owned(),
-                );
-            }
-        }
-    }
-    None
-}
 
 impl App {
     /// Opens the editor on `index`, in place of whatever form was open.
     pub fn open_rule_edit(&mut self, index: usize) {
         if let Some(rule) = self.rules.rules.get(index) {
-            self.rule_edit = Some(RuleEdit::new(index, rule));
+            self.rule_edit = Some(RuleEdit::opened(index, rule));
         }
+    }
+
+    /// Opens the editor on a rule the file does not hold yet: Save appends it, so Add Rule is
+    /// the same gesture whether or not there is a rule to start from.
+    pub fn open_new_rule(&mut self, kind: Kind) {
+        let index = self.rules.rules.len();
+        let rule = self.new_rule(kind);
+        self.rule_edit = Some(RuleEdit::added(index, rule));
+        // The form stands after its section's rows, below where the panel may be scrolled: the
+        // tab scrolls to it as it does to a rule it has just written.
+        self.rule_reveal = Some((format!("rule-editor-{index}"), 1));
+    }
+
+    /// What a new rule starts from: a folder rule keeps the folder on screen and the view it is
+    /// showing, and an entry rule the entry the browser has selected, so the form opens on
+    /// something worth saving rather than on a rule that matches nothing in particular.
+    fn new_rule(&self, kind: Kind) -> Rule {
+        let mut rule = Rule {
+            name: None,
+            kind,
+            matches: Vec::new(),
+            excludes: Vec::new(),
+            props: Props::default(),
+        };
+        match kind {
+            Kind::Folder => {
+                rule.matches.push(Matcher {
+                    path: Some(App::short_path(&self.cwd)),
+                    ..Matcher::default()
+                });
+                rule.props.view = Prop::Set(self.view);
+                rule.props.sort =
+                    Prop::Set(SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name));
+                rule.props.direction = Prop::Set(self.sort.1);
+                rule.props.show_hidden = Prop::Set(self.show_hidden);
+            }
+            Kind::Entry => {
+                let entry = self
+                    .selected
+                    .as_ref()
+                    .and_then(|id| self.entries.iter().find(|entry| &entry.id == id));
+                if let Some(entry) = entry {
+                    rule.matches.push(Matcher {
+                        path: Some(App::short_path(&entry.path)),
+                        ..Matcher::default()
+                    });
+                    rule.props.hidden = Prop::Set(false);
+                }
+            }
+        }
+        rule
     }
 
     /// Opens the editor on `index`, or closes it when it is already open on that rule.
@@ -440,12 +327,18 @@ impl App {
     }
 
     /// Writes the draft over the rule's node, keeping that node's leading comment and the rest
-    /// of the file as it was, then resolves the folder again.
+    /// of the file as it was, then resolves the folder again. A rule the file did not hold yet
+    /// is appended, so it lands after every rule and wins where the others disagree.
     fn write_rule_edit(&mut self) {
         let Some(edit) = &self.rule_edit else {
             return;
         };
         let text = edit.draft.to_kdl();
+        let kind = edit.draft.kind;
+        if edit.new {
+            self.append_rule(kind, &text);
+            return;
+        }
         let index = edit.index;
         let written = self.store.edit(config::CONFIG, |doc| {
             let Some(&at) = rule_positions(doc).get(index) else {

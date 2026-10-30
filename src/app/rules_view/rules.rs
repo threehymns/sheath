@@ -4,12 +4,12 @@
 
 use crate::app::{App, SettingsTab};
 use crate::config;
-use crate::rules::{EntryRef, SortKey};
+use crate::rules::{EntryRef, Kind, SortKey};
 use kdl::KdlNode;
 use rune_kit::SortDir;
 use std::path::Path;
 
-use super::{rule_key, rule_positions};
+use super::{rule_insertion, rule_key, rule_positions};
 
 impl App {
     /// A path with the home folder written as `~`, so a rule travels between machines.
@@ -27,8 +27,8 @@ impl App {
     }
 
     /// "Save this view as a rule": pins the current folder's view, sort, direction, and hidden
-    /// policy in a new folder rule, appended so it applies immediately. The rule goes unnamed:
-    /// its matcher already names it, and a name is the user's to give.
+    /// policy in a new folder rule, written after the last folder rule so it applies at once.
+    /// The rule goes unnamed: its matcher already names it, and a name is the user's to give.
     pub fn save_view_rule(&mut self) {
         let pattern = App::short_path(&self.cwd);
         let view = if self.view.is_grid() { "grid" } else { "list" };
@@ -42,7 +42,7 @@ impl App {
             crate::rules::quote(&pattern),
             SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name).as_str(),
         );
-        self.append_rule(&text);
+        self.append_rule(Kind::Folder, &text);
     }
 
     /// "Always show this entry" or "Always hide this entry", for the selected row.
@@ -59,14 +59,24 @@ impl App {
             "entry-rule {{\n    match path={}\n    hidden #{hidden}\n}}\n",
             crate::rules::quote(&pattern),
         );
-        self.append_rule(&text);
+        self.append_rule(Kind::Entry, &text);
     }
 
-    /// Adds a rule node at the end of the document, so it wins over every rule above it.
-    fn append_rule(&mut self, text: &str) {
+    /// Adds a rule node after the last rule of its kind, so the file keeps one block per kind,
+    /// and the new rule still lands after every rule that could speak for the same thing.
+    pub(super) fn append_rule(&mut self, kind: Kind, text: &str) {
+        // Where the rule lands in the tab's list: after the last rule of its kind, or at the
+        // end when it is the first of its kind.
+        let index = self
+            .rules
+            .rules
+            .iter()
+            .rposition(|rule| rule.kind == kind)
+            .map_or(self.rules.rules.len(), |at| at + 1);
         let written = match text.parse::<KdlNode>() {
             Ok(node) => self.store.edit(config::CONFIG, |doc| {
-                doc.nodes_mut().push(node.clone());
+                let at = rule_insertion(doc, kind);
+                doc.nodes_mut().insert(at, node.clone());
             }),
             Err(err) => Err(format!("Couldn’t write the rule: {err}")),
         };
@@ -76,8 +86,7 @@ impl App {
         if let Err(err) = written {
             self.rule_error = Some(err);
         } else if appended && self.settings == Some(SettingsTab::Rules) {
-            // The new rule is the last one, so the tab scrolls to what the action just wrote.
-            let index = self.rules.rules.len().saturating_sub(1);
+            // The tab scrolls to the rule the action just wrote, wherever in the file it landed.
             self.rule_reveal = rule_key(&self.rules.rules, index).map(|key| (key, 1));
             self.rule_query = None;
         }

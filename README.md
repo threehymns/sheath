@@ -132,9 +132,10 @@ a ruled folder lasts until you leave. `config.kdl` is watched, so an edit in a t
 reaches the open window. A file that does not parse leaves the last good rules in place, shows
 the error in the Rules tab, and is never written back.
 
-Settings > Rules has a section per kind, each listing its rules in file order: Folder rules' Add
-Rule appends one for the folder on screen, Entry rules' pins the entry selected in the browser,
-drag a rule to reorder it within its section, or delete it. Edit opens that rule as a form holding everything the
+Settings > Rules has a section per kind, each listing its rules in file order: Add Rule opens a
+form on a new rule — started from the folder on screen and its view, or from the entry selected
+in the browser — and Save writes it after the last rule of its kind, so the file keeps one block
+per kind. Drag a rule to reorder it within its section, or delete it. Edit opens that rule as a form holding everything the
 file can say: its name and kind, each `match` and `exclude` with every key, and each property,
 `inherit` included. `Save This View as a Rule`, `Always Show This Entry`
 and `Always Hide This Entry` write a rule for what is on screen, and `Show All Rules` and the

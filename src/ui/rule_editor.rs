@@ -174,7 +174,8 @@ fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
                 .w(CANCEL_WIDTH),
         );
     let mut width = CANCEL_WIDTH;
-    if edit.shown_dirty {
+    // A rule the file does not hold yet has something to write from the moment its form opens.
+    if edit.new || edit.shown_dirty {
         buttons = buttons.child(
             Button::new("Save")
                 .variant(ButtonVariant::Contrast)

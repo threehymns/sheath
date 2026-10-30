@@ -86,19 +86,28 @@ fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
         Kind::Folder => (
             "settings-folder-rules",
             "Folder rules",
-            "No folder rules yet. Add Rule writes one for the folder on screen, or write a \
+            "No folder rules yet. Add Rule starts one for the folder on screen, or write a \
              folder-rule in config.kdl.",
         ),
         Kind::Entry => (
             "settings-entry-rules",
             "Entry rules",
-            "No entry rules yet. Add Rule pins the entry selected in the browser, or write an \
+            "No entry rules yet. Add Rule starts one for the selected entry, or write an \
              entry-rule in config.kdl.",
         ),
     };
     let members = section_indices(s, kind);
+    // A form on a rule the file does not hold yet stands at the end of the section it will be
+    // appended to.
+    let adding = if read_only {
+        None
+    } else {
+        s.rule_edit
+            .as_ref()
+            .filter(|edit| edit.new && edit.draft.kind == kind)
+    };
     let mut rows = Vec::new();
-    if members.is_empty() {
+    if members.is_empty() && adding.is_none() {
         rows.push(empty_note(k, empty));
     }
     for (slot, &index) in members.iter().enumerate() {
@@ -110,7 +119,9 @@ fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
         let editing = if read_only {
             None
         } else {
-            s.rule_edit.as_ref().filter(|edit| edit.index == index)
+            s.rule_edit
+                .as_ref()
+                .filter(|edit| !edit.new && edit.index == index)
         };
         let row = match editing {
             Some(edit) => rule_editor(k, edit),
@@ -118,36 +129,38 @@ fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
         };
         rows.push(col().w_full().child(row));
     }
+    if let Some(edit) = adding {
+        rows.push(col().w_full().child(rule_editor(k, edit)));
+    }
     settings_section_action(
         k,
         section_key,
         title,
-        add_rule_button(s, k, kind, read_only),
+        add_rule_button(k, kind, read_only),
         rows,
     )
 }
 
-/// The section's Add Rule, while the file parses: the rule it writes applies at once. An entry
-/// rule speaks for one row, so its button is disabled until the browser has a selection.
-fn add_rule_button(s: &App, k: &Kit, kind: Kind, read_only: bool) -> Option<El> {
+/// The section's Add Rule, while the file parses: it opens the form on a rule the file does not
+/// hold yet, so nothing is written until Save. A folder rule starts from the folder on screen
+/// and the view it is showing, an entry rule from the entry the browser has selected, so either
+/// button is live whatever the browser holds.
+fn add_rule_button(k: &Kit, kind: Kind, read_only: bool) -> Option<El> {
     if read_only {
         return None;
     }
-    let button = Button::new("Add Rule")
-        .variant(ButtonVariant::Outline)
-        .control_size(ControlSize::Small);
-    let button = match kind {
-        Kind::Folder => button
-            .on_press(|s: &mut App| s.save_view_rule())
-            .build(k)
-            .key("add-folder-rule"),
-        Kind::Entry => button
-            .disabled(s.selected.is_none())
-            .on_press(|s: &mut App| s.pin_entry(false))
-            .build(k)
-            .key("add-entry-rule"),
+    let key = match kind {
+        Kind::Folder => "add-folder-rule",
+        Kind::Entry => "add-entry-rule",
     };
-    Some(button)
+    Some(
+        Button::new("Add Rule")
+            .variant(ButtonVariant::Outline)
+            .control_size(ControlSize::Small)
+            .on_press(move |s: &mut App| s.open_new_rule(kind))
+            .build(k)
+            .key(key),
+    )
 }
 
 /// The positions of one kind's rules, in file order: the rows its section draws, and the places

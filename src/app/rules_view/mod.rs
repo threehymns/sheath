@@ -5,15 +5,16 @@
 //! `edit` owns the form, its draft, and what the file can accept; `rules` owns saving the view,
 //! pinning an entry, deleting, reordering, and the picker.
 
+mod draft;
 mod edit;
 mod prop;
 mod rules;
 
 use crate::app::App;
-use crate::rules::Rule;
+use crate::rules::{Kind, Rule};
 use kdl::KdlDocument;
 
-pub use edit::RuleEdit;
+pub use draft::RuleEdit;
 pub use prop::{RuleMenu, RuleProp};
 
 /// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
@@ -127,4 +128,25 @@ pub(super) fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
         .filter(|(_, node)| matches!(node.name().value(), "folder-rule" | "entry-rule"))
         .map(|(at, _)| at)
         .collect()
+}
+
+/// Where a rule of `kind` goes in the document: after the last rule of its kind, so the file
+/// keeps one block per kind. With none of that kind it goes after the last rule of any kind,
+/// and with no rules at all it goes at the end of the document.
+pub(super) fn rule_insertion(doc: &KdlDocument, kind: Kind) -> usize {
+    let head = match kind {
+        Kind::Folder => "folder-rule",
+        Kind::Entry => "entry-rule",
+    };
+    let positions = rule_positions(doc);
+    let after = positions
+        .iter()
+        .rev()
+        .find(|&&at| doc.nodes()[at].name().value() == head)
+        .copied()
+        .or(positions.last().copied());
+    match after {
+        Some(at) => at + 1,
+        None => doc.nodes().len(),
+    }
 }
