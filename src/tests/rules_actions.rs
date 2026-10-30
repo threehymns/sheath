@@ -154,7 +154,7 @@ fn the_rule_forms_actions_sit_on_the_cards_corner() {
     click(&mut rt, "rule-field-name");
 
     let (card, _) = rt
-        .presented("settings-rule-list-card")
+        .presented("settings-folder-rules-card")
         .expect("the card is drawn");
     let (actions, _) = rt
         .presented("rule-editor-actions")

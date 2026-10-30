@@ -209,6 +209,18 @@ fn settings_header(k: &Kit, tab: SettingsTab) -> El {
 /// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
 /// and the card hangs [`SETTINGS_ROW_INSET`] past it, so the rows' text lines up with it.
 pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
+    settings_section_action(k, key, title, None, rows)
+}
+
+/// The same card, with a control at the end of its label line: the Rules tab's sections each
+/// write their own kind of rule, so each carries its own button.
+pub(super) fn settings_section_action(
+    k: &Kit,
+    key: &str,
+    title: &str,
+    action: Option<El>,
+    rows: Vec<El>,
+) -> El {
     let mut card = k.elevate(
         col()
             .key(format!("{key}-card"))
@@ -223,17 +235,28 @@ pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -
         }
         card = card.child(row);
     }
-    col()
-        .key(key)
+    let mut label = row()
         .w_full()
+        .min_h(20.0)
+        .mx(SETTINGS_ROW_INSET)
         .gap(8.0)
+        .center_y()
         .child(
             text(title)
                 .key("settings-section-label")
                 .font(k.ty.ui_medium.lh(16.0))
                 .color(k.c.text_muted)
-                .mx(SETTINGS_ROW_INSET),
-        )
+                .grow(1.0)
+                .truncate(),
+        );
+    if let Some(action) = action {
+        label = label.child(action);
+    }
+    col()
+        .key(key)
+        .w_full()
+        .gap(8.0)
+        .child(label)
         .child(card)
 }
 

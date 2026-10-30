@@ -444,6 +444,63 @@ fn an_entry_rule_cannot_name_a_count() {
 }
 
 #[test]
+fn the_rules_tab_gives_each_kind_its_own_section_and_add_rule() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/a\"\n    view grid\n}\n\
+         entry-rule \"logs\" {\n    match name=\"*.log\"\n    hidden #true\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+
+    assert!(
+        rt.find("settings-folder-rules").is_some()
+            && rt.find("settings-entry-rules").is_some(),
+        "the page has a section per kind"
+    );
+    assert!(
+        rt.find("rule-here-0").is_some() && rt.find("rule-logs-0").is_some(),
+        "each rule is on the page"
+    );
+    let (_, entry_title) = rt.find("settings-entry-rules").expect("the entry section is on screen");
+    assert!(
+        rt.find("rule-here-0").expect("the folder rule is on screen").1 < entry_title,
+        "the folder rule sits above the entry section"
+    );
+    assert!(
+        rt.find("rule-logs-0").expect("the entry rule is on screen").1 > entry_title,
+        "the entry rule sits under it"
+    );
+    assert!(
+        rt.find("add-folder-rule").is_some() && rt.find("add-entry-rule").is_some(),
+        "each section can add a rule of its own kind"
+    );
+}
+
+#[test]
+fn the_entry_sections_add_rule_pins_the_selected_entry() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    rt.state.select_id("f:.secret");
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+    click(&mut rt, "add-entry-rule");
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("entry-rule {"), "{text}");
+    assert!(text.contains("hidden #false"), "{text}");
+    assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
+}
+
+#[test]
 fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let dir = fixture();
     let (app, _path) = app_in_config_dir(&dir);
@@ -451,7 +508,7 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
-    click(&mut rt, "add-rule");
+    click(&mut rt, "add-folder-rule");
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("folder-rule"), "{text}");

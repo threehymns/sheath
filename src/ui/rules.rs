@@ -1,15 +1,17 @@
-//! The Rules category: every rule in file order, with its matcher, draggable, and deletable.
+//! The Rules category: one section per rule kind, each listing its rules in file order with
+//! their matchers, draggable within the section and deletable.
 
 use crate::app::{App, RULE_ROW_HEIGHT, RuleDrag, rule_key};
 use crate::config;
 use crate::icons;
+use crate::rules::Kind;
 use rune::{Anim, Drag, El, Phase, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_theme_opencode as theme;
 
 use super::dialogs::error_text;
 use super::rule_editor::rule_editor;
-use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET, settings_section};
+use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET, settings_section_action};
 
 /// The space between two rules: the hairline `settings_section` draws between them, plus the
 /// sliver kept above and below each row. A row stepping aside by its height plus this lands
@@ -24,7 +26,8 @@ const ROW_MARGIN: f32 = 4.0;
 /// over it nor the card's edge at either end of the list.
 const ROW_PAD: f32 = 4.0;
 
-/// A file that does not parse is shown as an error and left alone.
+/// A file that does not parse is shown as an error and left alone. The rules themselves are
+/// drawn in two sections, one per kind, each with the button that writes another of it.
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
     let mut page = col().key("settings-rules").w_full().gap(24.0);
     if let Some(error) = s
@@ -60,18 +63,6 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
     }
     // A stale list must not be edited: its positions are no longer the file's.
     let read_only = s.rule_error.is_some();
-    if !read_only {
-        page = page.child(
-            row().w_full().justify_end().child(
-                Button::new("Add Rule")
-                    .variant(ButtonVariant::Outline)
-                    .control_size(ControlSize::Small)
-                    .on_press(|s: &mut App| s.save_view_rule())
-                    .build(k)
-                    .key("add-rule"),
-            ),
-        );
-    }
     // The command that opened the tab found nothing to show.
     if let Some(message) = &s.rule_query {
         page = page.child(
@@ -83,21 +74,37 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
                 .wrap(),
         );
     }
-    if s.rules.rules.is_empty() {
-        return page.child(
-            text(
-                "No rules yet. Add Rule writes one for the folder on screen, or write a \
-                 folder-rule in config.kdl.",
-            )
-            .font(k.ty.caption())
-            .color(k.c.text_muted)
-            .mx(SETTINGS_ROW_INSET)
-            .wrap(),
-        );
-    }
+    page = page.child(rule_section(s, k, Kind::Folder, read_only));
+    page.child(rule_section(s, k, Kind::Entry, read_only))
+}
+
+/// One of the page's two sections: the rules of one kind in file order, under the button that
+/// writes another. A folder rule is written for the folder on screen; an entry rule is written
+/// for the entry the browser has selected, so that button waits for one.
+fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
+    let (section_key, title, empty) = match kind {
+        Kind::Folder => (
+            "settings-folder-rules",
+            "Folder rules",
+            "No folder rules yet. Add Rule writes one for the folder on screen, or write a \
+             folder-rule in config.kdl.",
+        ),
+        Kind::Entry => (
+            "settings-entry-rules",
+            "Entry rules",
+            "No entry rules yet. Add Rule pins the entry selected in the browser, or write an \
+             entry-rule in config.kdl.",
+        ),
+    };
+    let members = section_indices(s, kind);
     let mut rows = Vec::new();
-    for index in 0..s.rules.rules.len() {
-        let key = rule_key(&s.rules.rules, index).expect("every index names a rule");
+    if members.is_empty() {
+        rows.push(empty_note(k, empty));
+    }
+    for (slot, &index) in members.iter().enumerate() {
+        let Some(key) = rule_key(&s.rules.rules, index) else {
+            continue;
+        };
         // An open form takes the row's place instead of unfolding under it: the row's summary
         // and kind are the form's own fields, so the header would only repeat them.
         let editing = if read_only {
@@ -107,22 +114,73 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
         };
         let row = match editing {
             Some(edit) => rule_editor(k, edit),
-            None => rule_row(s, k, index, read_only, &key),
+            None => rule_row(s, k, index, slot, kind, read_only, &key),
         };
         rows.push(col().w_full().child(row));
     }
-    page.child(settings_section(
+    settings_section_action(
         k,
-        "settings-rule-list",
-        "In file order",
+        section_key,
+        title,
+        add_rule_button(s, k, kind, read_only),
         rows,
-    ))
+    )
+}
+
+/// The section's Add Rule, while the file parses: the rule it writes applies at once. An entry
+/// rule speaks for one row, so its button is disabled until the browser has a selection.
+fn add_rule_button(s: &App, k: &Kit, kind: Kind, read_only: bool) -> Option<El> {
+    if read_only {
+        return None;
+    }
+    let button = Button::new("Add Rule")
+        .variant(ButtonVariant::Outline)
+        .control_size(ControlSize::Small);
+    let button = match kind {
+        Kind::Folder => button
+            .on_press(|s: &mut App| s.save_view_rule())
+            .build(k)
+            .key("add-folder-rule"),
+        Kind::Entry => button
+            .disabled(s.selected.is_none())
+            .on_press(|s: &mut App| s.pin_entry(false))
+            .build(k)
+            .key("add-entry-rule"),
+    };
+    Some(button)
+}
+
+/// The positions of one kind's rules, in file order: the rows its section draws, and the places
+/// its drag counts in, so a rule never reorders past a rule of the other kind.
+fn section_indices(s: &App, kind: Kind) -> Vec<usize> {
+    s.rules
+        .rules
+        .iter()
+        .enumerate()
+        .filter(|(_, rule)| rule.kind == kind)
+        .map(|(index, _)| index)
+        .collect()
+}
+
+/// A section's line for when it holds no rules yet, where a row would be.
+fn empty_note(k: &Kit, message: &str) -> El {
+    row()
+        .w_full()
+        .px(SETTINGS_ROW_INSET)
+        .py(10.0)
+        .child(
+            text(message)
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .wrap(),
+        )
 }
 
 /// One rule: its matcher, the kind of rule it is, and the controls for it. A press anywhere on
 /// the row opens the rule's form; dragging rewrites the order of the rule nodes, and the rule's
-/// comments travel with it. Delete asks in the row before it removes anything.
-fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
+/// comments travel with it. Delete asks in the row before it removes anything. `slot` is the
+/// row's place in its section, which is what the drag counts in.
+fn rule_row(s: &App, k: &Kit, index: usize, slot: usize, kind: Kind, read_only: bool, key: &str) -> El {
     let Some(rule) = s.rules.rules.get(index) else {
         return row();
     };
@@ -214,11 +272,12 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
                         }
                         // The rows the drag passes spring aside; the row in hand follows the
                         // pointer exactly, which is why the travel is measured on the screen
-                        // and not on the row the pointer is dragging.
+                        // and not on the row the pointer is dragging. The drag counts in the
+                        // section's own places, so a rule never passes one of the other kind.
                         tx.animated();
-                        let count = s.rules.rules.len();
+                        let count = s.rules.rules.iter().filter(|rule| rule.kind == kind).count();
                         s.rule_drag
-                            .follow(index, count, drag.dy, drag.h, RULE_ROW_GAP);
+                            .follow(slot, count, drag.dy, drag.h, RULE_ROW_GAP);
                         // A release over the row arrives as a press too, so a gesture that
                         // passed over another place must not open the row's form.
                         if s.rule_drag.moves() {
@@ -231,8 +290,13 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
                         // animate, and the list must not spring in from the order the drag
                         // started in.
                         if let Some((from, to)) = s.rule_drag.end(drag.cancelled()) {
-                            tx.instant();
-                            s.move_rule(from, to);
+                            let members = section_indices(s, kind);
+                            if let (Some(&from), Some(&to)) =
+                                (members.get(from), members.get(to))
+                            {
+                                tx.instant();
+                                s.move_rule(from, to);
+                            }
                         }
                     }
                 },
@@ -259,8 +323,8 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
     }
     // The row in hand lifts above the rest and follows the pointer, and the rows it passes
     // step aside, so the gap it would drop into is the order it would land in.
-    line = line.offset(0.0, s.rule_drag.shift(index));
-    if s.rule_drag.dragging() == Some(index) {
+    line = line.offset(0.0, s.rule_drag.shift(slot));
+    if s.rule_drag.dragging() == Some(slot) {
         // Opaque on its own shadow, so the rows it passes do not show through, and instant so
         // it tracks the pointer rather than springing after it.
         line = k.elevate(
