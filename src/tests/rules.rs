@@ -1,8 +1,8 @@
-//! Rules: the matchers, the order they apply in, the view they resolve to, and the saves that
+//! Rules: the matchers, the order they apply in, the layout they resolve to, and the saves that
 //! keep the file they live in intact.
 
 use super::helpers::*;
-use crate::app::ViewMode;
+use crate::app::Layout;
 use crate::config::{self, Store};
 use crate::rules::Rules;
 use crate::settings::{Setting, Settings};
@@ -17,16 +17,16 @@ fn rules(text: &str) -> Rules {
 
 #[test]
 fn a_rule_covers_the_folder_and_everything_under_it() {
-    let rules = rules("folder-rule \"tree\" {\n    match path=\"/work/**\"\n    view grid\n}\n");
+    let rules = rules("folder-rule \"tree\" {\n    match path=\"/work/**\"\n    layout grid\n}\n");
     for path in ["/work", "/work/projects", "/work/projects/deep"] {
         assert_eq!(
-            rules.resolve(Path::new(path), 0).view,
-            Some(ViewMode::Grid),
+            rules.resolve(Path::new(path), 0).layout,
+            Some(Layout::Grid),
             "{path} is under the tree"
         );
     }
-    assert_eq!(rules.resolve(Path::new("/workshop"), 0).view, None);
-    assert_eq!(rules.resolve(Path::new("/elsewhere"), 0).view, None);
+    assert_eq!(rules.resolve(Path::new("/workshop"), 0).layout, None);
+    assert_eq!(rules.resolve(Path::new("/elsewhere"), 0).layout, None);
 }
 
 #[test]
@@ -35,18 +35,18 @@ fn matchers_or_together_and_keys_inside_one_and_together() {
         "folder-rule \"either\" {\n\
          \x20   match path=\"/a\"\n\
          \x20   match path=\"/b\"\n\
-         \x20   view grid\n\
+         \x20   layout grid\n\
          }\n\
          folder-rule \"both\" {\n\
          \x20   match path=\"/c\" min-items=3\n\
-         \x20   view list\n\
+         \x20   layout list\n\
          }\n",
     );
-    assert_eq!(rules.resolve(Path::new("/a"), 0).view, Some(ViewMode::Grid));
-    assert_eq!(rules.resolve(Path::new("/b"), 0).view, Some(ViewMode::Grid));
-    assert_eq!(rules.resolve(Path::new("/c"), 3).view, Some(ViewMode::List));
+    assert_eq!(rules.resolve(Path::new("/a"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/b"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/c"), 3).layout, Some(Layout::List));
     assert_eq!(
-        rules.resolve(Path::new("/c"), 2).view,
+        rules.resolve(Path::new("/c"), 2).layout,
         None,
         "the count has to hold too"
     );
@@ -58,11 +58,11 @@ fn an_exclude_vetoes_a_rule_that_would_otherwise_match() {
         "folder-rule \"all but one\" {\n\
          \x20   match path=\"/w/**\"\n\
          \x20   exclude path=\"/w/skip\"\n\
-         \x20   view grid\n\
+         \x20   layout grid\n\
          }\n",
     );
-    assert_eq!(rules.resolve(Path::new("/w"), 0).view, Some(ViewMode::Grid));
-    assert_eq!(rules.resolve(Path::new("/w/skip"), 0).view, None);
+    assert_eq!(rules.resolve(Path::new("/w"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/w/skip"), 0).layout, None);
 }
 
 #[test]
@@ -70,18 +70,18 @@ fn a_later_rule_wins_property_by_property_and_inherit_undoes_it() {
     let rules = rules(
         "folder-rule \"base\" {\n\
          \x20   match path=\"/w\"\n\
-         \x20   view grid\n\
+         \x20   layout grid\n\
          \x20   sort modified\n\
          \x20   direction descending\n\
          }\n\
          folder-rule \"narrow\" {\n\
          \x20   match path=\"/w\"\n\
          \x20   sort inherit\n\
-         \x20   view list\n\
+         \x20   layout list\n\
          }\n",
     );
     let resolved = rules.resolve(Path::new("/w"), 0);
-    assert_eq!(resolved.view, Some(ViewMode::List));
+    assert_eq!(resolved.layout, Some(Layout::List));
     assert_eq!(resolved.sort, None, "inherit cleared what the base set");
     assert_eq!(resolved.direction, Some(SortDir::Descending));
 }
@@ -125,7 +125,7 @@ fn an_unknown_property_names_the_ones_that_work() {
         .unwrap();
     let error = Rules::parse(&doc).expect_err("icon is not in the schema yet");
     assert!(error.contains("unknown property `icon`"), "{error}");
-    assert!(error.contains("view"), "{error}");
+    assert!(error.contains("layout"), "{error}");
     assert!(error.contains("show-hidden"), "{error}");
 }
 
@@ -136,7 +136,7 @@ fn saving_a_setting_keeps_comments_and_the_rest_of_the_file() {
     fs::write(
         &path,
         "// my settings\nsettings {\n    // keep me\n    show-hidden #false\n}\n\n\
-         // the tree\nfolder-rule \"tree\" {\n    match path=\"/w/**\"\n    view grid\n}\n",
+         // the tree\nfolder-rule \"tree\" {\n    match path=\"/w/**\"\n    layout grid\n}\n",
     )
     .unwrap();
 
@@ -185,12 +185,12 @@ fn a_file_that_does_not_parse_is_never_written_back() {
 }
 
 #[test]
-fn a_folder_rule_decides_the_view_a_folder_opens_in() {
+fn a_folder_rule_decides_the_layout_a_folder_opens_in() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
             dir.path().display()
         ),
     )
@@ -301,7 +301,7 @@ fn a_failed_write_is_the_stores_error_not_a_rule_error() {
     let (mut app, _path) = app_in_config_dir(&dir);
     fs::create_dir(dir.path().join(".config.kdl.tmp")).unwrap();
 
-    app.save_view_rule();
+    app.save_layout_rule();
     assert!(
         app.store.write_error.is_some(),
         "the store says why it failed"
@@ -320,7 +320,7 @@ fn a_failed_rule_edit_is_the_stores_error_too() {
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
             dir.path().display()
         ),
     )
@@ -346,7 +346,7 @@ fn a_failed_rule_edit_is_the_stores_error_too() {
 fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
     let dir = fixture();
     let (mut app, _path) = app_in_config_dir(&dir);
-    app.save_view_rule();
+    app.save_layout_rule();
     assert_eq!(app.rules.rules.len(), 1, "the tab wrote a rule");
     app.open_rule_edit(0);
     app.rule_fields_mut()
@@ -364,18 +364,18 @@ fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
 }
 
 #[test]
-fn saving_the_view_as_a_rule_writes_one_that_applies() {
+fn saving_the_layout_as_a_rule_writes_one_that_applies() {
     let dir = fixture();
     let (mut app, _path) = app_in_config_dir(&dir);
-    app.view = ViewMode::Grid;
-    app.save_view_rule();
+    app.layout = Layout::Grid;
+    app.save_layout_rule();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(
         text.contains("folder-rule {"),
         "the rule is unnamed: {text}"
     );
-    assert!(text.contains("view grid"), "{text}");
+    assert!(text.contains("layout grid"), "{text}");
     assert!(!app.rules.rules.is_empty(), "the rule is live");
     assert!(app.is_grid());
 }
@@ -400,7 +400,7 @@ fn a_toolbar_change_in_a_ruled_folder_lasts_for_the_visit() {
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
             dir.path().display()
         ),
     )
@@ -408,7 +408,7 @@ fn a_toolbar_change_in_a_ruled_folder_lasts_for_the_visit() {
 
     let (mut app, _path) = app_in_config_dir(&dir);
     assert!(app.is_grid());
-    app.toggle_view();
+    app.toggle_layout();
     assert!(!app.is_grid(), "the toolbar overrides for the visit");
 
     let here = app.cwd.clone();
@@ -425,7 +425,7 @@ fn resetting_a_setting_leaves_a_ruled_folder_alone() {
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
             dir.path().display()
         ),
     )
@@ -436,7 +436,7 @@ fn resetting_a_setting_leaves_a_ruled_folder_alone() {
     app.reset_setting(Setting::ScrollInertia);
     assert!(
         app.is_grid(),
-        "the rule still decides the view after a reset"
+        "the rule still decides the layout after a reset"
     );
 }
 
@@ -453,7 +453,7 @@ fn an_entry_rule_cannot_name_a_count() {
 #[test]
 fn a_rule_reads_back_from_the_text_the_editor_writes() {
     let rules = rules(
-        "folder-rule \"tree\" {\n    match path=\"/w/**\" min-items=2\n    view grid\n    sort modified\n    direction descending\n    show-hidden #true\n}\n\
+        "folder-rule \"tree\" {\n    match path=\"/w/**\" min-items=2\n    layout grid\n    sort modified\n    direction descending\n    show-hidden #true\n}\n\
          entry-rule \"logs\" {\n    match name=\"*.log\" kind=\"file\" extension=\"log\"\n    exclude path=\"/w/keep.log\"\n    hidden #false\n}\n",
     );
     let text: String = rules.rules.iter().map(|rule| rule.to_kdl()).collect();
@@ -461,7 +461,7 @@ fn a_rule_reads_back_from_the_text_the_editor_writes() {
     let again = Rules::parse(&doc).expect("the editor's text parses");
 
     assert_eq!(again.rules.len(), 2);
-    assert_eq!(again.rules[0].props.view, rules.rules[0].props.view);
+    assert_eq!(again.rules[0].props.layout, rules.rules[0].props.layout);
     assert_eq!(again.rules[1].matches[0].name.as_deref(), Some("*.log"));
     assert_eq!(
         again.rules[1].excludes[0].path.as_deref(),

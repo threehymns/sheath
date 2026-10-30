@@ -316,7 +316,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .build(k)
         .key("setting-inspector");
     let grid = Switch::new(s.is_grid())
-        .label("Grid view")
+        .label("Grid layout")
         .hide_label()
         .on_toggle(|s: &mut App| s.toggle_grid_setting())
         .build(k)
@@ -355,9 +355,9 @@ fn general_settings(s: &App, k: &Kit) -> El {
             settings_row(
                 k,
                 &icons::GRID,
-                "Grid view",
+                "Grid layout",
                 Some("Show the folder as tiles instead of a table of rows."),
-                setting_control(s, k, Setting::GridView, grid),
+                setting_control(s, k, Setting::GridLayout, grid),
             ),
         ],
     );

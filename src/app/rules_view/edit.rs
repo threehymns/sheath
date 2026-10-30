@@ -32,8 +32,8 @@ impl App {
         self.rule_reveal = Some((format!("rule-editor-{index}"), 1));
     }
 
-    /// What a new rule starts from: a folder rule keeps the folder on screen and the view it is
-    /// showing, and an entry rule the entry the browser has selected, so the form opens on
+    /// What a new rule starts from: a folder rule keeps the folder on screen and the layout it
+    /// is showing, and an entry rule the entry the browser has selected, so the form opens on
     /// something worth saving rather than on a rule that matches nothing in particular.
     fn new_rule(&self, kind: Kind) -> Rule {
         let mut rule = Rule {
@@ -49,7 +49,7 @@ impl App {
                     path: Some(App::short_path(&self.cwd)),
                     ..Matcher::default()
                 });
-                rule.props.view = Prop::Set(self.view);
+                rule.props.layout = Prop::Set(self.layout);
                 rule.props.sort =
                     Prop::Set(SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name));
                 rule.props.direction = Prop::Set(self.sort.1);
@@ -253,7 +253,7 @@ impl App {
         };
         let props = &mut edit.draft.props;
         match prop {
-            RuleProp::View => props.view = Prop::Unset,
+            RuleProp::Layout => props.layout = Prop::Unset,
             RuleProp::Sort => props.sort = Prop::Unset,
             RuleProp::Direction => props.direction = Prop::Unset,
             RuleProp::ShowHidden => props.show_hidden = Prop::Unset,

@@ -8,7 +8,7 @@ fn an_editor_closes_when_the_config_file_changes_under_it() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n",
     )
     .unwrap();
 
@@ -24,8 +24,8 @@ fn an_editor_closes_when_the_config_file_changes_under_it() {
     rt.state.store.watch(wake);
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"added\" {\n    match path=\"/new\"\n    view list\n}\n\
-         folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n",
+        "folder-rule \"added\" {\n    match path=\"/new\"\n    layout list\n}\n\
+         folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n",
     )
     .unwrap();
     // A frame's `poll` is what notices a file someone else wrote and applies it.
@@ -64,7 +64,7 @@ fn the_rules_tab_edits_a_rule_in_place() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n",
     )
     .unwrap();
 
@@ -105,7 +105,7 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view list\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -113,11 +113,11 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
 
-    // The field beside `view` lists the values the file accepts: list, grid, inherit.
-    click(&mut rt, "prop-select-view-trigger");
+    // The field beside `layout` lists the values the file accepts: list, grid, inherit.
+    click(&mut rt, "prop-select-layout-trigger");
     assert_eq!(
         rt.state.rule_edit.as_ref().expect("the form is open").menu,
-        Some(crate::app::RuleMenu::Prop(crate::app::RuleProp::View)),
+        Some(crate::app::RuleMenu::Prop(crate::app::RuleProp::Layout)),
         "the field opens the property's list"
     );
     click(&mut rt, "option1");
@@ -128,19 +128,19 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
             .expect("the form is open")
             .draft
             .props
-            .view,
-        crate::rules::Prop::Set(crate::app::ViewMode::Grid),
+            .layout,
+        crate::rules::Prop::Set(crate::app::Layout::Grid),
         "picking a value moves the draft"
     );
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(
-        !text.contains("view grid"),
+        !text.contains("layout grid"),
         "the file waits for Save: {text}"
     );
 
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("view grid"), "{text}");
+    assert!(text.contains("layout grid"), "{text}");
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n    sort size\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n    sort size\n}\n",
     )
     .unwrap();
 
@@ -157,10 +157,10 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
     open_rule_editor(&mut rt);
 
     // The line reveals its remove button while the pointer rests on it.
-    let (x, y) = rt.find("prop-view").expect("the property has a line");
+    let (x, y) = rt.find("prop-layout").expect("the property has a line");
     rt.pointer_move(x, y);
     rt.frame(0.1);
-    click(&mut rt, "clear-prop-view");
+    click(&mut rt, "clear-prop-layout");
     assert_eq!(
         rt.state
             .rule_edit
@@ -168,20 +168,23 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
             .expect("the form is open")
             .draft
             .props
-            .view,
+            .layout,
         crate::rules::Prop::Unset,
         "removing takes the property out of the draft"
     );
-    assert!(rt.find("prop-view").is_none(), "and its line off the form");
     assert!(
-        rt.find("clear-prop-view").is_none(),
+        rt.find("prop-layout").is_none(),
+        "and its line off the form"
+    );
+    assert!(
+        rt.find("clear-prop-layout").is_none(),
         "a property the rule no longer sets has nothing to remove"
     );
 
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(
-        !text.contains("view grid"),
+        !text.contains("layout grid"),
         "the property left the rule: {text}"
     );
     assert!(
@@ -210,7 +213,7 @@ fn the_rule_editor_adds_a_property_from_the_menu() {
         rt.find("prop-sort").is_none(),
         "a property the rule leaves unset has no line"
     );
-    // Add Property lists what the rule does not set yet: view, sort, direction, show-hidden.
+    // Add Property lists what the rule does not set yet: layout, sort, direction, show-hidden.
     click(&mut rt, "add-property-trigger");
     assert_eq!(
         rt.state.rule_edit.as_ref().expect("the form is open").menu,
@@ -244,7 +247,7 @@ fn the_rule_editor_adds_and_removes_a_matcher() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n",
     )
     .unwrap();
 
@@ -307,7 +310,7 @@ fn the_rule_editor_adds_and_removes_a_matcher() {
 #[test]
 fn a_rule_editor_writes_nothing_until_it_is_saved() {
     let dir = fixture();
-    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n";
+    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -358,7 +361,7 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
 #[test]
 fn the_rule_editor_refuses_a_match_that_names_nothing() {
     let dir = fixture();
-    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n";
+    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -384,7 +387,7 @@ fn the_rule_editor_refuses_a_match_that_names_nothing() {
 fn the_rule_editor_refuses_a_count_that_is_not_a_number() {
     let dir = fixture();
     let original =
-        "folder-rule \"here\" {\n    match path=\"/old\" min-items=2\n    view grid\n}\n";
+        "folder-rule \"here\" {\n    match path=\"/old\" min-items=2\n    layout grid\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -421,7 +424,7 @@ fn a_refused_save_says_why_without_moving_the_form() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n",
     )
     .unwrap();
 
@@ -467,7 +470,7 @@ fn a_refused_save_says_why_without_moving_the_form() {
 #[test]
 fn cancelling_the_rule_editor_leaves_the_file_alone() {
     let dir = fixture();
-    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n";
+    let original = "folder-rule \"here\" {\n    match path=\"/old\"\n    layout grid\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);

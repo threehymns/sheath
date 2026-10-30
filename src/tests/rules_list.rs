@@ -10,8 +10,8 @@ fn clicking_a_rule_opens_its_editor() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -43,8 +43,8 @@ fn clicking_a_rule_opens_its_editor() {
 #[test]
 fn deleting_a_rule_asks_first() {
     let dir = fixture();
-    let original = "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-                    folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n";
+    let original = "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+                    folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -98,7 +98,7 @@ fn escape_closes_the_rule_editor_before_the_panel() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n",
     )
     .unwrap();
 

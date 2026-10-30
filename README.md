@@ -55,12 +55,12 @@ unsupported by this backend.
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
 | Search this folder | The search field; Escape clears it |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
-| List or grid | The view button in the toolbar |
+| List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Command bar | Cmd/Ctrl+P |
 | Settings | Cmd/Ctrl+, |
-| Rules | The command bar: `Show All Rules`, `Save This View as a Rule`, `View Rules for This Folder` / `Entry` |
+| Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 
 Double-clicking a file opens it with the system opener (`open`, `xdg-open` or `start`). The
 settings panel can change any shortcut.
@@ -74,7 +74,7 @@ The settings, rules and keybinds are KDL files in one config folder:
 - Windows: `%APPDATA%\Sheath`
 - Any platform: `$SHEATH_CONFIG_DIR` overrides the others
 
-`config.kdl` holds the view settings, all of which the settings panel can also change:
+`config.kdl` holds the browser settings, all of which the settings panel can also change:
 
 ```kdl
 settings {
@@ -87,7 +87,7 @@ settings {
 ```
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
-bar of the header's height, and is also the toolbar's view button. `scroll-inertia` lets the
+bar of the header's height, and is also the toolbar's layout button. `scroll-inertia` lets the
 list coast after the wheel stops; `overscroll` lets it pull past the first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 
@@ -98,7 +98,7 @@ order:
 // How a folder presents its own listing.
 folder-rule "projects" {
     match path="~/Projects/**"
-    view grid
+    layout grid
     sort modified
     direction descending
 }
@@ -106,7 +106,7 @@ folder-rule "projects" {
 // A crowded folder switches itself.
 folder-rule "downloads" {
     match path="~/Downloads" min-items=20
-    view list
+    layout list
 }
 
 // One entry's presence, wherever it is listed.
@@ -116,7 +116,7 @@ entry-rule "config" {
 }
 ```
 
-A `folder-rule` sets `view` (`list`, `grid`), `sort` (`name`, `size`, `modified`), `direction`
+A `folder-rule` sets `layout` (`list`, `grid`), `sort` (`name`, `size`, `modified`), `direction`
 (`ascending`, `descending`) and `show-hidden`; an `entry-rule` sets `hidden`. Any property takes
 `inherit` to undo what an earlier rule said.
 
@@ -133,11 +133,11 @@ reaches the open window. A file that does not parse leaves the last good rules i
 the error in the Rules tab, and is never written back.
 
 Settings > Rules has a section per kind, each listing its rules in file order: Add Rule opens a
-form on a new rule — started from the folder on screen and its view, or from the entry selected
+form on a new rule — started from the folder on screen and its layout, or from the entry selected
 in the browser — and Save writes it after the last rule of its kind, so the file keeps one block
 per kind. Drag a rule to reorder it within its section, or delete it. Edit opens that rule as a form holding everything the
 file can say: its name, each `match` and `exclude` with every key, and each property,
-`inherit` included. `Save This View as a Rule`, `Always Show This Entry`
+`inherit` included. `Save This Layout as a Rule`, `Always Show This Entry`
 and `Always Hide This Entry` write a rule for what is on screen, and `Show All Rules` and the
 two `View Rules for …` commands find the rule behind it, saying so when nothing matches.
 
@@ -157,12 +157,12 @@ An empty chord clears the shortcut. Chords are `ctrl`, `alt`, `shift` and `super
 name, written the way Rune's shortcuts read them, so the file can be edited by hand. The
 command names are `command-bar`, `open-settings`, `back`, `forward`, `enclosing-folder`,
 `refresh`, `new-folder`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`, `cut`, `paste`,
-`duplicate`, `view-folder-rules`, `view-entry-rules`, `save-view-rule`, `show-entry`,
+`duplicate`, `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.
 `keybinds.kdl` is watched, so a new chord works without a restart.
 
-Each folder also remembers the view and sort it was left in, in a file of its own outside the
+Each folder also remembers the layout and sort it was left in, in a file of its own outside the
 config folder:
 
 - Linux: `$XDG_STATE_HOME/sheath/views.kdl` (`~/.local/state/sheath` by default)

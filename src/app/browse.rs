@@ -174,7 +174,7 @@ impl App {
         self.show_hidden = on;
         // A rule that speaks for this folder holds it for the visit; otherwise the switch is
         // the global setting it has always been.
-        if self.rule_view().show_hidden.is_some() {
+        if self.rule_presentation().show_hidden.is_some() {
             self.visit.show_hidden = Some(on);
         } else {
             self.config.show_hidden = on;
@@ -193,39 +193,39 @@ impl App {
     }
 
     /// Switches between the table of rows and the grid of tiles, and remembers the choice.
-    pub fn toggle_view(&mut self) {
-        self.view = if self.is_grid() {
-            ViewMode::List
+    pub fn toggle_layout(&mut self) {
+        self.layout = if self.is_grid() {
+            Layout::List
         } else {
-            ViewMode::Grid
+            Layout::Grid
         };
-        // The two views measure their content differently, so what the old one was coasting
+        // The two layouts measure their content differently, so what the old one was coasting
         // toward means nothing in the new one.
         self.scroll.stop();
         // A rule for this folder keeps its say after the visit: the change shows now, and the
         // rule wins again the next time the folder opens.
-        if self.rule_view().view.is_some() {
-            self.visit.view = Some(self.view);
+        if self.rule_presentation().layout.is_some() {
+            self.visit.layout = Some(self.layout);
         } else {
-            self.remember_view();
+            self.remember_presentation();
         }
     }
 
-    /// The settings panel's Grid view switch: turns the global setting over, then resolves the
+    /// The settings panel's Grid layout switch: turns the global setting over, then resolves the
     /// open folder again, so a rule or what the folder was left showing keeps its say.
     pub fn toggle_grid_setting(&mut self) {
         // The switch shows what the folder resolved to, so that is what it turns over.
-        let before = self.view;
-        self.view = if before.is_grid() {
-            ViewMode::List
+        let before = self.layout;
+        self.layout = if before.is_grid() {
+            Layout::List
         } else {
-            ViewMode::Grid
+            Layout::Grid
         };
-        // The setting is written from the browser's view, so the new mode is what it records.
-        self.remember(Setting::GridView, self.is_grid());
+        // The setting is written from the browser's layout, so the new mode is what it records.
+        self.remember(Setting::GridLayout, self.is_grid());
         // A rule or a remembered visit still outranks the global default.
         self.apply_rules();
-        if self.view != before {
+        if self.layout != before {
             self.scroll.stop();
         }
     }
@@ -294,12 +294,12 @@ impl App {
         } else {
             (column.to_owned(), SortDir::Ascending)
         };
-        let rule = self.rule_view();
+        let rule = self.rule_presentation();
         if rule.sort.is_some() || rule.direction.is_some() {
             self.visit.sort = Some(SortKey::from_column(column).unwrap_or(SortKey::Name));
             self.visit.direction = Some(self.sort.1);
         } else {
-            self.remember_view();
+            self.remember_presentation();
         }
         self.sort_entries();
         self.apply_filter();

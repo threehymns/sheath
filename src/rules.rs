@@ -1,7 +1,7 @@
-//! Folder and entry rules: the nodes in `config.kdl` and the view a folder resolves to. Everything here is pure: it takes a parsed document and a path, and returns
+//! Folder and entry rules: the nodes in `config.kdl` and the presentation a folder resolves to. Everything here is pure: it takes a parsed document and a path, and returns
 //! what the browser should show.
 
-use crate::app::ViewMode;
+use crate::app::Layout;
 use kdl::{KdlDocument, KdlNode};
 use rune_kit::SortDir;
 use std::path::Path;
@@ -156,7 +156,7 @@ impl<T> Default for Prop<T> {
 /// What a rule sets. A folder rule reads the first four; an entry rule reads `hidden`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Props {
-    pub view: Prop<ViewMode>,
+    pub layout: Prop<Layout>,
     pub sort: Prop<SortKey>,
     pub direction: Prop<SortDir>,
     pub show_hidden: Prop<bool>,
@@ -226,12 +226,12 @@ impl Rule {
         for matcher in &self.excludes {
             parts.push(format!("exclude {}", matcher.summary()));
         }
-        match self.props.view {
+        match self.props.layout {
             Prop::Unset => {}
-            Prop::Inherit => parts.push("view inherit".to_owned()),
-            Prop::Set(view) => parts.push(format!(
-                "view {}",
-                if view.is_grid() { "grid" } else { "list" }
+            Prop::Inherit => parts.push("layout inherit".to_owned()),
+            Prop::Set(layout) => parts.push(format!(
+                "layout {}",
+                if layout.is_grid() { "grid" } else { "list" }
             )),
         }
         match self.props.sort {
@@ -280,12 +280,12 @@ impl Rule {
         for matcher in &self.excludes {
             text.push_str(&directive("exclude", matcher));
         }
-        match self.props.view {
+        match self.props.layout {
             Prop::Unset => {}
-            Prop::Inherit => text.push_str("    view inherit\n"),
-            Prop::Set(view) => text.push_str(&format!(
-                "    view {}\n",
-                if view.is_grid() { "grid" } else { "list" }
+            Prop::Inherit => text.push_str("    layout inherit\n"),
+            Prop::Set(layout) => text.push_str(&format!(
+                "    layout {}\n",
+                if layout.is_grid() { "grid" } else { "list" }
             )),
         }
         match self.props.sort {
@@ -356,7 +356,7 @@ pub struct Rules {
 /// global value applies.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Resolved {
-    pub view: Option<ViewMode>,
+    pub layout: Option<Layout>,
     pub sort: Option<SortKey>,
     pub direction: Option<SortDir>,
     pub show_hidden: Option<bool>,
@@ -366,7 +366,7 @@ impl Resolved {
     /// Fills what this resolution leaves unset from `fallback`.
     pub fn or(self, fallback: Resolved) -> Resolved {
         Resolved {
-            view: self.view.or(fallback.view),
+            layout: self.layout.or(fallback.layout),
             sort: self.sort.or(fallback.sort),
             direction: self.direction.or(fallback.direction),
             show_hidden: self.show_hidden.or(fallback.show_hidden),
@@ -406,7 +406,7 @@ impl Rules {
             if !rule.applies_to_folder(&path, count) {
                 continue;
             }
-            merge(&mut resolved.view, rule.props.view);
+            merge(&mut resolved.layout, rule.props.layout);
             merge(&mut resolved.sort, rule.props.sort);
             merge(&mut resolved.direction, rule.props.direction);
             merge(&mut resolved.show_hidden, rule.props.show_hidden);
@@ -462,7 +462,9 @@ fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
         match child.name().value() {
             "match" => rule.matches.push(parse_matcher(child, kind)?),
             "exclude" => rule.excludes.push(parse_matcher(child, kind)?),
-            "view" => rule.props.view = parse_prop(child, "view", Kind::Folder, kind, parse_view)?,
+            "layout" => {
+                rule.props.layout = parse_prop(child, "layout", Kind::Folder, kind, parse_layout)?
+            }
             "sort" => {
                 rule.props.sort =
                     parse_prop(child, "sort", Kind::Folder, kind, SortKey::from_column)?
@@ -480,7 +482,7 @@ fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
             }
             other => {
                 return Err(format!(
-                    "unknown property `{other}`; folder rules and entry rules support view, \
+                    "unknown property `{other}`; folder rules and entry rules support layout, \
                      sort, direction, show-hidden, and hidden"
                 ));
             }
@@ -524,10 +526,10 @@ fn parse_prop<T: Copy>(
     }
 }
 
-fn parse_view(value: &str) -> Option<ViewMode> {
+fn parse_layout(value: &str) -> Option<Layout> {
     match value {
-        "list" => Some(ViewMode::List),
-        "grid" => Some(ViewMode::Grid),
+        "list" => Some(Layout::List),
+        "grid" => Some(Layout::Grid),
         _ => None,
     }
 }

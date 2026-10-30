@@ -45,8 +45,8 @@ pub(super) fn app(dir: &TempDir) -> App {
     app.views = crate::views::Views::default();
     app.rules = crate::rules::Rules::default();
     app.rule_error = None;
-    // Opening applied whatever the machine saved, so the list view is put back by hand.
-    app.view = crate::app::ViewMode::List;
+    // Opening applied whatever the machine saved, so the list layout is put back by hand.
+    app.layout = crate::app::Layout::List;
     app
 }
 

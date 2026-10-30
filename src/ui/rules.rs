@@ -143,7 +143,7 @@ fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
 
 /// The section's Add Rule, while the file parses: it opens the form on a rule the file does not
 /// hold yet, so nothing is written until Save. A folder rule starts from the folder on screen
-/// and the view it is showing, an entry rule from the entry the browser has selected, so either
+/// and the layout it is showing, an entry rule from the entry the browser has selected, so either
 /// button is live whatever the browser holds.
 fn add_rule_button(k: &Kit, kind: Kind, read_only: bool) -> Option<El> {
     if read_only {

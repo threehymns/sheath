@@ -1,14 +1,14 @@
 //! The properties a rule can set: what the file calls each one, the values it accepts, and the
 //! one the form starts it at. The form and its menu read this, and nothing here touches a file.
 
-use crate::app::ViewMode;
+use crate::app::Layout;
 use crate::rules::{Kind, Prop, Props, SortKey};
 use rune_kit::SortDir;
 
 /// One property the editor can change, in the field that lists its values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuleProp {
-    View,
+    Layout,
     Sort,
     Direction,
     ShowHidden,
@@ -20,7 +20,7 @@ impl RuleProp {
     pub fn all(kind: Kind) -> &'static [RuleProp] {
         match kind {
             Kind::Folder => &[
-                RuleProp::View,
+                RuleProp::Layout,
                 RuleProp::Sort,
                 RuleProp::Direction,
                 RuleProp::ShowHidden,
@@ -32,7 +32,7 @@ impl RuleProp {
     /// The key the file writes it as, which is what the form calls it too.
     pub fn name(self) -> &'static str {
         match self {
-            RuleProp::View => "view",
+            RuleProp::Layout => "layout",
             RuleProp::Sort => "sort",
             RuleProp::Direction => "direction",
             RuleProp::ShowHidden => "show-hidden",
@@ -43,7 +43,7 @@ impl RuleProp {
     /// The property a key names, for the menu that adds one to the rule.
     pub fn from_name(name: &str) -> Option<RuleProp> {
         [
-            RuleProp::View,
+            RuleProp::Layout,
             RuleProp::Sort,
             RuleProp::Direction,
             RuleProp::ShowHidden,
@@ -56,7 +56,7 @@ impl RuleProp {
     /// Every value the file accepts, as the form words them; `inherit` last.
     pub fn options(self) -> &'static [&'static str] {
         match self {
-            RuleProp::View => &["list", "grid", "inherit"],
+            RuleProp::Layout => &["list", "grid", "inherit"],
             RuleProp::Sort => &["name", "size", "modified", "inherit"],
             RuleProp::Direction => &["ascending", "descending", "inherit"],
             RuleProp::ShowHidden | RuleProp::Hidden => &["show", "hide", "inherit"],
@@ -66,7 +66,7 @@ impl RuleProp {
     /// The value the property takes when it is added to the rule.
     pub fn initial(self) -> &'static str {
         match self {
-            RuleProp::View => "list",
+            RuleProp::Layout => "list",
             RuleProp::Sort => "name",
             RuleProp::Direction => "ascending",
             RuleProp::ShowHidden => "show",
@@ -77,9 +77,9 @@ impl RuleProp {
     /// What the rule holds for it, as one of `options`; `None` when the rule leaves it unset.
     pub fn label(self, props: &Props) -> Option<&'static str> {
         match self {
-            RuleProp::View => held(
-                props.view,
-                |view| if view.is_grid() { "grid" } else { "list" },
+            RuleProp::Layout => held(
+                props.layout,
+                |layout| if layout.is_grid() { "grid" } else { "list" },
             ),
             RuleProp::Sort => held(props.sort, SortKey::as_str),
             RuleProp::Direction => held(props.direction, |direction| match direction {
@@ -100,13 +100,13 @@ impl RuleProp {
     pub fn set(self, props: &mut Props, value: &str) {
         let inherit = value == "inherit";
         match self {
-            RuleProp::View => {
-                props.view = if inherit {
+            RuleProp::Layout => {
+                props.layout = if inherit {
                     Prop::Inherit
                 } else if value == "grid" {
-                    Prop::Set(ViewMode::Grid)
+                    Prop::Set(Layout::Grid)
                 } else {
-                    Prop::Set(ViewMode::List)
+                    Prop::Set(Layout::List)
                 }
             }
             RuleProp::Sort => {

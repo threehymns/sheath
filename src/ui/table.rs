@@ -7,7 +7,7 @@ use rune::{Align, Cursor, Drag, El, GrowthSpec, Phase, ScrollSpec, Tx, col, el, 
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
-/// The column header's height, which the grid's sort toolbar shares so the two views start
+/// The column header's height, which the grid's sort toolbar shares so the two layouts start
 /// their items at the same place.
 pub(super) const HEADER_HEIGHT: f32 = 32.0;
 

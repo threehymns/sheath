@@ -264,7 +264,7 @@ impl App {
             Action::Duplicate => self.duplicate_selection(),
             Action::ViewFolderRules => self.show_folder_rules(),
             Action::ViewEntryRules => self.show_entry_rules(),
-            Action::SaveViewRule => self.save_view_rule(),
+            Action::SaveLayoutRule => self.save_layout_rule(),
             Action::ShowEntry => self.pin_entry(false),
             Action::HideEntry => self.pin_entry(true),
             Action::PickRule => self.open_rule_picker(),

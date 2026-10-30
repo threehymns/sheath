@@ -28,7 +28,7 @@ pub enum Action {
     Duplicate,
     ViewFolderRules,
     ViewEntryRules,
-    SaveViewRule,
+    SaveLayoutRule,
     ShowEntry,
     HideEntry,
     PickRule,
@@ -54,7 +54,7 @@ impl Action {
         Action::Duplicate,
         Action::ViewFolderRules,
         Action::ViewEntryRules,
-        Action::SaveViewRule,
+        Action::SaveLayoutRule,
         Action::ShowEntry,
         Action::HideEntry,
         Action::PickRule,
@@ -86,7 +86,7 @@ impl Action {
             Action::Duplicate => "duplicate",
             Action::ViewFolderRules => "view-folder-rules",
             Action::ViewEntryRules => "view-entry-rules",
-            Action::SaveViewRule => "save-view-rule",
+            Action::SaveLayoutRule => "save-layout-rule",
             Action::ShowEntry => "show-entry",
             Action::HideEntry => "hide-entry",
             Action::PickRule => "pick-rule",
@@ -113,7 +113,7 @@ impl Action {
             Action::Duplicate => "Duplicate",
             Action::ViewFolderRules => "View Rules for This Folder",
             Action::ViewEntryRules => "View Rules for This Entry",
-            Action::SaveViewRule => "Save This View as a Rule",
+            Action::SaveLayoutRule => "Save This Layout as a Rule",
             Action::ShowEntry => "Always Show This Entry",
             Action::HideEntry => "Always Hide This Entry",
             Action::PickRule => "Show All Rules",
@@ -129,7 +129,7 @@ impl Action {
         match self {
             Action::ViewFolderRules
             | Action::ViewEntryRules
-            | Action::SaveViewRule
+            | Action::SaveLayoutRule
             | Action::ShowEntry
             | Action::HideEntry
             | Action::PickRule => None,

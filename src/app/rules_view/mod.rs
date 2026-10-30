@@ -2,7 +2,7 @@
 //! one-shot actions that write a rule at once. Every change goes through the config store, so
 //! the rest of the file keeps its comments and layout.
 //!
-//! `edit` owns the form, its draft, and what the file can accept; `rules` owns saving the view,
+//! `edit` owns the form, its draft, and what the file can accept; `rules` owns saving the layout,
 //! pinning an entry, deleting, reordering, and the picker.
 
 mod draft;

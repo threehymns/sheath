@@ -187,7 +187,7 @@ fn the_grid_switch_leaves_a_ruled_folder_alone() {
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
             dir.path().display()
         ),
     )
@@ -202,7 +202,7 @@ fn the_grid_switch_leaves_a_ruled_folder_alone() {
     click(&mut rt, "setting-grid");
     assert!(
         rt.state.is_grid(),
-        "the rule still decides the view after the switch"
+        "the rule still decides the layout after the switch"
     );
     assert!(!saved_settings(&dir).grid, "the setting itself is written");
 }
@@ -252,15 +252,15 @@ fn the_hidden_switch_leaves_a_ruled_folder_alone() {
     );
 }
 
-/// A rule's view and hidden policy belong to the folder it matches, so turning another setting
+/// A rule's layout and hidden policy belong to the folder it matches, so turning another setting
 /// over there must not carry them into the folders the rule leaves alone.
 #[test]
-fn a_ruled_folders_view_does_not_become_the_global_default() {
+fn a_ruled_folders_layout_does_not_become_the_global_default() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
         format!(
-            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n    show-hidden #true\n}}\n",
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n    show-hidden #true\n}}\n",
             dir.path().display()
         ),
     )
@@ -271,7 +271,7 @@ fn a_ruled_folders_view_does_not_become_the_global_default() {
 
     app.toggle_inspector();
     app.navigate(dir.path().join("alpha"));
-    assert!(!app.is_grid(), "the rule's view stays with its folder");
+    assert!(!app.is_grid(), "the rule's layout stays with its folder");
     assert!(
         !app.show_hidden,
         "the rule's hidden policy stays with its folder"

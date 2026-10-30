@@ -1,4 +1,4 @@
-//! The one-shot rule actions: saving the view, pinning an entry, deleting, reordering, and the
+//! The one-shot rule actions: saving the layout, pinning an entry, deleting, reordering, and the
 //! picker that jumps to a rule's definition. Each of these writes the file at once, which is
 //! right for an action the user asked for by name.
 
@@ -27,19 +27,23 @@ impl App {
         }
     }
 
-    /// "Save this view as a rule": pins the current folder's view, sort, direction, and hidden
-    /// policy in a new folder rule, written after the last folder rule so it applies at once.
-    /// The rule goes unnamed: its matcher already names it, and a name is the user's to give.
-    pub fn save_view_rule(&mut self) {
+    /// "Save this layout as a rule": pins the current folder's layout, sort, direction, and
+    /// hidden policy in a new folder rule, written after the last folder rule so it applies at
+    /// once. The rule goes unnamed: its matcher already names it, and a name is the user's to give.
+    pub fn save_layout_rule(&mut self) {
         let pattern = App::short_path(&self.cwd);
-        let view = if self.view.is_grid() { "grid" } else { "list" };
+        let layout = if self.layout.is_grid() {
+            "grid"
+        } else {
+            "list"
+        };
         let direction = match self.sort.1 {
             SortDir::Ascending => "ascending",
             SortDir::Descending => "descending",
         };
         let hidden = if self.show_hidden { "true" } else { "false" };
         let text = format!(
-            "folder-rule {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
+            "folder-rule {{\n    match path={}\n    layout {layout}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
             crate::rules::quote(&pattern),
             SortKey::from_column(&self.sort.0)
                 .unwrap_or(SortKey::Name)

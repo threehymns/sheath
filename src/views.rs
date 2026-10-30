@@ -2,7 +2,7 @@
 //! than the config folder, capped so it cannot grow without bound, and ignored when it cannot be
 //! read: a folder always opens.
 
-use crate::app::ViewMode;
+use crate::app::Layout;
 use crate::config;
 use crate::rules::{Resolved, SortKey};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
@@ -107,9 +107,13 @@ fn render(entries: &[(PathBuf, Resolved)]) -> String {
         let mut node = KdlNode::new("folder");
         node.push(KdlEntry::new(path.to_string_lossy().into_owned()));
         let mut children = KdlDocument::new();
-        if let Some(view) = state.view {
-            let mut child = KdlNode::new("view");
-            child.push(KdlEntry::new(if view.is_grid() { "grid" } else { "list" }));
+        if let Some(layout) = state.layout {
+            let mut child = KdlNode::new("layout");
+            child.push(KdlEntry::new(if layout.is_grid() {
+                "grid"
+            } else {
+                "list"
+            }));
             children.nodes_mut().push(child);
         }
         if let Some(sort) = state.sort {
@@ -151,8 +155,8 @@ fn parse(text: &str) -> Result<Vec<(PathBuf, Resolved)>, String> {
         for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
             let value = child.get(0).and_then(|entry| entry.as_string());
             match (child.name().value(), value) {
-                ("view", Some("grid")) => state.view = Some(ViewMode::Grid),
-                ("view", Some("list")) => state.view = Some(ViewMode::List),
+                ("layout", Some("grid")) => state.layout = Some(Layout::Grid),
+                ("layout", Some("list")) => state.layout = Some(Layout::List),
                 ("sort", Some(value)) => state.sort = SortKey::from_column(value).or(state.sort),
                 ("direction", Some("ascending")) => state.direction = Some(SortDir::Ascending),
                 ("direction", Some("descending")) => state.direction = Some(SortDir::Descending),

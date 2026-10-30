@@ -25,7 +25,7 @@ pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, Marquee, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
-pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
+pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
 pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
@@ -70,7 +70,7 @@ pub struct App {
     /// The column the list sorts by, and which way.
     pub sort: (String, SortDir),
     /// Whether the folder is a table of rows or a grid of tiles.
-    pub view: ViewMode,
+    pub layout: Layout,
     /// The drag box, while the pointer is down in the list's empty space.
     pub marquee: Option<Marquee>,
     /// The rows being dragged toward a folder, while the pointer is down on a row.
@@ -185,10 +185,10 @@ impl App {
         let recorders = Keybinds::recorders();
         let mut inspector = PaneState::new(286.0).range(232.0, 420.0);
         inspector.set_open(config.inspector);
-        let view = if config.grid {
-            ViewMode::Grid
+        let layout = if config.grid {
+            Layout::Grid
         } else {
-            ViewMode::List
+            Layout::List
         };
         App {
             cwd: PathBuf::new(),
@@ -198,7 +198,7 @@ impl App {
             selected: None,
             anchor: None,
             sort: ("name".to_owned(), SortDir::Ascending),
-            view,
+            layout,
             marquee: None,
             file_drag: None,
             clipboard: None,
@@ -284,20 +284,20 @@ impl App {
     }
 
     /// The presentation the folder resolves to, before this visit's override.
-    pub fn rule_view(&self) -> Resolved {
+    pub fn rule_presentation(&self) -> Resolved {
         self.rules.resolve(&self.cwd, self.entries.len())
     }
 
     /// Applies the visit's override, then the rules, then what the folder was left showing,
     /// and last the global defaults.
     fn apply_rules(&mut self) {
-        let rule = self.rule_view();
+        let rule = self.rule_presentation();
         let remembered = self.views.get(&self.cwd);
         let resolved = self.visit.or(rule).or(remembered);
-        self.view = resolved.view.unwrap_or(if self.config.grid {
-            ViewMode::Grid
+        self.layout = resolved.layout.unwrap_or(if self.config.grid {
+            Layout::Grid
         } else {
-            ViewMode::List
+            Layout::List
         });
         let sort = resolved.sort.unwrap_or(SortKey::Name);
         self.sort = (
@@ -308,12 +308,12 @@ impl App {
     }
 
     /// Records what this folder is showing, which is what it opens with next time.
-    fn remember_view(&mut self) {
+    fn remember_presentation(&mut self) {
         let sort = SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name);
         self.views.set(
             &self.cwd,
             Resolved {
-                view: Some(self.view),
+                layout: Some(self.layout),
                 sort: Some(sort),
                 direction: Some(self.sort.1),
                 show_hidden: None,

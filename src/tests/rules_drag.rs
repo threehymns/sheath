@@ -9,8 +9,8 @@ fn dragging_a_rule_rewrites_the_file_order() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -84,8 +84,8 @@ fn a_press_without_movement_leaves_the_order_alone() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -146,8 +146,8 @@ fn a_cancelled_rule_drag_puts_the_row_back() {
 #[test]
 fn a_drag_does_not_start_while_the_editor_holds_changes() {
     let dir = fixture();
-    let original = "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-                    folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n";
+    let original = "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+                    folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n";
     fs::write(dir.path().join("config.kdl"), original).unwrap();
 
     let (app, _path) = app_in_config_dir(&dir);
@@ -202,8 +202,8 @@ fn a_drag_closes_a_clean_editor_before_reordering() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -241,8 +241,8 @@ fn dragging_a_rule_leaves_the_other_sections_rows_still() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n\
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n\
          entry-rule \"logs\" {\n    match name=\"*.log\"\n    hidden #true\n}\n",
     )
     .unwrap();

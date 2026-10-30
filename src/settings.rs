@@ -10,7 +10,7 @@ use kdl::{KdlDocument, KdlNode};
 pub enum Setting {
     ShowHidden,
     Inspector,
-    GridView,
+    GridLayout,
     ScrollInertia,
     Overscroll,
 }
@@ -19,7 +19,7 @@ impl Setting {
     pub const ALL: [Setting; 5] = [
         Setting::ShowHidden,
         Setting::Inspector,
-        Setting::GridView,
+        Setting::GridLayout,
         Setting::ScrollInertia,
         Setting::Overscroll,
     ];
@@ -29,7 +29,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => "show-hidden",
             Setting::Inspector => "inspector",
-            Setting::GridView => "grid",
+            Setting::GridLayout => "grid",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -40,7 +40,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => "hidden",
             Setting::Inspector => "inspector",
-            Setting::GridView => "grid",
+            Setting::GridLayout => "grid",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -49,7 +49,7 @@ impl Setting {
     /// What the app does when the file doesn't name it.
     pub fn default_on(self) -> bool {
         match self {
-            Setting::ShowHidden | Setting::GridView => false,
+            Setting::ShowHidden | Setting::GridLayout => false,
             Setting::Inspector | Setting::ScrollInertia | Setting::Overscroll => true,
         }
     }
@@ -58,7 +58,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => 0,
             Setting::Inspector => 1,
-            Setting::GridView => 2,
+            Setting::GridLayout => 2,
             Setting::ScrollInertia => 3,
             Setting::Overscroll => 4,
         }
@@ -74,7 +74,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => settings.show_hidden,
             Setting::Inspector => settings.inspector,
-            Setting::GridView => settings.grid,
+            Setting::GridLayout => settings.grid,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
         }
@@ -84,7 +84,7 @@ impl Setting {
         match self {
             Setting::ShowHidden => settings.show_hidden = on,
             Setting::Inspector => settings.inspector = on,
-            Setting::GridView => settings.grid = on,
+            Setting::GridLayout => settings.grid = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
         }

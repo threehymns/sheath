@@ -1,7 +1,7 @@
-//! The grid view: switching to it, clicking and walking its tiles, and remembering the choice.
+//! The grid layout: switching to it, clicking and walking its tiles, and remembering the choice.
 
 use super::helpers::*;
-use crate::app::{App, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
+use crate::app::{App, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
 use std::fs;
@@ -11,14 +11,14 @@ fn the_toolbar_switches_between_the_list_and_the_grid() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    assert_eq!(rt.state.view, ViewMode::List);
+    assert_eq!(rt.state.layout, Layout::List);
     assert!(
         rt.find("header").is_some(),
         "the list has its column header"
     );
 
-    click(&mut rt, "toggle-view");
-    assert_eq!(rt.state.view, ViewMode::Grid);
+    click(&mut rt, "toggle-layout");
+    assert_eq!(rt.state.layout, Layout::Grid);
     assert!(rt.find("file-grid").is_some(), "the grid is on screen");
     assert!(rt.find("header").is_none(), "the grid has no column header");
     assert!(
@@ -26,8 +26,8 @@ fn the_toolbar_switches_between_the_list_and_the_grid() {
         "the file has a tile on screen"
     );
 
-    click(&mut rt, "toggle-view");
-    assert_eq!(rt.state.view, ViewMode::List);
+    click(&mut rt, "toggle-layout");
+    assert_eq!(rt.state.layout, Layout::List);
     assert!(rt.find("file-grid").is_none());
     assert!(rt.find("header").is_some());
 }
@@ -37,7 +37,7 @@ fn clicking_a_tile_selects_it() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
     click(&mut rt, "f:notes.md");
@@ -51,7 +51,7 @@ fn arrow_keys_walk_the_grid_by_tile_and_by_row() {
     let dir = long_folder(24);
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
     let columns = rt.state.grid_columns();
@@ -92,7 +92,7 @@ fn dragging_a_tile_onto_a_folder_tile_moves_it() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
     click(&mut rt, "f:file2.txt");
@@ -127,7 +127,7 @@ fn the_gaps_between_tiles_start_a_box_rather_than_a_drag() {
     let dir = long_folder(24);
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
     let (x, y) = rt.find("f:file00.txt").expect("the first tile");
@@ -162,7 +162,7 @@ fn the_grid_toolbar_sorts_from_the_tiles() {
     rt.frame(0.1);
     let list_top = rt.state.rows_view[1];
 
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
     assert!(
         rt.find("grid-sort-name").is_some(),
@@ -188,7 +188,7 @@ fn the_grid_toolbar_sorts_from_the_tiles() {
     );
     assert_eq!(rt.state.sort_column(), ("size", SortDir::Descending));
 
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
     assert!(
         rt.find("size").is_some(),
@@ -202,7 +202,7 @@ fn the_sort_chevron_turns_over_when_the_direction_reverses() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
     let turn = |rt: &rune::Runtime<App>| {
@@ -250,11 +250,11 @@ fn the_grid_choice_is_remembered_for_the_folder() {
     let mut rt = runtime(app);
     rt.frame(0.0);
 
-    click(&mut rt, "toggle-view");
+    click(&mut rt, "toggle-layout");
     assert!(rt.state.is_grid());
     let views = fs::read_to_string(dir.path().join("views.kdl")).unwrap();
-    assert!(views.contains("view grid"), "{views}");
+    assert!(views.contains("layout grid"), "{views}");
 
     let remembered = crate::views::Views::at(dir.path().join("views.kdl")).get(dir.path());
-    assert_eq!(remembered.view, Some(crate::app::ViewMode::Grid));
+    assert_eq!(remembered.layout, Some(crate::app::Layout::Grid));
 }

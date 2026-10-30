@@ -172,20 +172,20 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .build(k)
         .key("toggle-hidden");
 
-    let (view_icon, view_label) = if s.is_grid() {
-        (&icons::LIST, "List View")
+    let (layout_icon, layout_label) = if s.is_grid() {
+        (&icons::LIST, "List Layout")
     } else {
-        (&icons::GRID, "Grid View")
+        (&icons::GRID, "Grid Layout")
     };
-    let view = IconButton::new(view_icon)
+    let layout = IconButton::new(layout_icon)
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Regular)
-        .label(view_label)
-        .help(view_label)
+        .label(layout_label)
+        .help(layout_label)
         .expanded(s.is_grid())
-        .on_press(|s: &mut App| s.toggle_view())
+        .on_press(|s: &mut App| s.toggle_layout())
         .build(k)
-        .key("toggle-view");
+        .key("toggle-layout");
 
     let inspector = IconButton::new(&icons::INSPECTOR)
         .variant(IconButtonVariant::GhostMuted)
@@ -214,7 +214,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .center(search)
         .trailing(new_folder)
         .trailing(hidden)
-        .trailing(view)
+        .trailing(layout)
         .trailing(inspector)
         .trailing(settings)
 }

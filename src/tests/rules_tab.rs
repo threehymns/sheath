@@ -34,8 +34,8 @@ fn the_picker_lists_every_rule_and_jumps_to_one() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"first\" {\n    match path=\"/a\"\n    view grid\n}\n\
-         folder-rule \"second\" {\n    match path=\"/b\"\n    view list\n}\n",
+        "folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n\
+         folder-rule \"second\" {\n    match path=\"/b\"\n    layout list\n}\n",
     )
     .unwrap();
 
@@ -68,7 +68,7 @@ fn the_rules_tab_gives_each_kind_its_own_section_and_add_rule() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/a\"\n    view grid\n}\n\
+        "folder-rule \"here\" {\n    match path=\"/a\"\n    layout grid\n}\n\
          entry-rule \"logs\" {\n    match name=\"*.log\"\n    hidden #true\n}\n",
     )
     .unwrap();
@@ -213,7 +213,7 @@ fn each_sections_add_rule_is_inset_like_its_label() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"here\" {\n    match path=\"/a\"\n    view grid\n}\n\
+        "folder-rule \"here\" {\n    match path=\"/a\"\n    layout grid\n}\n\
          entry-rule \"logs\" {\n    match name=\"*.log\"\n    hidden #true\n}\n",
     )
     .unwrap();
@@ -271,8 +271,8 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("folder-rule"), "{text}");
     assert!(
-        text.contains("view list") && text.contains("sort name"),
-        "the draft starts from the folder on screen and its view: {text}"
+        text.contains("layout list") && text.contains("sort name"),
+        "the draft starts from the folder on screen and its layout: {text}"
     );
     assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
     let key = format!("rule-{}-0", rt.state.rules.rules[0].summary());
@@ -289,7 +289,7 @@ fn a_command_with_no_matching_rule_says_so_in_the_tab() {
     let dir = fixture();
     fs::write(
         dir.path().join("config.kdl"),
-        "folder-rule \"elsewhere\" {\n    match path=\"/nowhere\"\n    view grid\n}\n",
+        "folder-rule \"elsewhere\" {\n    match path=\"/nowhere\"\n    layout grid\n}\n",
     )
     .unwrap();
 

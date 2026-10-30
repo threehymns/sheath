@@ -237,11 +237,11 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
         )
         .separator()
         .item(
-            MenuItem::new("Save This View as a Rule")
+            MenuItem::new("Save This Layout as a Rule")
                 .icon(&theme::icons::EDIT)
                 .on_select(|s: &mut App| {
                     s.close_menu();
-                    s.save_view_rule();
+                    s.save_layout_rule();
                 }),
         )
         .item(
