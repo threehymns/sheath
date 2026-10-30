@@ -164,6 +164,50 @@ fn the_general_category_toggles_what_the_browser_shows() {
 }
 
 #[test]
+fn the_grid_switch_writes_the_global_setting() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "setting-grid");
+    assert!(rt.state.is_grid(), "the switch shows the tiles");
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("grid #true"), "{config}");
+    assert!(
+        !dir.path().join("views.kdl").exists(),
+        "the setting is global, not this folder's"
+    );
+}
+
+#[test]
+fn the_grid_switch_leaves_a_ruled_folder_alone() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    assert!(rt.state.is_grid());
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "setting-grid");
+    assert!(
+        rt.state.is_grid(),
+        "the rule still decides the view after the switch"
+    );
+    assert!(!saved_settings(&dir).grid, "the setting itself is written");
+}
+
+#[test]
 fn saved_settings_load_at_launch() {
     let dir = fixture();
     let path = dir.path().join("config.kdl");

@@ -202,6 +202,25 @@ impl App {
         }
     }
 
+    /// The settings panel's Grid view switch: turns the global setting over, then resolves the
+    /// open folder again, so a rule or what the folder was left showing keeps its say.
+    pub fn toggle_grid_setting(&mut self) {
+        // The switch shows what the folder resolved to, so that is what it turns over.
+        let before = self.view;
+        self.view = if before.is_grid() {
+            ViewMode::List
+        } else {
+            ViewMode::Grid
+        };
+        // The setting is written from the browser's view, so the new mode is what it records.
+        self.remember(Setting::GridView);
+        // A rule or a remembered visit still outranks the global default.
+        self.apply_rules();
+        if self.view != before {
+            self.scroll.stop();
+        }
+    }
+
     /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();

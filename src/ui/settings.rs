@@ -318,7 +318,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
     let grid = Switch::new(s.is_grid())
         .label("Grid view")
         .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_view())
+        .on_toggle(|s: &mut App| s.toggle_grid_setting())
         .build(k)
         .key("setting-grid");
     let inertia = Switch::new(s.config.scroll_inertia)
