@@ -2,6 +2,7 @@
 //! navigation walks.
 
 use crate::app::App;
+use crate::rules::SortKey;
 use crate::settings::Setting;
 use rune_kit::SortDir;
 use std::collections::BTreeSet;
@@ -245,14 +246,11 @@ impl App {
         let _ = self
             .store
             .edit(crate::config::CONFIG, |doc| crate::settings::Settings::clear(doc, setting));
-        self.show_hidden = self.config.show_hidden;
+        // A rule or a remembered visit still outranks the global default, so the open folder
+        // is resolved again rather than forced back to the setting just reset.
+        self.apply_rules();
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
-        self.view = if self.config.grid {
-            ViewMode::Grid
-        } else {
-            ViewMode::List
-        };
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }
@@ -275,11 +273,7 @@ impl App {
         };
         let rule = self.rule_view();
         if rule.sort.is_some() || rule.direction.is_some() {
-            self.visit.sort = Some(match column {
-                "size" => crate::rules::SortKey::Size,
-                "modified" => crate::rules::SortKey::Modified,
-                _ => crate::rules::SortKey::Name,
-            });
+            self.visit.sort = Some(SortKey::from_column(column).unwrap_or(SortKey::Name));
             self.visit.direction = Some(self.sort.1);
         } else {
             self.remember_view();

@@ -21,23 +21,32 @@ pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     }
     for (index, rule) in s.rules.rules.iter().enumerate() {
         let active = index == selected;
+        let mut labels = col().grow(1.0).min_w(0.0).gap(1.0);
+        if let Some(name) = &rule.name {
+            labels = labels.child(
+                text(name.clone())
+                    .font(k.ty.ui)
+                    .color(k.c.text_base)
+                    .truncate(),
+            );
+        }
+        labels = labels.child(
+            text(rule.details())
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .truncate(),
+        );
         let mut line = row()
             .key(format!("rule-picker-{index}"))
             .w_full()
-            .h(32.0)
+            .h(40.0)
             .px(8.0)
             .gap(10.0)
             .center_y()
             .radius(k.radius.sm)
             .cursor(Cursor::Pointer)
             .on_press(move |s: &mut App| s.choose_rule(index))
-            .child(
-                text(rule.summary())
-                    .font(k.ty.ui)
-                    .color(k.c.text_base)
-                    .grow(1.0)
-                    .truncate(),
-            )
+            .child(labels)
             .child(
                 text(rule.kind_label())
                     .font(k.ty.caption())

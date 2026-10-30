@@ -39,7 +39,9 @@ impl SortKey {
         }
     }
 
-    fn parse(value: &str) -> Option<SortKey> {
+    /// The key a column's string id names; the browser keeps the id, and this is the one place
+    /// that turns it back.
+    pub fn from_column(value: &str) -> Option<SortKey> {
         match value {
             "name" => Some(SortKey::Name),
             "size" => Some(SortKey::Size),
@@ -206,6 +208,52 @@ impl Rule {
             Kind::Entry => "Entry",
         }
     }
+
+    /// The rule's matchers and properties, as the tab and the picker print them.
+    pub fn details(&self) -> String {
+        let mut parts = Vec::new();
+        for matcher in &self.matches {
+            parts.push(format!("match {}", matcher.summary()));
+        }
+        for matcher in &self.excludes {
+            parts.push(format!("exclude {}", matcher.summary()));
+        }
+        match self.props.view {
+            Prop::Unset => {}
+            Prop::Inherit => parts.push("view inherit".to_owned()),
+            Prop::Set(view) => parts.push(format!(
+                "view {}",
+                if view.is_grid() { "grid" } else { "list" }
+            )),
+        }
+        match self.props.sort {
+            Prop::Unset => {}
+            Prop::Inherit => parts.push("sort inherit".to_owned()),
+            Prop::Set(sort) => parts.push(format!("sort {}", sort.as_str())),
+        }
+        match self.props.direction {
+            Prop::Unset => {}
+            Prop::Inherit => parts.push("direction inherit".to_owned()),
+            Prop::Set(SortDir::Ascending) => parts.push("direction ascending".to_owned()),
+            Prop::Set(SortDir::Descending) => parts.push("direction descending".to_owned()),
+        }
+        for (name, prop) in [
+            ("show-hidden", self.props.show_hidden),
+            ("hidden", self.props.hidden),
+        ] {
+            match prop {
+                Prop::Unset => {}
+                Prop::Inherit => parts.push(format!("{name} inherit")),
+                Prop::Set(true) => parts.push(format!("{name} #true")),
+                Prop::Set(false) => parts.push(format!("{name} #false")),
+            }
+        }
+        if parts.is_empty() {
+            "everything".to_owned()
+        } else {
+            parts.join("  ")
+        }
+    }
 }
 
 /// Every rule, in the order the file holds them.
@@ -322,7 +370,9 @@ fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
             "match" => rule.matches.push(parse_matcher(child, kind)?),
             "exclude" => rule.excludes.push(parse_matcher(child, kind)?),
             "view" => rule.props.view = parse_prop(child, "view", Kind::Folder, kind, parse_view)?,
-            "sort" => rule.props.sort = parse_prop(child, "sort", Kind::Folder, kind, SortKey::parse)?,
+            "sort" => {
+                rule.props.sort = parse_prop(child, "sort", Kind::Folder, kind, SortKey::from_column)?
+            }
             "direction" => {
                 rule.props.direction = parse_prop(child, "direction", Kind::Folder, kind, parse_direction)?
             }
@@ -438,6 +488,13 @@ fn parse_matcher(node: &KdlNode, kind: Kind) -> Result<Matcher, String> {
         return Err(
             "folder rules match path, min-items, and max-items; name, kind, and extension are \
              for entry rules"
+                .to_owned(),
+        );
+    }
+    if kind == Kind::Entry && (matcher.min_items.is_some() || matcher.max_items.is_some()) {
+        return Err(
+            "entry rules match path, name, kind, and extension; min-items and max-items are for \
+             folder rules"
                 .to_owned(),
         );
     }

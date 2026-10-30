@@ -432,3 +432,32 @@ fn a_toolbar_change_in_a_ruled_folder_lasts_for_the_visit() {
     assert!(app.cwd == here);
     assert!(app.is_grid(), "the rule wins again on the next visit");
 }
+
+#[test]
+fn resetting_a_setting_leaves_a_ruled_folder_alone() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    view grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+
+    let (mut app, _path) = app_in_config_dir(&dir);
+    assert!(app.is_grid());
+    app.reset_setting(Setting::ScrollInertia);
+    assert!(app.is_grid(), "the rule still decides the view after a reset");
+}
+
+#[test]
+fn an_entry_rule_cannot_name_a_count() {
+    let doc: kdl::KdlDocument =
+        "entry-rule \"x\" {\n    match min-items=3\n    hidden #true\n}\n"
+            .parse()
+            .unwrap();
+    let error = Rules::parse(&doc).expect_err("min-items is a folder matcher");
+    assert!(error.contains("min-items"), "{error}");
+    assert!(error.contains("folder rules"), "{error}");
+}

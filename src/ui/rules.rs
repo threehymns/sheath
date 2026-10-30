@@ -1,6 +1,6 @@
 //! The Rules category: every rule in file order, with its matcher, draggable, and deletable.
 
-use crate::app::App;
+use crate::app::{App, RULE_ROW_HEIGHT};
 use crate::config;
 use rune::{Cursor, Drag, El, Phase, Tx, col, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit};
@@ -80,7 +80,7 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
         .role("listitem")
         .label(rule.summary())
         .w_full()
-        .min_h(56.0)
+        .min_h(RULE_ROW_HEIGHT)
         .px(SETTINGS_ROW_INSET)
         .py(8.0)
         .gap(12.0)
@@ -98,10 +98,16 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
                         .truncate(),
                 )
                 .child(
-                    text(rule.kind_label())
+                    text(rule.details())
                         .font(k.ty.caption())
-                        .color(k.c.text_muted),
+                        .color(k.c.text_muted)
+                        .truncate(),
                 ),
+        )
+        .child(
+            text(rule.kind_label())
+                .font(k.ty.caption())
+                .color(k.c.text_muted),
         );
     if !read_only {
         line = line
@@ -110,7 +116,7 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
                 Phase::Down => s.rule_drag = Some((index, index)),
                 Phase::Move => {
                     if let Some((from, _)) = s.rule_drag {
-                        let step = (drag.y / 56.0).round() as isize;
+                        let step = (drag.y / RULE_ROW_HEIGHT).round() as isize;
                         let last = s.rules.rules.len().saturating_sub(1) as isize;
                         let to = (from as isize + step).clamp(0, last) as usize;
                         s.rule_drag = Some((from, to));
