@@ -107,6 +107,10 @@ pub struct App {
     pub rule_drag: Option<(usize, usize)>,
     /// The rule picker's highlighted row, while it is up.
     pub rule_picker: Option<usize>,
+    /// The rule the tab should scroll to once its row is laid out, and the frames left to wait.
+    pub rule_reveal: Option<(usize, u8)>,
+    /// What a command asked about that no rule matches, so the tab can say so.
+    pub rule_query: Option<String>,
     /// A presentation the user chose for this visit, over what the rules say. Cleared on every
     /// navigation, so a rule wins again the next time the folder opens.
     pub visit: Resolved,
@@ -212,6 +216,8 @@ impl App {
             rule_focus: None,
             rule_drag: None,
             rule_picker: None,
+            rule_reveal: None,
+            rule_query: None,
             visit: Resolved::default(),
             views: Views::default(),
             keybinds,

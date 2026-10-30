@@ -43,10 +43,35 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
                 ),
         );
     }
+    // A stale list must not be edited: its positions are no longer the file's.
+    let read_only = s.rule_error.is_some();
+    if !read_only {
+        page = page.child(
+            row().w_full().justify_end().child(
+                Button::new("Add Rule")
+                    .variant(ButtonVariant::Outline)
+                    .control_size(ControlSize::Small)
+                    .on_press(|s: &mut App| s.save_view_rule())
+                    .build(k)
+                    .key("add-rule"),
+            ),
+        );
+    }
+    // The command that opened the tab found nothing to show.
+    if let Some(message) = &s.rule_query {
+        page = page.child(
+            text(message.clone())
+                .key("rules-no-match")
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .mx(SETTINGS_ROW_INSET)
+                .wrap(),
+        );
+    }
     if s.rules.rules.is_empty() {
         return page.child(
             text(
-                "No rules yet. Use Save This View as a Rule from the command bar, or write a \
+                "No rules yet. Add Rule writes one for the folder on screen, or write a \
                  folder-rule in config.kdl.",
             )
             .font(k.ty.caption())
@@ -55,8 +80,6 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
             .wrap(),
         );
     }
-    // A stale list must not be edited: its positions are no longer the file's.
-    let read_only = s.rule_error.is_some();
     let rows = (0..s.rules.rules.len())
         .map(|index| rule_row(s, k, index, read_only))
         .collect();

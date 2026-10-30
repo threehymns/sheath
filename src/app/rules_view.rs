@@ -80,10 +80,17 @@ impl App {
             }),
             Err(err) => Err(format!("Couldn’t write the rule: {err}")),
         };
+        let appended = written.is_ok();
         self.after_rule_change();
         // Set after the reload, which clears it whenever the file reads back cleanly.
         if let Err(err) = written {
             self.rule_error = Some(err);
+        } else if appended && self.settings == Some(SettingsTab::Rules) {
+            // The new rule is the last one, so the tab shows what the action just wrote.
+            let index = self.rules.rules.len().saturating_sub(1);
+            self.rule_focus = Some(index);
+            self.rule_reveal = Some((index, 1));
+            self.rule_query = None;
         }
     }
 
@@ -149,6 +156,8 @@ impl App {
         self.rule_picker = None;
         if index < self.rules.rules.len() {
             self.rule_focus = Some(index);
+            self.rule_reveal = Some((index, 1));
+            self.rule_query = None;
             self.settings = Some(SettingsTab::Rules);
         }
     }
@@ -162,13 +171,18 @@ impl App {
     /// Opens the Rules tab at the first rule matching the folder on screen.
     pub fn show_folder_rules(&mut self) {
         let count = self.entries.len();
-        self.rule_focus = self.rules.first_folder(&self.cwd, count);
+        let focus = self.rules.first_folder(&self.cwd, count);
+        self.rule_focus = focus;
+        self.rule_reveal = focus.map(|index| (index, 1));
+        self.rule_query = focus
+            .is_none()
+            .then(|| "No rule matches this folder.".to_owned());
         self.settings = Some(SettingsTab::Rules);
     }
 
     /// Opens the Rules tab at the first rule matching the selected entry.
     pub fn show_entry_rules(&mut self) {
-        self.rule_focus = self.selected.as_ref().and_then(|id| {
+        let focus = self.selected.as_ref().and_then(|id| {
             let entry = self.entries.iter().find(|entry| &entry.id == id)?;
             let path = entry.path.to_string_lossy();
             self.rules.first_entry(&EntryRef {
@@ -177,6 +191,11 @@ impl App {
                 is_dir: entry.is_dir,
             })
         });
+        self.rule_focus = focus;
+        self.rule_reveal = focus.map(|index| (index, 1));
+        self.rule_query = focus
+            .is_none()
+            .then(|| "No rule matches the selected entry.".to_owned());
         self.settings = Some(SettingsTab::Rules);
     }
 

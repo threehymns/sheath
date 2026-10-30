@@ -72,6 +72,19 @@ impl App {
             self.apply_config();
             redraw = true;
         }
+        // A command asked for a rule: wait one frame so the tab's rows are laid out, then put
+        // the rule just under the viewport's top.
+        if let Some((index, wait)) = self.rule_reveal {
+            if wait == 0 {
+                self.rule_reveal = None;
+                if self.settings == Some(SettingsTab::Rules) {
+                    tx.scroll_key_to(format!("rule-{index}"), 8.0);
+                }
+            } else {
+                self.rule_reveal = Some((index, wait - 1));
+                redraw = true;
+            }
+        }
         let limits = self.limits();
         self.scroll.observe(self.told_offset());
         let dt = self.scroll.frame(t);

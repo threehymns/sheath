@@ -461,3 +461,47 @@ fn an_entry_rule_cannot_name_a_count() {
     assert!(error.contains("min-items"), "{error}");
     assert!(error.contains("folder rules"), "{error}");
 }
+
+#[test]
+fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+    click(&mut rt, "add-rule");
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("folder-rule"), "{text}");
+    assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
+    assert_eq!(rt.state.rule_focus, Some(0), "the new rule is on screen");
+    assert_eq!(
+        rt.state.rule_reveal,
+        Some((0, 1)),
+        "the tab scrolls to the rule it just wrote"
+    );
+
+    rt.frame(0.1);
+    assert!(rt.find("rule-0").is_some());
+}
+
+#[test]
+fn a_command_with_no_matching_rule_says_so_in_the_tab() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"elsewhere\" {\n    match path=\"/nowhere\"\n    view grid\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    rt.state.show_folder_rules();
+    rt.frame(0.05);
+
+    assert!(rt.find("rules-no-match").is_some(), "the tab says nothing matched");
+    assert_eq!(rt.state.rule_focus, None, "no rule is singled out");
+    assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
+}

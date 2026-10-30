@@ -127,6 +127,8 @@ impl App {
     }
 
     pub fn open_tab(&mut self, tab: SettingsTab) {
+        self.rule_query = None;
+        self.rule_reveal = None;
         self.settings = Some(tab);
     }
 
