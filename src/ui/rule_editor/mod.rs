@@ -3,16 +3,18 @@
 //! draft, and Save writes it. Save and Discard Changes are up only while the draft differs from
 //! the file, so a form opened on a rule has nothing to press.
 
+mod fields;
+
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
 use crate::corner::CornerCut;
 use crate::rules::{EntryKind, Kind, Matcher};
-use rune::{Color, El, Shadow, TextEdit, Tx, col, row, text};
+use fields::{rule_field, rule_name_field};
+use rune::{Color, El, Shadow, Tx, col, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Select,
-    SelectAppearance, TextInput,
+    SelectAppearance,
 };
 use rune_theme_opencode as theme;
-use std::collections::BTreeMap;
 
 use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 
@@ -53,7 +55,7 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
         .w_full()
         .gap(8.0)
         .center_y()
-        .child(rule_field(k, &edit.fields, "name", "Rule name", 220.0));
+        .child(rule_name_field(k, &edit.fields));
     // The form is cut into the card rather than laid on top of it: a sliver of card around it,
     // corners concentric with the card's, a fill a clear step darker, and an inset shade along
     // the top edge.
@@ -462,41 +464,4 @@ pub(super) fn rule_editor_layers(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .build(k, layers);
         }
     }
-}
-
-/// One text field of the editor, wired back to the draft. Typing only changes the draft; the
-/// file is written when the form is saved.
-fn rule_field(
-    k: &Kit,
-    fields: &BTreeMap<String, TextEdit>,
-    key: &str,
-    placeholder: &str,
-    width: f32,
-) -> El {
-    let id = key.to_owned();
-    let target = id.clone();
-    TextInput::new(fields.get(key).expect("the editor seeds every field"))
-        .placeholder(placeholder)
-        .width(Some(width))
-        .on_edit(move |s: &mut App| {
-            s.rule_fields_mut()
-                .get_mut(&target)
-                .expect("the editor seeds every field")
-        })
-        .on_change(|s: &mut App, tx: &mut Tx| {
-            // A keystroke is the user's own hand, so its commit lands at once and cannot
-            // animate. Save is drawn from `shown_dirty`, left as it was here: the next frame
-            // catches it up, and that commit is the one that animates. Nothing else would ask
-            // for that frame once the key is drawn, so this does.
-            let shown = s.rule_edit.as_ref().map(|edit| edit.shown_dirty);
-            s.apply_rule_fields();
-            if let (Some(shown), Some(edit)) = (shown, s.rule_edit.as_mut()) {
-                if edit.dirty() != shown {
-                    tx.wake_after(std::time::Duration::ZERO);
-                }
-                edit.shown_dirty = shown;
-            }
-        })
-        .build(k)
-        .key(format!("rule-field-{id}"))
 }
