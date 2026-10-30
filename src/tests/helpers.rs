@@ -42,6 +42,8 @@ pub(super) fn app(dir: &TempDir) -> App {
     app.keybinds = Keybinds::defaults();
     app.recorders = Keybinds::recorders();
     app.config = Settings::defaults();
+    // The pane was opened with the machine's real config; the defaults are what this app uses.
+    app.inspector.set_open(app.config.inspector);
     app.views = crate::views::Views::default();
     app.rules = crate::rules::Rules::default();
     app.rule_error = None;
@@ -59,6 +61,8 @@ pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     app.keybinds = Keybinds::from_doc(app.store.doc(crate::config::KEYBINDS));
     app.recorders = Keybinds::recorders();
     app.config = Settings::from_doc(app.store.doc(crate::config::CONFIG));
+    // The config just replaced the defaults the pane was opened with, so it has its say too.
+    app.inspector.set_open(app.config.inspector);
     app.views = crate::views::Views::at(dir.path().join("views.kdl"));
     app.reload_rules();
     app.reload();
