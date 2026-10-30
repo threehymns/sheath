@@ -83,10 +83,10 @@ impl App {
         if let Err(err) = written {
             self.rule_error = Some(err);
         } else if appended && self.settings == Some(SettingsTab::Rules) {
-            // The new rule is the last one, so the tab shows what the action just wrote.
-            let index = self.rules.rules.len().saturating_sub(1);
-            self.rule_focus = Some(index);
-            self.rule_reveal = Some((index, 1));
+            // The new rule is the last one, so the tab reveals what the action just wrote. It
+            // is not focused: the focused fill answers a command that asked which rule applies,
+            // and a row the user has only just added should not look singled out.
+            self.rule_reveal = Some((self.rules.rules.len().saturating_sub(1), 1));
             self.rule_query = None;
         }
     }

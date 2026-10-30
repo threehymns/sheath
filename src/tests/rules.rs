@@ -445,7 +445,10 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("folder-rule"), "{text}");
     assert_eq!(rt.state.rules.rules.len(), 1, "{text}");
-    assert_eq!(rt.state.rule_focus, Some(0), "the new rule is on screen");
+    assert_eq!(
+        rt.state.rule_focus, None,
+        "a rule the user just added is not picked out"
+    );
     assert_eq!(
         rt.state.rule_reveal,
         Some((0, 1)),
@@ -453,7 +456,8 @@ fn the_rules_tab_adds_a_rule_for_the_folder_on_screen() {
     );
 
     rt.frame(0.1);
-    assert!(rt.find("rule-0").is_some());
+    let key = format!("rule-{}-0", rt.state.rules.rules[0].summary());
+    assert!(rt.find(&key).is_some(), "the new rule is on screen as {key}");
 }
 
 #[test]

@@ -89,8 +89,16 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
         );
     }
     let mut rows = Vec::new();
+    let mut seen: BTreeMap<String, usize> = BTreeMap::new();
     for index in 0..s.rules.rules.len() {
-        rows.push(rule_row(s, k, index, read_only));
+        let summary = s.rules.rules[index].summary();
+        let occurrence = seen.entry(summary.clone()).or_insert(0);
+        // The key follows the rule, not its place in the list. Keyed by index, a reorder would
+        // leave the rows where they are and swap the text between them, so the drop would
+        // animate from the order the drag started in.
+        let key = format!("rule-{summary}-{occurrence}");
+        *occurrence += 1;
+        rows.push(rule_row(s, k, index, read_only, &key));
         if !read_only && let Some(edit) = s.rule_edit.as_ref().filter(|edit| edit.index == index) {
             rows.push(rule_editor(k, edit));
         }
@@ -105,13 +113,13 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
 
 /// One rule: its matcher, the kind of rule it is, a handle to drag it by, and a delete button.
 /// Dragging rewrites the order of the rule nodes, and the rule's comments travel with it.
-fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
+fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool, key: &str) -> El {
     let Some(rule) = s.rules.rules.get(index) else {
         return row();
     };
     let focused = s.rule_focus == Some(index);
     let mut line = row()
-        .key(format!("rule-{index}"))
+        .key(key)
         .role("listitem")
         .label(rule.summary())
         .w_full()
@@ -171,8 +179,11 @@ fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
                         .follow(index, count, drag.dy, drag.h, RULE_ROW_GAP);
                 }
                 Phase::Up => {
-                    // Escape, or the window losing focus, puts the row back where it was.
+                    // The gap the drag opened is the order it drops into, so the reorder lands
+                    // in the same frame the rows' offsets clear: there is nothing to animate,
+                    // and the list must not spring in from the order the drag started in.
                     if let Some((from, to)) = s.rule_drag.end(drag.cancelled()) {
+                        tx.instant();
                         s.move_rule(from, to);
                     }
                 }
