@@ -98,11 +98,6 @@ impl Views {
             Err(err) => self.error = Some(err),
         }
     }
-
-    /// Whether anything is remembered, for the Rules tab's empty state.
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
 }
 
 /// The file: a `folder` node per remembered path, holding only what was not at its default.
@@ -158,14 +153,7 @@ fn parse(text: &str) -> Result<Vec<(PathBuf, Resolved)>, String> {
             match (child.name().value(), value) {
                 ("view", Some("grid")) => state.view = Some(ViewMode::Grid),
                 ("view", Some("list")) => state.view = Some(ViewMode::List),
-                ("sort", Some(value)) => {
-                    state.sort = match value {
-                        "name" => Some(SortKey::Name),
-                        "size" => Some(SortKey::Size),
-                        "modified" => Some(SortKey::Modified),
-                        _ => state.sort,
-                    }
-                }
+                ("sort", Some(value)) => state.sort = SortKey::from_column(value).or(state.sort),
                 ("direction", Some("ascending")) => state.direction = Some(SortDir::Ascending),
                 ("direction", Some("descending")) => state.direction = Some(SortDir::Descending),
                 ("show-hidden", _) => {

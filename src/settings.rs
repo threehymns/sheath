@@ -160,11 +160,6 @@ impl Settings {
         self.present[setting.index()]
     }
 
-    /// Whether the file names any setting, for the panel's reset affordances.
-    pub fn names_anything(&self) -> bool {
-        self.present.iter().any(|present| *present)
-    }
-
     /// Writes `setting` as a child of the `settings` node, leaving the rest of the document
     /// exactly as it was: the node keeps its own whitespace and the comments above it.
     pub fn write(&self, doc: &mut KdlDocument, setting: Setting) {

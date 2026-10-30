@@ -28,6 +28,7 @@ pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
+pub use rules_view::RULE_ROW_HEIGHT;
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
 
@@ -106,8 +107,6 @@ pub struct App {
     pub rule_drag: Option<(usize, usize)>,
     /// The rule picker's highlighted row, while it is up.
     pub rule_picker: Option<usize>,
-    /// The Rules tab's list rect in window points, from the last layout.
-    pub rules_view: [f32; 4],
     /// A presentation the user chose for this visit, over what the rules say. Cleared on every
     /// navigation, so a rule wins again the next time the folder opens.
     pub visit: Resolved,
@@ -163,6 +162,7 @@ impl App {
 
     /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
     /// that keep them out of the real config folder).
+    #[cfg(test)]
     pub fn open_with(path: PathBuf, config: Settings) -> App {
         let mut app = App::blank(config, Store::none(), Keybinds::defaults());
         app.history.push(path.clone());
@@ -212,7 +212,6 @@ impl App {
             rule_focus: None,
             rule_drag: None,
             rule_picker: None,
-            rules_view: [0.0; 4],
             visit: Resolved::default(),
             views: Views::default(),
             keybinds,
@@ -268,44 +267,23 @@ impl App {
     fn apply_rules(&mut self) {
         let rule = self.rule_view();
         let remembered = self.views.get(&self.cwd);
-        let view = self
-            .visit
-            .view
-            .or(rule.view)
-            .or(remembered.view)
-            .unwrap_or(if self.config.grid {
-                ViewMode::Grid
-            } else {
-                ViewMode::List
-            });
-        let sort = self
-            .visit
-            .sort
-            .or(rule.sort)
-            .or(remembered.sort)
-            .unwrap_or(SortKey::Name);
-        let direction = self
-            .visit
-            .direction
-            .or(rule.direction)
-            .or(remembered.direction)
-            .unwrap_or(SortDir::Ascending);
-        self.show_hidden = self
-            .visit
-            .show_hidden
-            .or(rule.show_hidden)
-            .unwrap_or(self.config.show_hidden);
-        self.view = view;
-        self.sort = (sort.as_str().to_owned(), direction);
+        let resolved = self.visit.or(rule).or(remembered);
+        self.view = resolved.view.unwrap_or(if self.config.grid {
+            ViewMode::Grid
+        } else {
+            ViewMode::List
+        });
+        let sort = resolved.sort.unwrap_or(SortKey::Name);
+        self.sort = (
+            sort.as_str().to_owned(),
+            resolved.direction.unwrap_or(SortDir::Ascending),
+        );
+        self.show_hidden = resolved.show_hidden.unwrap_or(self.config.show_hidden);
     }
 
     /// Records what this folder is showing, which is what it opens with next time.
     fn remember_view(&mut self) {
-        let sort = match self.sort.0.as_str() {
-            "size" => SortKey::Size,
-            "modified" => SortKey::Modified,
-            _ => SortKey::Name,
-        };
+        let sort = SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name);
         self.views.set(
             &self.cwd,
             Resolved {

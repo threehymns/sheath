@@ -313,7 +313,7 @@ fn the_recorder_shows_the_bound_chord_as_a_keycap() {
 #[test]
 fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
     let dir = fixture();
-    let (app, path) = app_in_config_dir(&dir);
+    let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     rt.frame(0.0);
 

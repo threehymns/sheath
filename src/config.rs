@@ -79,11 +79,6 @@ pub fn state_dir() -> Option<PathBuf> {
     }
 }
 
-/// The path of `file` in the config folder, when there is one.
-pub fn path(file: &str) -> Option<PathBuf> {
-    dir().map(|dir| dir.join(file))
-}
-
 /// Replaces `path` in one step: the text goes to a sibling temporary file first, so a crash or a
 /// full disk leaves the old file rather than half of a new one.
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
@@ -175,10 +170,6 @@ impl Store {
         store
     }
 
-    pub fn dir(&self) -> Option<&Path> {
-        self.dir.as_deref()
-    }
-
     /// The path of a config file, when there is a folder to keep it in.
     pub fn path(&self, name: &str) -> Option<PathBuf> {
         self.dir.as_ref().map(|dir| dir.join(name))
@@ -212,22 +203,16 @@ impl Store {
         let Some(path) = self.path(name) else {
             return Ok(());
         };
-        let Some(file) = self.files.get(name) else {
-            return Ok(());
-        };
         // The document kept here is the last one that parsed, not what is on disk now. Writing
         // it back would throw away whatever the user is in the middle of typing.
-        if file.error.is_some() {
+        if !self.writable(name) {
             return Err(format!(
                 "{} does not parse, so nothing is written to it",
                 path.display()
             ));
         }
-        let Some(doc) = file.doc.clone() else {
-            return Err(format!(
-                "{} does not parse, so nothing is written to it",
-                path.display()
-            ));
+        let Some(doc) = self.files.get(name).and_then(|file| file.doc.clone()) else {
+            return Ok(());
         };
         let mut doc = doc;
         edit(&mut doc);

@@ -4,10 +4,13 @@
 
 use crate::app::{App, SettingsTab};
 use crate::config;
-use crate::rules::{EntryRef, Kind, Rule};
+use crate::rules::EntryRef;
 use kdl::{KdlDocument, KdlNode};
 use rune_kit::SortDir;
 use std::path::Path;
+
+/// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
+pub const RULE_ROW_HEIGHT: f32 = 56.0;
 
 impl App {
     /// A path with the home folder written as `~`, so a rule travels between machines.
@@ -43,7 +46,9 @@ impl App {
             "folder-rule {} {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
             kdl_string(&name),
             kdl_string(&pattern),
-            self.sort.0,
+            crate::rules::SortKey::from_column(&self.sort.0)
+                .unwrap_or(crate::rules::SortKey::Name)
+                .as_str(),
         );
         self.append_rule(&text);
     }
@@ -198,20 +203,5 @@ fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
             matches!(node.name().value(), "folder-rule" | "entry-rule")
         })
         .map(|(at, _)| at)
-        .collect()
-}
-
-/// Every rule the tab lists, paired with the kind the parser gave it.
-pub fn rule_rows(rules: &[Rule]) -> Vec<(usize, &'static str, String)> {
-    rules
-        .iter()
-        .enumerate()
-        .map(|(index, rule)| {
-            let kind = match rule.kind {
-                Kind::Folder => "Folder",
-                Kind::Entry => "Entry",
-            };
-            (index, kind, rule.summary())
-        })
         .collect()
 }
