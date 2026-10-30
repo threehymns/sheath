@@ -90,7 +90,8 @@ impl App {
     }
 
     /// Writes the form's draft over the rule and closes the form. A draft the file cannot hold
-    /// is refused, and the form says why.
+    /// is refused, and the form says why. A write that did not reach the file keeps the form
+    /// and its draft open, leaving `store.write_error` to say why.
     pub fn save_rule_edit(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -99,7 +100,9 @@ impl App {
         if edit.error.is_some() {
             return;
         }
-        self.write_rule_edit();
+        if !self.write_rule_edit() {
+            return;
+        }
         self.rule_edit = None;
         // The row is left unfocused: the focused fill answers a command that singles a rule
         // out, and saving one the user was already looking at is not that.
@@ -287,21 +290,21 @@ impl App {
 
     /// Writes the draft over the rule's node, keeping that node's leading comment and the rest
     /// of the file as it was, then resolves the folder again. A rule the file did not hold yet
-    /// is appended, so it lands after every rule and wins where the others disagree.
-    fn write_rule_edit(&mut self) {
+    /// is appended, so it lands after every rule and wins where the others disagree. Says
+    /// whether the write reached the file.
+    fn write_rule_edit(&mut self) -> bool {
         let Some(edit) = &self.rule_edit else {
-            return;
+            return false;
         };
         let text = edit.draft.to_kdl();
         let kind = edit.draft.kind;
         if edit.new {
-            self.append_rule(kind, &text);
-            return;
+            return self.append_rule(kind, &text);
         }
         let index = edit.index;
         // A write the store could not make is `store.write_error`'s to report; `rule_error` stays
         // for a file that does not parse, which is what makes the list read only.
-        let _ = self.store.edit(config::CONFIG, |doc| {
+        let written = self.store.edit(config::CONFIG, |doc| {
             let Some(&at) = rule_positions(doc).get(index) else {
                 return;
             };
@@ -314,5 +317,6 @@ impl App {
             }
         });
         self.after_rule_change();
+        written.is_ok()
     }
 }

@@ -340,6 +340,10 @@ fn a_failed_rule_edit_is_the_stores_error_too() {
         app.rule_error
     );
     assert_eq!(app.rules.rules.len(), 1, "the rule is still listed");
+    assert!(
+        app.rule_edit.is_some(),
+        "the form and its unsaved draft stay open"
+    );
 }
 
 #[test]
