@@ -43,28 +43,17 @@ const WELL_WIDTH: f32 = SETTINGS_CARD_WIDTH - 2.0 * WELL_MARGIN;
 /// What an entry matcher's `kind` accepts, as its field lists them.
 const KINDS: &[&str] = &["any", "file", "folder"];
 
-/// The open rule's form: its name and kind, a line per match and exclude, and a line per
-/// property the rule sets. A property's field lists every value the file accepts, `inherit`
-/// included, and the button beside it takes the property back out; Add Property offers the
-/// properties the rule does not set yet. It edits a draft; Save writes it and Discard Changes
-/// drops it.
+/// The open rule's form: its name, a line per match and exclude, and a line per property the
+/// rule sets. A property's field lists every value the file accepts, `inherit` included, and the
+/// button beside it takes the property back out; Add Property offers the properties the rule does
+/// not set yet. It edits a draft; Save writes it and Discard Changes drops it. The rule's kind is
+/// fixed: it is the section the form hangs in, so the form cannot move a rule to the other one.
 pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
         .gap(8.0)
         .center_y()
-        .child(rule_field(k, &edit.fields, "name", "Rule name", 220.0))
-        .child(
-            Button::new(match edit.draft.kind {
-                Kind::Folder => "Folder rule",
-                Kind::Entry => "Entry rule",
-            })
-            .variant(ButtonVariant::Outline)
-            .control_size(ControlSize::Small)
-            .on_press(|s: &mut App| s.cycle_rule_kind())
-            .build(k)
-            .key("rule-editor-kind"),
-        );
+        .child(rule_field(k, &edit.fields, "name", "Rule name", 220.0));
     // The form is cut into the card rather than laid on top of it: a sliver of card around it,
     // corners concentric with the card's, a fill a clear step darker, and an inset shade along
     // the top edge.

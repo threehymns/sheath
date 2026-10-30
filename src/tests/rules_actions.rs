@@ -16,8 +16,9 @@ fn the_corner_bite_opens_with_the_buttons_while_its_edge_holds_the_card() {
 
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
-    open_rule_editor(&mut rt);    // A press makes the form dirty, so Save mounts and the bite takes the room it needs.
-    click(&mut rt, "rule-editor-kind");
+    open_rule_editor(&mut rt);
+    // A change to the draft mounts Save, so the bite takes the room it needs.
+    click(&mut rt, "add-match");
     let (form, _) = rt.presented("rule-editor-0").expect("the form is drawn");
     let edge = form[0] + form[2];
     let mut widths = Vec::new();
@@ -123,7 +124,6 @@ fn an_open_rule_form_takes_the_place_of_its_row() {
     );
     assert!(rt.find("rule-field-name").is_some(), "the form is");
 
-    click(&mut rt, "rule-editor-kind");
     click(&mut rt, "rule-editor-cancel");
     assert!(
         rt.find("rule-here-0").is_some(),

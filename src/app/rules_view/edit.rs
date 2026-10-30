@@ -201,47 +201,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Turns the rule into the other kind, taking the parts that kind cannot hold with it.
-    pub fn cycle_rule_kind(&mut self) {
-        let Some(edit) = self.rule_edit.as_mut() else {
-            return;
-        };
-        let kind = match edit.draft.kind {
-            Kind::Folder => Kind::Entry,
-            Kind::Entry => Kind::Folder,
-        };
-        edit.draft.kind = kind;
-        for matcher in edit
-            .draft
-            .matches
-            .iter_mut()
-            .chain(edit.draft.excludes.iter_mut())
-        {
-            match kind {
-                Kind::Folder => {
-                    matcher.name = None;
-                    matcher.kind = None;
-                    matcher.extension = None;
-                }
-                Kind::Entry => {
-                    matcher.min_items = None;
-                    matcher.max_items = None;
-                }
-            }
-        }
-        match kind {
-            Kind::Folder => edit.draft.props.hidden = Prop::Unset,
-            Kind::Entry => {
-                edit.draft.props.view = Prop::Unset;
-                edit.draft.props.sort = Prop::Unset;
-                edit.draft.props.direction = Prop::Unset;
-                edit.draft.props.show_hidden = Prop::Unset;
-            }
-        }
-        edit.reseed();
-        self.apply_rule_fields();
-    }
-
     /// Opens `menu`, or closes it when it is the one already open.
     pub fn toggle_rule_menu(&mut self, menu: RuleMenu) {
         let Some(edit) = self.rule_edit.as_mut() else {

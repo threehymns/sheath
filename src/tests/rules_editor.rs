@@ -141,17 +141,6 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     click(&mut rt, "rule-editor-save");
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("view grid"), "{text}");
-
-    // The rule's kind is still a press of its own, and an entry rule takes no view.
-    click(&mut rt, "rule-here-0");
-    click(&mut rt, "rule-editor-kind");
-    click(&mut rt, "rule-editor-save");
-    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(text.contains("entry-rule"), "the node changed kind: {text}");
-    assert!(
-        !text.contains("view grid"),
-        "entry rules take no view: {text}"
-    );
 }
 
 #[test]

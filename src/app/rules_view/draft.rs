@@ -90,11 +90,11 @@ impl RuleEdit {
         self.reseed();
     }
 
-    /// Builds the text fields for the draft as it stands now. Structural changes (a new matcher,
-    /// another rule kind) shift the keys, so the fields are rebuilt from the draft.
+    /// Builds the text fields for the draft as it stands now. Structural changes (a matcher
+    /// added or dropped) shift the keys, so the fields are rebuilt from the draft.
     pub(super) fn reseed(&mut self) {
-        // A structural change (another kind, a matcher added or dropped) leaves the open menu
-        // naming a control that no longer exists.
+        // A matcher added or dropped leaves the open menu naming a control that no longer
+        // exists.
         self.menu = None;
         seed(&mut self.fields, &self.draft);
     }

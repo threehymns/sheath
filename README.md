@@ -136,7 +136,7 @@ Settings > Rules has a section per kind, each listing its rules in file order: A
 form on a new rule — started from the folder on screen and its view, or from the entry selected
 in the browser — and Save writes it after the last rule of its kind, so the file keeps one block
 per kind. Drag a rule to reorder it within its section, or delete it. Edit opens that rule as a form holding everything the
-file can say: its name and kind, each `match` and `exclude` with every key, and each property,
+file can say: its name, each `match` and `exclude` with every key, and each property,
 `inherit` included. `Save This View as a Rule`, `Always Show This Entry`
 and `Always Hide This Entry` write a rule for what is on screen, and `Show All Rules` and the
 two `View Rules for …` commands find the rule behind it, saying so when nothing matches.
