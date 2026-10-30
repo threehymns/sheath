@@ -121,6 +121,19 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
         for (index, matcher) in matchers.iter().enumerate() {
             form = form.child(matcher_row(k, edit, matcher, exclude, index));
         }
+        if matchers.is_empty() {
+            form = form.child(
+                empty_line(
+                    k,
+                    match (exclude, edit.draft.kind) {
+                        (false, Kind::Folder) => "No matches. The rule applies to every folder.",
+                        (false, Kind::Entry) => "No matches. The rule applies to every entry.",
+                        (true, _) => "Nothing excluded.",
+                    },
+                )
+                .key(if exclude { "no-excludes" } else { "no-matches" }),
+            );
+        }
     }
     form.child(properties(k, edit))
 }
@@ -195,6 +208,14 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
     )
 }
 
+/// A section's line for when it holds nothing, in the same faded type as the rest.
+fn empty_line(k: &Kit, message: &str) -> El {
+    text(message)
+        .font(k.ty.small)
+        .color(k.c.text_faint)
+        .wrap()
+}
+
 /// The kind a field lists, as the file's `kind` words it.
 fn kind_label(kind: Option<EntryKind>) -> &'static str {
     match kind {
@@ -247,15 +268,7 @@ fn properties(k: &Kit, edit: &RuleEdit) -> El {
         .filter(|prop| prop.is_set(&edit.draft.props))
         .collect();
     if set.is_empty() {
-        section = section.child(
-            text(
-                "This rule sets no properties yet. Add Property adds a view, a sort, or which \
-                 entries the folder hides.",
-            )
-            .font(k.ty.small)
-            .color(k.c.text_faint)
-            .wrap(),
-        );
+        section = section.child(empty_line(k, "No properties set.").key("no-properties"));
     }
     for prop in set {
         section = section.child(property_line(k, edit, prop));

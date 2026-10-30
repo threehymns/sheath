@@ -450,3 +450,28 @@ fn cancelling_the_rule_editor_leaves_the_file_alone() {
     );
     assert!(!reopened.dirty(), "there is nothing to save");
 }
+
+#[test]
+fn the_rule_editor_says_which_sections_are_empty() {
+    let dir = fixture();
+    fs::write(dir.path().join("config.kdl"), "folder-rule \"here\" {\n}\n").unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    assert!(rt.find("no-matches").is_some(), "the match section says it is empty");
+    assert!(rt.find("no-excludes").is_some(), "and so does the exclude section");
+    assert!(rt.find("no-properties").is_some(), "and the properties section");
+
+    click(&mut rt, "add-match");
+    assert!(
+        rt.find("no-matches").is_none(),
+        "a match fills the match section"
+    );
+    click(&mut rt, "add-exclude");
+    assert!(
+        rt.find("no-excludes").is_none(),
+        "an exclude fills the exclude section"
+    );
+}
