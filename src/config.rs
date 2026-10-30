@@ -198,7 +198,7 @@ impl Store {
     pub fn writable(&self, name: &str) -> bool {
         self.files
             .get(name)
-            .is_some_and(|file| file.doc.is_some())
+            .is_some_and(|file| file.doc.is_some() && file.error.is_none())
     }
 
     /// Edits the document and writes it back. The edit lands on a copy, so a failed write leaves
@@ -215,6 +215,14 @@ impl Store {
         let Some(file) = self.files.get(name) else {
             return Ok(());
         };
+        // The document kept here is the last one that parsed, not what is on disk now. Writing
+        // it back would throw away whatever the user is in the middle of typing.
+        if file.error.is_some() {
+            return Err(format!(
+                "{} does not parse, so nothing is written to it",
+                path.display()
+            ));
+        }
         let Some(doc) = file.doc.clone() else {
             return Err(format!(
                 "{} does not parse, so nothing is written to it",
@@ -243,6 +251,8 @@ impl Store {
         let Some(dir) = self.dir.clone() else {
             return;
         };
+        // A first run has no config folder yet, and there is nothing to watch until it exists.
+        let _ = fs::create_dir_all(&dir);
         let (tx, rx) = mpsc::channel();
         let watcher = notify::recommended_watcher(
             move |event: notify::Result<notify::Event>| {

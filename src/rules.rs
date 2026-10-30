@@ -456,6 +456,12 @@ pub fn glob(pattern: &str, text: &str) -> bool {
     glob_bytes(pattern.as_bytes(), text.as_bytes())
 }
 
+/// A byte that ends one part of a path, whichever platform wrote it: a rule from one machine has
+/// to match the same folder on another, and Windows paths carry both characters.
+fn is_separator(byte: u8) -> bool {
+    byte == b'/' || byte == b'\\'
+}
+
 fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
     let Some(&first) = pattern.first() else {
         return text.is_empty();
@@ -474,10 +480,10 @@ fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
         b'*' => {
             let rest = &pattern[1..];
             if rest.is_empty() {
-                return !text.contains(&b'/');
+                return !text.iter().any(|&byte| is_separator(byte));
             }
             for at in 0..=text.len() {
-                if text[..at].contains(&b'/') {
+                if text[..at].iter().any(|&byte| is_separator(byte)) {
                     break;
                 }
                 if glob_bytes(rest, &text[at..]) {
@@ -486,15 +492,20 @@ fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
             }
             false
         }
-        b'?' => !text.is_empty() && text[0] != b'/' && glob_bytes(&pattern[1..], &text[1..]),
+        b'?' => {
+            !text.is_empty()
+                && !is_separator(text[0])
+                && glob_bytes(&pattern[1..], &text[1..])
+        }
         literal => !text.is_empty() && text[0] == literal && glob_bytes(&pattern[1..], &text[1..]),
     }
 }
 
-/// Whether a path pattern matches `path`, with `~` read as home and a trailing `/**` also
-/// matching the folder itself.
+/// Whether a path pattern matches `path`, with `~` read as home, `/` and `\` read the same, and
+/// a trailing `/**` also matching the folder itself.
 pub fn path_match(pattern: &str, path: &str) -> bool {
-    let pattern = expand_home(pattern);
+    let pattern = expand_home(pattern).replace('\\', "/");
+    let path = path.replace('\\', "/");
     let path = path.trim_end_matches('/');
     let path = if path.is_empty() { "/" } else { path };
     if glob(&pattern, path) {
@@ -515,5 +526,5 @@ pub fn expand_home(pattern: &str) -> String {
         return pattern.to_owned();
     };
     let home = home.to_string_lossy();
-    format!("{}{rest}", home.trim_end_matches('/'))
+    format!("{}{rest}", home.trim_end_matches(['/', '\\']))
 }

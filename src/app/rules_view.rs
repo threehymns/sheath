@@ -17,9 +17,9 @@ impl App {
             return text.into_owned();
         };
         let home = home.to_string_lossy();
-        let home = home.trim_end_matches('/');
+        let home = home.trim_end_matches(['/', '\\']);
         match text.strip_prefix(home) {
-            Some(rest) if rest.is_empty() || rest.starts_with('/') => format!("~{rest}"),
+            Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => format!("~{rest}"),
             _ => text.into_owned(),
         }
     }
@@ -40,7 +40,9 @@ impl App {
         };
         let hidden = if self.show_hidden { "true" } else { "false" };
         let text = format!(
-            "folder-rule \"{name}\" {{\n    match path=\"{pattern}\"\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
+            "folder-rule {} {{\n    match path={}\n    view {view}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
+            kdl_string(&name),
+            kdl_string(&pattern),
             self.sort.0,
         );
         self.append_rule(&text);
@@ -58,24 +60,35 @@ impl App {
         let name = entry.name.clone();
         let hidden = if hidden { "true" } else { "false" };
         let text = format!(
-            "entry-rule \"{name}\" {{\n    match path=\"{pattern}\"\n    hidden #{hidden}\n}}\n"
+            "entry-rule {} {{\n    match path={}\n    hidden #{hidden}\n}}\n",
+            kdl_string(&name),
+            kdl_string(&pattern),
         );
         self.append_rule(&text);
     }
 
     /// Adds a rule node at the end of the document, so it wins over every rule above it.
     fn append_rule(&mut self, text: &str) {
-        let Ok(node) = text.parse::<KdlNode>() else {
-            return;
+        let written = match text.parse::<KdlNode>() {
+            Ok(node) => self.store.edit(config::CONFIG, |doc| {
+                doc.nodes_mut().push(node.clone());
+            }),
+            Err(err) => Err(format!("Couldn’t write the rule: {err}")),
         };
-        let _ = self.store.edit(config::CONFIG, |doc| {
-            doc.nodes_mut().push(node.clone());
-        });
         self.after_rule_change();
+        // Set after the reload, which clears it whenever the file reads back cleanly.
+        if let Err(err) = written {
+            self.rule_error = Some(err);
+        }
     }
 
     /// Removes the rule at `index` in the tab's order.
     pub fn delete_rule(&mut self, index: usize) {
+        // The list on screen came from the last file that parsed, so its positions mean nothing
+        // against a document that has not.
+        if self.rule_error.is_some() {
+            return;
+        }
         let _ = self.store.edit(config::CONFIG, |doc| {
             if let Some(&at) = rule_positions(doc).get(index) {
                 doc.nodes_mut().remove(at);
@@ -86,7 +99,7 @@ impl App {
 
     /// Moves the rule at `from` to `to`, rewriting the order of the rule nodes only.
     pub fn move_rule(&mut self, from: usize, to: usize) {
-        if from == to {
+        if from == to || self.rule_error.is_some() {
             return;
         }
         let _ = self.store.edit(config::CONFIG, |doc| {
@@ -168,6 +181,12 @@ impl App {
         self.visit = Default::default();
         self.reload();
     }
+}
+
+/// A string as KDL writes it, quoted and escaped when it has to be, so a folder called `"odd"`
+/// or a path holding a backslash leaves a rule that still parses.
+fn kdl_string(text: &str) -> String {
+    kdl::KdlValue::String(text.to_owned()).to_string()
 }
 
 /// The document positions of the rule nodes, in file order.

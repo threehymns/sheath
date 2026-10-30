@@ -325,6 +325,62 @@ fn the_store_notices_a_file_changed_by_someone_else() {
 }
 
 #[test]
+fn a_file_that_breaks_after_it_loaded_is_never_written_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    show-hidden #false\n}\n").unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    store.watch(wake);
+    let broken = "settings {\n    show-hidden #true\n";
+    fs::write(&path, broken).unwrap();
+
+    for _ in 0..100 {
+        if store.poll() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    assert!(
+        store.error(config::CONFIG).is_some(),
+        "the text that does not parse is reported"
+    );
+    assert!(
+        !store.writable(config::CONFIG),
+        "a file that does not parse is read only"
+    );
+    assert!(
+        store.edit(config::CONFIG, |_| {}).is_err(),
+        "the save is refused"
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        broken,
+        "the half-finished edit is still on disk"
+    );
+}
+
+#[test]
+fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
+    let dir = fixture();
+    let odd = dir.path().join("odd \"name\" \\ here");
+    if fs::create_dir(&odd).is_err() {
+        return;
+    }
+    let (mut app, _path) = app_in_config_dir(&dir);
+    app.navigate(odd);
+    app.save_view_rule();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    let doc: kdl::KdlDocument = text.parse().expect("the file still parses");
+    let name = doc.nodes()[0].get(0).and_then(|entry| entry.as_string());
+    assert_eq!(name, Some("odd \"name\" \\ here"), "{text}");
+    assert_eq!(app.rules.rules.len(), 1, "the rule reads back: {text}");
+}
+
+#[test]
 fn saving_the_view_as_a_rule_writes_one_that_applies() {
     let dir = fixture();
     let (mut app, _path) = app_in_config_dir(&dir);

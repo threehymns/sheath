@@ -55,8 +55,10 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
             .wrap(),
         );
     }
+    // A stale list must not be edited: its positions are no longer the file's.
+    let read_only = s.rule_error.is_some();
     let rows = (0..s.rules.rules.len())
-        .map(|index| rule_row(s, k, index))
+        .map(|index| rule_row(s, k, index, read_only))
         .collect();
     page.child(settings_section(
         k,
@@ -68,7 +70,7 @@ pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
 
 /// One rule: its matcher, the kind of rule it is, a handle to drag it by, and a delete button.
 /// Dragging rewrites the order of the rule nodes, and the rule's comments travel with it.
-fn rule_row(s: &App, k: &Kit, index: usize) -> El {
+fn rule_row(s: &App, k: &Kit, index: usize, read_only: bool) -> El {
     let Some(rule) = s.rules.rules.get(index) else {
         return row();
     };
@@ -83,23 +85,6 @@ fn rule_row(s: &App, k: &Kit, index: usize) -> El {
         .py(8.0)
         .gap(12.0)
         .center_y()
-        .cursor(Cursor::Pointer)
-        .on_drag(move |s: &mut App, drag: &mut Drag, _: &mut Tx| match drag.phase {
-            Phase::Down => s.rule_drag = Some((index, index)),
-            Phase::Move => {
-                if let Some((from, _)) = s.rule_drag {
-                    let step = (drag.y / 56.0).round() as isize;
-                    let last = s.rules.rules.len().saturating_sub(1) as isize;
-                    let to = (from as isize + step).clamp(0, last) as usize;
-                    s.rule_drag = Some((from, to));
-                }
-            }
-            Phase::Up => {
-                if let Some((from, to)) = s.rule_drag.take() {
-                    s.move_rule(from, to);
-                }
-            }
-        })
         .child(icon(&theme::icons::EDIT, 14.0).color(k.c.icon_faint))
         .child(
             col()
@@ -117,16 +102,36 @@ fn rule_row(s: &App, k: &Kit, index: usize) -> El {
                         .font(k.ty.caption())
                         .color(k.c.text_muted),
                 ),
-        )
-        .child(
-            IconButton::new(&theme::icons::TRASH)
-                .variant(IconButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label(format!("Delete {}", rule.summary()))
-                .on_press(move |s: &mut App| s.delete_rule(index))
-                .build(k)
-                .key(format!("delete-rule-{index}")),
         );
+    if !read_only {
+        line = line
+            .cursor(Cursor::Pointer)
+            .on_drag(move |s: &mut App, drag: &mut Drag, _: &mut Tx| match drag.phase {
+                Phase::Down => s.rule_drag = Some((index, index)),
+                Phase::Move => {
+                    if let Some((from, _)) = s.rule_drag {
+                        let step = (drag.y / 56.0).round() as isize;
+                        let last = s.rules.rules.len().saturating_sub(1) as isize;
+                        let to = (from as isize + step).clamp(0, last) as usize;
+                        s.rule_drag = Some((from, to));
+                    }
+                }
+                Phase::Up => {
+                    if let Some((from, to)) = s.rule_drag.take() {
+                        s.move_rule(from, to);
+                    }
+                }
+            })
+            .child(
+                IconButton::new(&theme::icons::TRASH)
+                    .variant(IconButtonVariant::GhostMuted)
+                    .control_size(ControlSize::Small)
+                    .label(format!("Delete {}", rule.summary()))
+                    .on_press(move |s: &mut App| s.delete_rule(index))
+                    .build(k)
+                    .key(format!("delete-rule-{index}")),
+            );
+    }
     if focused {
         line = line.fill(k.c.layer_02);
     }
