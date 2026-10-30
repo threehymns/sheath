@@ -129,11 +129,17 @@ impl App {
     pub fn open_tab(&mut self, tab: SettingsTab) {
         self.rule_query = None;
         self.rule_reveal = None;
+        if tab != SettingsTab::Rules {
+            self.rule_edit = None;
+        }
         self.settings = Some(tab);
     }
 
     pub fn close_settings(&mut self) {
         self.settings = None;
+        self.rule_edit = None;
+        self.rule_query = None;
+        self.rule_reveal = None;
     }
 
     /// Opens `config.kdl` in the system's editor, from the Rules tab's error banner.

@@ -1,11 +1,14 @@
-//! Folder and entry rules: the nodes in `config.kdl`, the glob matchers, and the view a folder
-//! resolves to. Everything here is pure: it takes a parsed document and a path, and returns
+//! Folder and entry rules: the nodes in `config.kdl` and the view a folder resolves to. Everything here is pure: it takes a parsed document and a path, and returns
 //! what the browser should show.
 
 use crate::app::ViewMode;
 use kdl::{KdlDocument, KdlNode};
 use rune_kit::SortDir;
 use std::path::Path;
+
+mod pattern;
+
+pub use pattern::{glob, path_match, quote};
 
 /// Which listing a rule governs: a folder's own presentation, or one entry's presence in the
 /// folder that lists it.
@@ -254,6 +257,88 @@ impl Rule {
             parts.join("  ")
         }
     }
+
+    /// The rule as the `folder-rule` or `entry-rule` node it lives as, in the shape the parser
+    /// reads back. The editor writes this over the old node, so nothing else in the file moves.
+    pub fn to_kdl(&self) -> String {
+        let head = match self.kind {
+            Kind::Folder => "folder-rule",
+            Kind::Entry => "entry-rule",
+        };
+        let mut text = match &self.name {
+            Some(name) => format!("{head} {} {{\n", quote(name)),
+            None => format!("{head} {{\n"),
+        };
+        for matcher in &self.matches {
+            text.push_str(&directive("match", matcher));
+        }
+        for matcher in &self.excludes {
+            text.push_str(&directive("exclude", matcher));
+        }
+        match self.props.view {
+            Prop::Unset => {}
+            Prop::Inherit => text.push_str("    view inherit\n"),
+            Prop::Set(view) => text.push_str(&format!(
+                "    view {}\n",
+                if view.is_grid() { "grid" } else { "list" }
+            )),
+        }
+        match self.props.sort {
+            Prop::Unset => {}
+            Prop::Inherit => text.push_str("    sort inherit\n"),
+            Prop::Set(sort) => text.push_str(&format!("    sort {}\n", sort.as_str())),
+        }
+        match self.props.direction {
+            Prop::Unset => {}
+            Prop::Inherit => text.push_str("    direction inherit\n"),
+            Prop::Set(SortDir::Ascending) => text.push_str("    direction ascending\n"),
+            Prop::Set(SortDir::Descending) => text.push_str("    direction descending\n"),
+        }
+        for (name, prop) in [
+            ("show-hidden", self.props.show_hidden),
+            ("hidden", self.props.hidden),
+        ] {
+            match prop {
+                Prop::Unset => {}
+                Prop::Inherit => text.push_str(&format!("    {name} inherit\n")),
+                Prop::Set(on) => {
+                    text.push_str(&format!("    {name} #{on}\n"));
+                }
+            }
+        }
+        text.push_str("}\n");
+        text
+    }
+}
+
+/// One `match` or `exclude` line, with only the keys the directive names.
+fn directive(name: &str, matcher: &Matcher) -> String {
+    let mut parts = vec![name.to_owned()];
+    if let Some(path) = &matcher.path {
+        parts.push(format!("path={}", quote(path)));
+    }
+    if let Some(value) = &matcher.name {
+        parts.push(format!("name={}", quote(value)));
+    }
+    if let Some(kind) = matcher.kind {
+        parts.push(format!(
+            "kind=\"{}\"",
+            match kind {
+                EntryKind::File => "file",
+                EntryKind::Folder => "folder",
+            }
+        ));
+    }
+    if let Some(extension) = &matcher.extension {
+        parts.push(format!("extension={}", quote(extension)));
+    }
+    if let Some(min) = matcher.min_items {
+        parts.push(format!("min-items={min}"));
+    }
+    if let Some(max) = matcher.max_items {
+        parts.push(format!("max-items={max}"));
+    }
+    format!("    {}\n", parts.join(" "))
 }
 
 /// Every rule, in the order the file holds them.
@@ -505,83 +590,4 @@ fn parse_count(key: &str, value: &str) -> Result<usize, String> {
     value
         .parse()
         .map_err(|_| format!("`{key}` needs a whole number, not `{value}`"))
-}
-
-/// Whether `pattern` matches all of `text`. `*` stops at a separator, `**` crosses them, `?` is
-/// one character, and everything else is literal.
-pub fn glob(pattern: &str, text: &str) -> bool {
-    glob_bytes(pattern.as_bytes(), text.as_bytes())
-}
-
-/// A byte that ends one part of a path, whichever platform wrote it: a rule from one machine has
-/// to match the same folder on another, and Windows paths carry both characters.
-fn is_separator(byte: u8) -> bool {
-    byte == b'/' || byte == b'\\'
-}
-
-fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
-    let Some(&first) = pattern.first() else {
-        return text.is_empty();
-    };
-    match first {
-        b'*' if pattern.get(1) == Some(&b'*') => {
-            let mut rest = &pattern[2..];
-            while rest.first() == Some(&b'*') {
-                rest = &rest[1..];
-            }
-            if rest.is_empty() {
-                return true;
-            }
-            (0..=text.len()).any(|at| glob_bytes(rest, &text[at..]))
-        }
-        b'*' => {
-            let rest = &pattern[1..];
-            if rest.is_empty() {
-                return !text.iter().any(|&byte| is_separator(byte));
-            }
-            for at in 0..=text.len() {
-                if text[..at].iter().any(|&byte| is_separator(byte)) {
-                    break;
-                }
-                if glob_bytes(rest, &text[at..]) {
-                    return true;
-                }
-            }
-            false
-        }
-        b'?' => {
-            !text.is_empty()
-                && !is_separator(text[0])
-                && glob_bytes(&pattern[1..], &text[1..])
-        }
-        literal => !text.is_empty() && text[0] == literal && glob_bytes(&pattern[1..], &text[1..]),
-    }
-}
-
-/// Whether a path pattern matches `path`, with `~` read as home, `/` and `\` read the same, and
-/// a trailing `/**` also matching the folder itself.
-pub fn path_match(pattern: &str, path: &str) -> bool {
-    let pattern = expand_home(pattern).replace('\\', "/");
-    let path = path.replace('\\', "/");
-    let path = path.trim_end_matches('/');
-    let path = if path.is_empty() { "/" } else { path };
-    if glob(&pattern, path) {
-        return true;
-    }
-    match pattern.strip_suffix("/**") {
-        Some(base) => glob(base, path),
-        None => false,
-    }
-}
-
-/// Replaces a leading `~` with the user's home directory.
-pub fn expand_home(pattern: &str) -> String {
-    let Some(rest) = pattern.strip_prefix('~') else {
-        return pattern.to_owned();
-    };
-    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
-        return pattern.to_owned();
-    };
-    let home = home.to_string_lossy();
-    format!("{}{rest}", home.trim_end_matches(['/', '\\']))
 }

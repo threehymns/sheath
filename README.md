@@ -133,7 +133,9 @@ reaches the open window. A file that does not parse leaves the last good rules i
 the error in the Rules tab, and is never written back.
 
 Settings > Rules lists both kinds in file order: Add Rule appends one for the folder on screen,
-drag a rule to reorder it, or delete it. `Save This View as a Rule`, `Always Show This Entry`
+drag a rule to reorder it, or delete it. Edit opens that rule as a form holding everything the
+file can say: its name and kind, each `match` and `exclude` with every key, and each property,
+`inherit` included. `Save This View as a Rule`, `Always Show This Entry`
 and `Always Hide This Entry` write a rule for what is on screen, and `Show All Rules` and the
 two `View Rules for …` commands find the rule behind it, saying so when nothing matches.
 

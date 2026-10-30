@@ -505,3 +505,108 @@ fn a_command_with_no_matching_rule_says_so_in_the_tab() {
     assert_eq!(rt.state.rule_focus, None, "no rule is singled out");
     assert_eq!(rt.state.settings, Some(crate::app::SettingsTab::Rules));
 }
+
+/// Opens the first rule's editor in the Rules tab.
+fn open_rule_editor(rt: &mut rune::Runtime<crate::app::App>) {
+    rt.frame(0.0);
+    click(rt, "open-settings");
+    click(rt, "settings-tab-rules");
+    click(rt, "edit-rule-0");
+}
+
+#[test]
+fn a_rule_reads_back_from_the_text_the_editor_writes() {
+    let rules = rules(
+        "folder-rule \"tree\" {\n    match path=\"/w/**\" min-items=2\n    view grid\n    sort modified\n    direction descending\n    show-hidden #true\n}\n\
+         entry-rule \"logs\" {\n    match name=\"*.log\" kind=\"file\" extension=\"log\"\n    exclude path=\"/w/keep.log\"\n    hidden #false\n}\n",
+    );
+    let text: String = rules.rules.iter().map(|rule| rule.to_kdl()).collect();
+    let doc: kdl::KdlDocument = text.parse().unwrap_or_else(|err| panic!("{err}\n{text}"));
+    let again = Rules::parse(&doc).expect("the editor's text parses");
+
+    assert_eq!(again.rules.len(), 2);
+    assert_eq!(again.rules[0].props.view, rules.rules[0].props.view);
+    assert_eq!(again.rules[1].matches[0].name.as_deref(), Some("*.log"));
+    assert_eq!(again.rules[1].excludes[0].path.as_deref(), Some("/w/keep.log"));
+}
+
+#[test]
+fn the_rules_tab_edits_a_rule_in_place() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    rt.state
+        .rule_fields_mut()
+        .get_mut("m0.path")
+        .expect("the matcher's path field")
+        .text = "/edited/**".to_owned();
+    rt.state.apply_rule_fields();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("path=\"/edited/**\""), "{text}");
+    assert_eq!(
+        rt.state.rules.rules[0].matches[0].path.as_deref(),
+        Some("/edited/**"),
+        "the open folder reads the edit back: {text}"
+    );
+}
+
+#[test]
+fn the_rule_editor_cycles_properties_and_the_rule_kind() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    click(&mut rt, "prop-view");
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("view inherit"), "{text}");
+
+    click(&mut rt, "rule-editor-kind");
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("entry-rule"), "the node changed kind: {text}");
+    assert!(!text.contains("view inherit"), "entry rules take no view: {text}");
+}
+
+#[test]
+fn the_rule_editor_adds_and_removes_a_matcher() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n    view grid\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    open_rule_editor(&mut rt);
+
+    click(&mut rt, "add-match");
+    assert_eq!(rt.state.rules.rules[0].matches.len(), 2);
+    rt.state
+        .rule_fields_mut()
+        .get_mut("m1.path")
+        .expect("the new matcher's path field")
+        .text = "~/second".to_owned();
+    rt.state.apply_rule_fields();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("path=\"~/second\""), "{text}");
+
+    click(&mut rt, "remove-m1");
+    assert_eq!(rt.state.rules.rules[0].matches.len(), 1, "{text}");
+}

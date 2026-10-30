@@ -258,7 +258,7 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
 #[test]
 fn recording_a_chord_in_the_settings_binds_and_saves_it() {
     let dir = fixture();
-    let (app, path) = app_in_config_dir(&dir);
+    let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     rt.frame(0.0);
 
