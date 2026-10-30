@@ -380,6 +380,25 @@ fn saving_the_layout_as_a_rule_writes_one_that_applies() {
     assert!(app.is_grid());
 }
 
+/// A file whose last node does not end in a newline: the rule still starts on its own line,
+/// so the file the next launch reads parses.
+#[test]
+fn a_rule_after_a_final_node_without_a_newline_keeps_the_file_parsing() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    grid #false\n}",
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+
+    app.save_layout_rule();
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    text.parse::<kdl::KdlDocument>()
+        .unwrap_or_else(|err| panic!("{err}\n{text}"));
+    assert_eq!(app.rules.rules.len(), 1, "the rule reads back: {text}");
+}
+
 #[test]
 fn pinning_an_entry_writes_an_entry_rule_that_applies() {
     let dir = fixture();

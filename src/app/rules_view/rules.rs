@@ -70,8 +70,9 @@ impl App {
     }
 
     /// Adds a rule node after the last rule of its kind, so the file keeps one block per kind,
-    /// and the new rule still lands after every rule that could speak for the same thing.
-    pub(super) fn append_rule(&mut self, kind: Kind, text: &str) {
+    /// and the new rule still lands after every rule that could speak for the same thing. Says
+    /// whether the write reached the file.
+    pub(super) fn append_rule(&mut self, kind: Kind, text: &str) -> bool {
         // Where the rule lands in the tab's list: after the last rule of its kind, or at the
         // end when it is the first of its kind.
         let index = self
@@ -83,6 +84,19 @@ impl App {
         let written = match text.parse::<KdlNode>() {
             Ok(node) => self.store.edit(config::CONFIG, |doc| {
                 let at = rule_insertion(doc, kind);
+                // The node before has to break the line first: a file whose last node has no
+                // terminator or trailing newline would otherwise run the two together, and
+                // the file would stop parsing.
+                if at > 0
+                    && let Some(format) = doc
+                        .nodes_mut()
+                        .get_mut(at - 1)
+                        .and_then(KdlNode::format_mut)
+                    && !format.terminator.contains('\n')
+                    && !format.trailing.contains('\n')
+                {
+                    format.trailing.push('\n');
+                }
                 doc.nodes_mut().insert(at, node.clone());
             }),
             Err(err) => Err(format!("Couldn’t write the rule: {err}")),
@@ -95,6 +109,7 @@ impl App {
             self.rule_reveal = rule_key(&self.rules.rules, index).map(|key| (key, 1));
             self.rule_query = None;
         }
+        written.is_ok()
     }
 
     /// Asks before removing a rule: the row turns into a question until the second press.
