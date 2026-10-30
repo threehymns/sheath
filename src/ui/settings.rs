@@ -306,7 +306,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
     let hidden = Switch::new(s.show_hidden)
         .label("Show hidden files")
         .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_hidden())
+        .on_toggle(|s: &mut App| s.toggle_hidden_setting())
         .build(k)
         .key("setting-hidden");
     let inspector = Switch::new(s.inspector.is_open())

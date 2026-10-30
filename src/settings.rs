@@ -175,21 +175,11 @@ impl Settings {
         write_child(doc, "settings", setting.name(), &body);
     }
 
-    /// Records the browser's current switches, naming `changed` in the file from now on.
-    pub fn remember(
-        &mut self,
-        changed: Setting,
-        show_hidden: bool,
-        inspector: bool,
-        grid: bool,
-        scroll_inertia: bool,
-        overscroll: bool,
-    ) {
-        self.show_hidden = show_hidden;
-        self.inspector = inspector;
-        self.grid = grid;
-        self.scroll_inertia = scroll_inertia;
-        self.overscroll = overscroll;
+    /// Records `changed`'s new value, naming it in the file from now on. The other settings
+    /// stay as they were: a rule or a remembered visit may be what the folder shows, and that
+    /// is not the global default.
+    pub fn remember(&mut self, changed: Setting, on: bool) {
+        changed.set(self, on);
         self.present[changed.index()] = true;
     }
 

@@ -178,8 +178,17 @@ impl App {
             self.visit.show_hidden = Some(on);
         } else {
             self.config.show_hidden = on;
-            self.remember(Setting::ShowHidden);
+            self.remember(Setting::ShowHidden, on);
         }
+        self.apply_filter();
+    }
+
+    /// The settings panel's Show hidden files switch: turns the global setting over, then
+    /// resolves the open folder again, so a rule or a remembered visit keeps its say.
+    pub fn toggle_hidden_setting(&mut self) {
+        self.show_hidden = !self.show_hidden;
+        self.remember(Setting::ShowHidden, self.show_hidden);
+        self.apply_rules();
         self.apply_filter();
     }
 
@@ -213,7 +222,7 @@ impl App {
             ViewMode::Grid
         };
         // The setting is written from the browser's view, so the new mode is what it records.
-        self.remember(Setting::GridView);
+        self.remember(Setting::GridView, self.is_grid());
         // A rule or a remembered visit still outranks the global default.
         self.apply_rules();
         if self.view != before {
@@ -224,7 +233,7 @@ impl App {
     /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
-        self.remember(Setting::Inspector);
+        self.remember(Setting::Inspector, self.inspector.is_open());
     }
 
     /// Keeps the list coasting after the wheel, or stops it doing so, and remembers the choice.
@@ -233,7 +242,7 @@ impl App {
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }
-        self.remember(Setting::ScrollInertia);
+        self.remember(Setting::ScrollInertia, self.config.scroll_inertia);
     }
 
     /// Lets the list be pulled past its ends, or not, and remembers the choice.
@@ -242,19 +251,14 @@ impl App {
         if !self.config.overscroll {
             self.scroll.stop_bounce();
         }
-        self.remember(Setting::Overscroll);
+        self.remember(Setting::Overscroll, self.config.overscroll);
     }
 
-    /// Saves the browser's view settings into `config.kdl`, naming `changed` in it.
-    fn remember(&mut self, changed: Setting) {
-        self.config.remember(
-            changed,
-            self.show_hidden,
-            self.inspector.is_open(),
-            self.is_grid(),
-            self.config.scroll_inertia,
-            self.config.overscroll,
-        );
+    /// Saves one setting into `config.kdl`, naming it there from now on. Only that setting is
+    /// recorded: what the open folder shows may be a rule's or a remembered visit's doing, and
+    /// that must not become the global default for the folders those leave alone.
+    fn remember(&mut self, changed: Setting, on: bool) {
+        self.config.remember(changed, on);
         self.save_setting(changed);
     }
 
