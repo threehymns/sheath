@@ -184,6 +184,8 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
         .and_then(|id| s.entries.iter().find(|entry| &entry.id == id))
         .is_some_and(|entry| entry.hidden());
     context_menu("row-menu", el(), Some(at))
+        // The rule items name whole sentences, so the menu is wider than the kit's default.
+        .min_width(240.0)
         .item(
             // One name at a time: the sheet renames a single row.
             MenuItem::new("Rename")
