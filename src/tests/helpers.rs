@@ -41,6 +41,8 @@ pub(super) fn app(dir: &TempDir) -> App {
     app.keybinds = Keybinds::defaults();
     app.recorders = Keybinds::recorders();
     app.config = Settings::defaults();
+    // Opening applied whatever the machine saved, so the list view is put back by hand.
+    app.view = crate::app::ViewMode::List;
     app
 }
 

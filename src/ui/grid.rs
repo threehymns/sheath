@@ -2,9 +2,15 @@
 //! box and a drop read the same state the table's rows do.
 
 use crate::app::{App, GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
-use rune::{Align, El, GrowthSpec, ScrollSpec, Tx, col, icon, row, text};
-use rune_kit::{Kit, file_icon, glyphs};
+use rune::{Align, Cursor, El, GrowthSpec, ScrollSpec, Tx, col, el, icon, row, text};
+use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
+
+use super::table::{HEADER_HEIGHT, browser_style, sort_label};
+
+/// The theme's small control height. The sort buttons run at it inside the header-tall bar, so
+/// they sit with a little room above and below rather than filling it edge to edge.
+const SORT_BUTTON_HEIGHT: f32 = 20.0;
 
 pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
     let told = s.scroll_told.clone();
@@ -12,42 +18,98 @@ pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
     let rows = s.grid_rows();
     // The press, the keys, the drags and the wheel live on the scrolling viewport, as they do
     // in the table, so a press on the space past the last tile starts a box too.
-    col().key("file-grid").w_full().h_full().min_h(0.0).child(
-        col()
-            .key("files-table")
-            .role("grid")
-            .label("Files")
-            .w_full()
-            .grow(1.0)
-            .min_h(0.0)
-            .scroll(ScrollSpec {
-                stick_bottom: false,
-            })
-            .focusable(true)
-            .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
-            .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
-            .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
-            .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
-            .on_layout(|s: &mut App, rect| s.rows_view = rect)
-            .on_scroll_offset(move |at| told.set(at))
-            // The bounce moves the tiles without moving the viewport, so its edges stay put.
-            .child(
-                col()
-                    .key("file-grid-rows")
-                    .w_full()
-                    .growth(GrowthSpec::default())
-                    .virtual_rows(
-                        rows,
-                        GRID_ROW_HEIGHT,
-                        move |s: &App, r| match s.visible.get(r * columns) {
-                            Some(&i) => Cow::Owned(format!("grid-row:{}", s.entries[i].id)),
-                            None => Cow::Borrowed("grid-row"),
-                        },
-                        move |s: &App, r| grid_row(s, r, columns, k),
-                    )
-                    .offset(0.0, s.overshoot()),
-            ),
-    )
+    col()
+        .key("file-grid")
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .child(grid_toolbar(s, k))
+        .child(
+            col()
+                .key("files-table")
+                .role("grid")
+                .label("Files")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .focusable(true)
+                .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
+                .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
+                .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
+                .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
+                .on_layout(|s: &mut App, rect| s.rows_view = rect)
+                .on_scroll_offset(move |at| told.set(at))
+                // The bounce moves the tiles without moving the viewport, so its edges stay put.
+                .child(
+                    col()
+                        .key("file-grid-rows")
+                        .w_full()
+                        .growth(GrowthSpec::default())
+                        .virtual_rows(
+                            rows,
+                            GRID_ROW_HEIGHT,
+                            move |s: &App, r| match s.visible.get(r * columns) {
+                                Some(&i) => Cow::Owned(format!("grid-row:{}", s.entries[i].id)),
+                                None => Cow::Borrowed("grid-row"),
+                            },
+                            move |s: &App, r| grid_row(s, r, columns, k),
+                        )
+                        .offset(0.0, s.overshoot()),
+                ),
+        )
+}
+
+/// The grid's stand-in for the column header: the same sort columns at the header's height, so
+/// the tiles start where the rows do and a sort set here is the one the table shows.
+fn grid_toolbar(s: &App, k: &'static Kit) -> El {
+    let style = browser_style(k);
+    let (column, direction) = s.sort_column();
+    let sort = |id, title| grid_sort(k, &style, id, title, column, direction);
+    row()
+        .key("grid-toolbar")
+        .role("row")
+        .label("Sort")
+        .w_full()
+        .h(HEADER_HEIGHT)
+        .px(GRID_PAD)
+        .gap(2.0)
+        .center_y()
+        .child(
+            el().key("grid-toolbar-rule")
+                .pin(Some(0.0), None, Some(0.0), Some(0.0))
+                .h(1.0)
+                .fill(style.rule),
+        )
+        .child(sort("name", "Name"))
+        .child(sort("size", "Size"))
+        .child(sort("modified", "Date Modified"))
+}
+
+/// One sort column in the grid's toolbar: a click sorts by it, another click reverses it, as a
+/// header cell does.
+fn grid_sort(
+    k: &Kit,
+    style: &rune_kit::TableStyle,
+    id: &'static str,
+    title: &'static str,
+    column: &str,
+    direction: SortDir,
+) -> El {
+    row()
+        .key(format!("grid-sort-{id}"))
+        .role("button")
+        .label(format!("Sort by {title}"))
+        .h(SORT_BUTTON_HEIGHT)
+        .px(10.0)
+        .center_y()
+        .radius(k.radius.sm)
+        .cursor(Cursor::Pointer)
+        .hover(k.c.hover)
+        .on_press(move |s: &mut App| s.sort_by(id))
+        .child(sort_label(k, style, id, title, column, direction))
 }
 
 /// One grid row: as many tiles as the viewport fits across, and none past the last item.

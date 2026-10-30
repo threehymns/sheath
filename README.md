@@ -54,7 +54,7 @@ unsupported by this backend.
 | Jump to a name | Type its first letters; repeat a letter to cycle matches |
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
 | Search this folder | The search field; Escape clears it |
-| Sort or resize | Click a column header; drag a header edge |
+| Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | List or grid | The view button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
@@ -85,9 +85,10 @@ settings {
 }
 ```
 
-`grid` shows the folder as tiles instead of a table of rows, and is also the toolbar's view
-button. `scroll-inertia` lets the list coast after the wheel stops; `overscroll` lets it pull
-past the first or last row and spring back.
+`grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
+bar of the header's height, and is also the toolbar's view button. `scroll-inertia` lets the
+list coast after the wheel stops; `overscroll` lets it pull past the first or last row and
+spring back.
 
 `keybinds.kdl` holds the shortcuts. Delete the file, or press Restore Defaults in Settings, to
 get the defaults back:

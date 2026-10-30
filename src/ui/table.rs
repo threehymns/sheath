@@ -7,12 +7,21 @@ use rune::{Align, Cursor, Drag, El, GrowthSpec, Phase, ScrollSpec, Tx, col, el, 
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
-pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
-    let style = TableStyle {
+/// The column header's height, which the grid's sort toolbar shares so the two views start
+/// their items at the same place.
+pub(super) const HEADER_HEIGHT: f32 = 32.0;
+
+/// The table's measurements, shared with anything else that draws its parts.
+pub(super) fn browser_style(k: &Kit) -> TableStyle {
+    TableStyle {
         row_height: ROW_HEIGHT,
-        header_height: 32.0,
+        header_height: HEADER_HEIGHT,
         ..TableStyle::from_kit(k)
-    };
+    }
+}
+
+pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
+    let style = browser_style(k);
     // The viewport's own offset, told in the frame that scrolls it, so the wheel and its coast
     // start where the rows really are rather than where their rects last reported.
     let told = s.scroll_told.clone();
@@ -105,26 +114,6 @@ fn header_cell(
     column: &str,
     direction: SortDir,
 ) -> El {
-    let sorted = (column == id).then_some(direction);
-    let label = text(title)
-        .font(style.header_font)
-        .color(if sorted.is_some() {
-            style.text
-        } else {
-            style.header_text
-        })
-        .truncate()
-        .shrink()
-        .min_w(0.0);
-    let mut inner = row().gap(2.0).center_y().min_w(0.0).shrink().child(label);
-    if let Some(direction) = sorted {
-        let glyph = if direction == SortDir::Ascending {
-            k.glyph.chevron_up
-        } else {
-            k.glyph.chevron_down
-        };
-        inner = inner.child(icon(glyph, 14.0).key("sort").color(style.text));
-    }
     let mut cell = row()
         .role("columnheader")
         .h_full()
@@ -133,7 +122,7 @@ fn header_cell(
         .cursor(Cursor::Pointer)
         .hover(k.c.hover)
         .on_press(move |s: &mut App| s.sort_by(id))
-        .child(inner);
+        .child(sort_label(k, style, id, title, column, direction));
     cell = match align {
         Align::End => cell.justify_end(),
         Align::Center => cell.justify_center(),
@@ -147,6 +136,46 @@ fn header_cell(
         // The name column takes what the fixed ones leave.
         None => cell.grow(1.0).shrink().min_w(200.0).key(id),
     }
+}
+
+/// A column's title and, when it is the sorted column, the arrow that points the way it sorts.
+/// The header and the grid's sort toolbar both draw their controls from this.
+pub(super) fn sort_label(
+    k: &Kit,
+    style: &TableStyle,
+    id: &'static str,
+    title: &'static str,
+    column: &str,
+    direction: SortDir,
+) -> El {
+    let sorted = (column == id).then_some(direction);
+    let label = text(title)
+        .font(style.header_font)
+        .color(if sorted.is_some() {
+            style.text
+        } else {
+            style.header_text
+        })
+        .truncate()
+        .shrink()
+        .min_w(0.0);
+    let mut inner = row().gap(2.0).center_y().min_w(0.0).shrink().child(label);
+    if let Some(direction) = sorted {
+        // One chevron, turned over for the ascending sort, so reversing a column springs the
+        // arrow round rather than swapping one glyph for another.
+        let turn = if direction == SortDir::Ascending {
+            std::f32::consts::PI
+        } else {
+            0.0
+        };
+        inner = inner.child(
+            icon(k.glyph.chevron_down, 14.0)
+                .key("sort")
+                .color(style.text)
+                .rotate(turn),
+        );
+    }
+    inner
 }
 
 /// The drag target on a header cell's trailing edge: dragging it resizes the column, a double

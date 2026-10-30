@@ -4,6 +4,7 @@ use super::helpers::*;
 use crate::app::{App, ViewMode};
 use crate::settings::Settings;
 use rune::{Key, KeyEvent, Mods};
+use rune_kit::SortDir;
 use std::fs;
 
 #[test]
@@ -120,6 +121,95 @@ fn dragging_a_tile_onto_a_folder_tile_moves_it() {
     assert!(dir.path().join("alpha").join("file2.txt").exists());
     assert!(!dir.path().join("file2.txt").exists());
     assert!(rt.state.error.is_none());
+}
+
+#[test]
+fn the_grid_toolbar_sorts_from_the_tiles() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.frame(0.1);
+    let list_top = rt.state.rows_view[1];
+
+    click(&mut rt, "toggle-view");
+    rt.frame(0.1);
+    assert!(
+        rt.find("grid-sort-name").is_some(),
+        "the grid offers the sort controls its header used to"
+    );
+    assert_eq!(
+        rt.state.rows_view[1], list_top,
+        "the sort toolbar is the column header's height"
+    );
+
+    click(&mut rt, "grid-sort-size");
+    assert_eq!(
+        names(&rt.state),
+        ["alpha", "file2.txt", "file10.txt", "notes.md"]
+    );
+    assert_eq!(rt.state.sort_column(), ("size", SortDir::Ascending));
+
+    click(&mut rt, "grid-sort-size");
+    assert_eq!(
+        names(&rt.state),
+        ["alpha", "notes.md", "file10.txt", "file2.txt"],
+        "a second click reverses the sort"
+    );
+    assert_eq!(rt.state.sort_column(), ("size", SortDir::Descending));
+
+    click(&mut rt, "toggle-view");
+    rt.frame(0.1);
+    assert!(
+        rt.find("size").is_some(),
+        "the table's header shows the same sort"
+    );
+    assert_eq!(rt.state.sort_column(), ("size", SortDir::Descending));
+}
+
+#[test]
+fn the_sort_chevron_turns_over_when_the_direction_reverses() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-view");
+    rt.frame(0.1);
+
+    let turn = |rt: &rune::Runtime<App>| {
+        rt.presented_pose("grid-sort-size/sort")
+            .expect("the sorted column shows a chevron")
+            .rotation()
+    };
+    let settle = |rt: &mut rune::Runtime<App>| {
+        for _ in 0..40 {
+            rt.frame(1.0 / 60.0);
+        }
+    };
+
+    click(&mut rt, "grid-sort-size");
+    settle(&mut rt);
+    assert!(
+        (turn(&rt) - std::f32::consts::PI).abs() < 0.01,
+        "an ascending sort points up: {}",
+        turn(&rt)
+    );
+
+    // Press and release without the helper's settle, to catch the arrow partway round.
+    let (x, y) = rt.find("grid-sort-size").expect("the sort control");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+    let turning = turn(&rt);
+    assert!(
+        turning > 0.01 && turning < std::f32::consts::PI - 0.01,
+        "the chevron turns rather than swapping glyphs: {turning}"
+    );
+
+    settle(&mut rt);
+    assert!(
+        turn(&rt).abs() < 0.01,
+        "a descending sort points down: {}",
+        turn(&rt)
+    );
 }
 
 #[test]
