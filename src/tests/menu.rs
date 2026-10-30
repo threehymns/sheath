@@ -3,6 +3,7 @@
 use super::helpers::*;
 use crate::app::SheetKind;
 use rune::{Key, KeyEvent, Mods};
+use std::fs;
 
 #[test]
 fn right_clicking_a_row_opens_the_menu_and_rename_opens_a_focused_sheet() {
@@ -103,6 +104,38 @@ fn escape_and_an_outside_press_close_the_row_menu() {
     assert!(rt.state.menu.is_some());
     click(&mut rt, "path-bar");
     assert!(rt.state.menu.is_none());
+}
+
+#[test]
+fn the_row_menu_offers_to_hide_an_entry_a_rule_revealed() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "entry-rule \"secret\" {{\n    match path=\"{}\"\n    hidden #false\n}}\n",
+            dir.path().join(".secret").display()
+        ),
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    assert!(
+        names(&rt.state).contains(&".secret"),
+        "the rule keeps the dot file on screen"
+    );
+
+    right_click(&mut rt, "f:.secret");
+    let elements = rt.elements();
+    let labels: Vec<&str> = elements
+        .iter()
+        .filter_map(|element| element.text.as_deref())
+        .collect();
+    assert!(
+        labels.contains(&"Always Hide This Entry"),
+        "the menu reads the row as shown: {labels:?}"
+    );
 }
 
 #[test]
