@@ -1,7 +1,7 @@
 //! The grid view: switching to it, clicking and walking its tiles, and remembering the choice.
 
 use super::helpers::*;
-use crate::app::{App, ViewMode};
+use crate::app::{App, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
 use crate::settings::Settings;
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
@@ -121,6 +121,38 @@ fn dragging_a_tile_onto_a_folder_tile_moves_it() {
     assert!(dir.path().join("alpha").join("file2.txt").exists());
     assert!(!dir.path().join("file2.txt").exists());
     assert!(rt.state.error.is_none());
+}
+
+#[test]
+fn the_gaps_between_tiles_start_a_box_rather_than_a_drag() {
+    let dir = long_folder(24);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-view");
+    rt.frame(0.1);
+
+    let (x, y) = rt.find("f:file00.txt").expect("the first tile");
+    // The gap after the tile in its grid row, and the one below it before the next row.
+    for (gx, gy) in [
+        (x + TILE_WIDTH / 2.0 + TILE_GAP / 2.0, y),
+        (x, y + TILE_HEIGHT / 2.0 + TILE_GAP / 2.0),
+    ] {
+        rt.pointer_down(gx, gy);
+        rt.frame(0.05);
+        rt.pointer_move(gx + 30.0, gy + 12.0);
+        rt.frame(0.05);
+        assert!(
+            rt.state.marquee.is_some(),
+            "a press at {gx},{gy} starts a selection box"
+        );
+        assert!(
+            rt.state.file_drag.is_none(),
+            "no tile is picked up at {gx},{gy}"
+        );
+        assert!(rt.find("drag-badge").is_none(), "nothing is dragged");
+        rt.pointer_up(gx + 30.0, gy + 12.0);
+        rt.frame(0.1);
+    }
 }
 
 #[test]

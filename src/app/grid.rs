@@ -55,6 +55,7 @@ impl App {
     }
 
     /// The tile or row under a point in the list's own points, where the first starts at zero.
+    /// The gaps around the tiles hold neither: a point there is empty space.
     pub fn index_at(&self, at: (f32, f32)) -> Option<usize> {
         if self.visible.is_empty() || at.1 < 0.0 {
             return None;
@@ -73,6 +74,13 @@ impl App {
             return None;
         }
         let row = (at.1 / GRID_ROW_HEIGHT).floor() as usize;
+        // A cell is a tile and the gap that follows it. Only the tile counts as one, so a
+        // press between tiles starts a selection box as a press below the rows does.
+        let cell_x = x - column as f32 * (TILE_WIDTH + TILE_GAP);
+        let cell_y = at.1 - row as f32 * GRID_ROW_HEIGHT;
+        if cell_x >= TILE_WIDTH || cell_y >= TILE_HEIGHT {
+            return None;
+        }
         let index = row * columns + column;
         (index < self.visible.len()).then_some(index)
     }
