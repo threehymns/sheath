@@ -2,8 +2,8 @@
 
 A file manager built with [Rune](https://github.com/anomalyco/rune) for its
 views, layout, input, animation and rendering. It has a sidebar of places, a breadcrumb path
-bar, a sortable file list or tile grid, live search, an inspector with a text preview, and
-copy, move, rename and trash operations.
+bar, a sortable file list or tile grid, folder and entry rules in its config, live search, an
+inspector with a text preview, and copy, move, rename and trash operations.
 
 ## Run
 
@@ -60,13 +60,14 @@ unsupported by this backend.
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Command bar | Cmd/Ctrl+P |
 | Settings | Cmd/Ctrl+, |
+| Rules | The command bar: `Show All Rules`, `Save This View as a Rule`, `View Rules for This Folder` / `Entry` |
 
 Double-clicking a file opens it with the system opener (`open`, `xdg-open` or `start`). The
 settings panel can change any shortcut.
 
 ## Configuration
 
-Settings and keybinds are KDL files in one config folder:
+The settings, rules and keybinds are KDL files in one config folder:
 
 - Linux: `$XDG_CONFIG_HOME/sheath` (`~/.config/sheath` by default)
 - macOS: `~/Library/Application Support/Sheath`
@@ -88,7 +89,53 @@ settings {
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
 bar of the header's height, and is also the toolbar's view button. `scroll-inertia` lets the
 list coast after the wheel stops; `overscroll` lets it pull past the first or last row and
-spring back.
+spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
+
+`config.kdl` also holds folder and entry rules, as top-level nodes beside `settings`, in file
+order:
+
+```kdl
+// How a folder presents its own listing.
+folder-rule "projects" {
+    match path="~/Projects/**"
+    view grid
+    sort modified
+    direction descending
+}
+
+// A crowded folder switches itself.
+folder-rule "downloads" {
+    match path="~/Downloads" min-items=20
+    view list
+}
+
+// One entry's presence, wherever it is listed.
+entry-rule "config" {
+    match path="~/.config"
+    hidden #false
+}
+```
+
+A `folder-rule` sets `view` (`list`, `grid`), `sort` (`name`, `size`, `modified`), `direction`
+(`ascending`, `descending`) and `show-hidden`; an `entry-rule` sets `hidden`. Any property takes
+`inherit` to undo what an earlier rule said.
+
+`match` and `exclude` take globs: `path` for a folder or an entry, `name`, `kind` (`file`,
+`folder`) and `extension` for entries, and `min-items`/`max-items` for folders. Several `match`
+nodes OR together, the keys inside one AND, and any matching `exclude` vetoes the rule; a rule
+with no `match` matches everything. Matching is case-sensitive, `~` expands to home, and both
+`/` and `\` separate segments, so a file of rules works on every platform.
+
+Every matching rule applies in file order, later rules winning property by property. Rules
+outrank what a folder remembers, which outranks `settings`; a change made from the toolbar in
+a ruled folder lasts until you leave. `config.kdl` is watched, so an edit in a text editor
+reaches the open window. A file that does not parse leaves the last good rules in place, shows
+the error in the Rules tab, and is never written back.
+
+Settings > Rules lists both kinds in file order: drag a rule to reorder it, or delete it.
+`Save This View as a Rule`, `Always Show This Entry` and `Always Hide This Entry` write a rule
+for what is on screen, and `Show All Rules` and the two `View Rules for …` commands find the
+rule behind it.
 
 `keybinds.kdl` holds the shortcuts. Delete the file, or press Restore Defaults in Settings, to
 get the defaults back:
@@ -105,11 +152,24 @@ keybinds {
 An empty chord clears the shortcut. Chords are `ctrl`, `alt`, `shift` and `super`, then a key
 name, written the way Rune's shortcuts read them, so the file can be edited by hand. The
 command names are `command-bar`, `open-settings`, `back`, `forward`, `enclosing-folder`,
-`refresh`, `new-folder`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`, `cut`, `paste`
-and `duplicate`. Recording a chord in Settings > Keybinds is easier, and it refuses a chord
-another command already uses.
+`refresh`, `new-folder`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`, `cut`, `paste`,
+`duplicate`, `view-folder-rules`, `view-entry-rules`, `save-view-rule`, `show-entry`,
+`hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
+Settings > Keybinds is easier, and it refuses a chord another command already uses.
+`keybinds.kdl` is watched, so a new chord works without a restart.
+
+Each folder also remembers the view and sort it was left in, in a file of its own outside the
+config folder:
+
+- Linux: `$XDG_STATE_HOME/sheath/views.kdl` (`~/.local/state/sheath` by default)
+- macOS: `~/Library/Application Support/Sheath/views.kdl`
+- Windows: `%LOCALAPPDATA%\Sheath\views.kdl`
+- Any platform: `$SHEATH_STATE_DIR` overrides the folder
+
+`views.kdl` is machine-owned and safe to delete: it forgets the remembered folders and nothing
+else, and a damaged file is ignored.
 
 ## Not there yet
 
-No search inside subfolders, no filesystem watching, no image previews. Copy and paste use the
-app's own clipboard rather than the system one.
+No search inside subfolders, no image previews, no per-entry icons or badges. Copy and paste
+use the app's own clipboard rather than the system one.
