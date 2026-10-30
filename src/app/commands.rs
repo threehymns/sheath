@@ -10,16 +10,19 @@ use rune::{PhysicalInput, Shortcut, ShortcutError, TextEdit, Tx};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
     General,
+    Rules,
     Keybinds,
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 2] = [SettingsTab::General, SettingsTab::Keybinds];
+    pub const ALL: [SettingsTab; 3] =
+        [SettingsTab::General, SettingsTab::Rules, SettingsTab::Keybinds];
 
     /// The stable name the element keys use.
     pub fn id(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
+            SettingsTab::Rules => "rules",
             SettingsTab::Keybinds => "keybinds",
         }
     }
@@ -28,6 +31,7 @@ impl SettingsTab {
     pub fn label(self) -> &'static str {
         match self {
             SettingsTab::General => "General",
+            SettingsTab::Rules => "Rules",
             SettingsTab::Keybinds => "Keybinds",
         }
     }
@@ -137,7 +141,11 @@ impl App {
         action: Action,
         shortcut: Option<&Shortcut>,
     ) -> Result<(), ShortcutError> {
-        self.keybinds.set(action, shortcut)
+        self.keybinds.set(action, shortcut)?;
+        let _ = self
+            .store
+            .edit(crate::config::KEYBINDS, |doc| self.keybinds.write(doc, action));
+        Ok(())
     }
 
     /// One physical input for the settings recorder listening on `action`: Escape cancels,
@@ -170,6 +178,9 @@ impl App {
     /// the field back to rest.
     pub fn reset_binding(&mut self, action: Action) {
         self.keybinds.reset(action);
+        let _ = self
+            .store
+            .edit(crate::config::KEYBINDS, |doc| self.keybinds.write(doc, action));
         self.recorders.insert(action, Recorder::default());
     }
 
@@ -186,6 +197,9 @@ impl App {
                 self.selection_len() > 0
             }
             Action::Paste => self.clipboard.is_some() && self.selection_len() > 0,
+            Action::ShowEntry | Action::HideEntry | Action::ViewEntryRules => {
+                self.selected.is_some()
+            }
             _ => true,
         }
     }
@@ -216,6 +230,11 @@ impl App {
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
+            Action::ViewFolderRules => self.show_folder_rules(),
+            Action::ViewEntryRules => self.show_entry_rules(),
+            Action::SaveViewRule => self.save_view_rule(),
+            Action::ShowEntry => self.pin_entry(false),
+            Action::HideEntry => self.pin_entry(true),
         }
     }
 }

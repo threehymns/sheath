@@ -2,10 +2,11 @@
 //! Done in the dialog's corner.
 
 use crate::app::{App, SettingsTab};
+use crate::config;
 use crate::corner::CornerControl;
 use crate::icons;
-use crate::keybinds::{Action, Keybinds};
-use crate::settings::{Setting, Settings};
+use crate::keybinds::Action;
+use crate::settings::Setting;
 use rune::{El, Icon, ScrollSpec, Tx, col, el, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
@@ -23,7 +24,7 @@ const SETTINGS_RAIL: f32 = 220.0;
 
 const SETTINGS_GUTTER: f32 = 32.0;
 
-const SETTINGS_ROW_INSET: f32 = 16.0;
+pub(super) const SETTINGS_ROW_INSET: f32 = 16.0;
 
 const SETTINGS_ROW_HEIGHT: f32 = 48.0;
 
@@ -104,6 +105,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .child(version);
     let body = match tab {
         SettingsTab::General => general_settings(s, k),
+        SettingsTab::Rules => super::rules::rules_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
     };
     // Concentric with the dialog's corners: the same 8 pt inset taken off the radius.
@@ -218,7 +220,7 @@ fn settings_header(k: &Kit, tab: SettingsTab) -> El {
 
 /// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
 /// and the card hangs [`SETTINGS_ROW_INSET`] past it, so the rows' text lines up with it.
-fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
+pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
     let mut card = k.elevate(
         col()
             .key(format!("{key}-card"))
@@ -291,6 +293,7 @@ fn settings_row(
 fn tab_icon(tab: SettingsTab) -> &'static Icon {
     match tab {
         SettingsTab::General => &theme::icons::SETTINGS_GEAR,
+        SettingsTab::Rules => &theme::icons::EDIT,
         SettingsTab::Keybinds => &glyphs::KEYBOARD,
     }
 }
@@ -384,14 +387,14 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 k,
                 &glyphs::KEYBOARD,
                 "Keybinds",
-                Keybinds::file(),
+                s.store.path(config::KEYBINDS),
                 "copy-keybinds-path",
             ),
             file_path_row(
                 k,
                 &theme::icons::SETTINGS_GEAR,
                 "Settings",
-                Settings::file(),
+                s.store.path(config::CONFIG),
                 "copy-settings-path",
             ),
         ],
@@ -403,7 +406,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .child(browser)
         .child(scrolling)
         .child(files);
-    if let Some(error) = &s.config.error {
+    if let Some(error) = s.store.error(config::CONFIG) {
         page = page.child(error_text(k, error));
     }
     page
@@ -423,7 +426,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
             binding_control(s, k, action, recorder_field(s, k, action)),
         ));
     }
-    let saved = match Keybinds::file() {
+    let saved = match s.store.path(config::KEYBINDS) {
         Some(path) => format!(
             "Click a shortcut and press the keys to use instead. Backspace clears it, Escape \
              cancels while recording. Saved in {}.",
@@ -446,7 +449,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
                 .mx(SETTINGS_ROW_INSET)
                 .wrap(),
         );
-    if let Some(error) = &s.keybinds.error {
+    if let Some(error) = s.store.error(config::KEYBINDS) {
         page = page.child(error_text(k, error));
     }
     page

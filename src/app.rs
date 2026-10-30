@@ -15,6 +15,7 @@ mod files;
 mod grid;
 mod input;
 mod paths;
+mod rules_view;
 mod scroll;
 mod scrolling;
 mod selection;
@@ -36,12 +37,15 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use rune::{PointerPress, ScrollPos, TextEdit};
+use rune::{PointerPress, ScrollPos, TextEdit, Waker};
 use rune_kit::{PaneState, SortDir};
 
+use crate::config::{self, Store};
 use crate::keybinds::{Action, Keybinds};
 use crate::recorder::Recorder;
+use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
+use crate::views::Views;
 
 use paths::start_location;
 use scroll::Scroll;
@@ -90,11 +94,28 @@ pub struct App {
     pub settings: Option<SettingsTab>,
     /// The command bar, while it's up.
     pub palette: Option<Palette>,
-    /// The settings saved in `config.kdl`: hidden files and the inspector.
+    /// The global settings from `config.kdl`: hidden files, the inspector, and the scrolling.
     pub config: Settings,
+    /// The parsed rules from `config.kdl`, in file order.
+    pub rules: Rules,
+    /// Why the rules could not be read, for the Rules tab.
+    pub rule_error: Option<String>,
+    /// The rule the Rules tab should show first, after a command asked for it.
+    pub rule_focus: Option<usize>,
+    /// The rule being dragged and the position it would land in.
+    pub rule_drag: Option<(usize, usize)>,
+    /// The Rules tab's list rect in window points, from the last layout.
+    pub rules_view: [f32; 4],
+    /// A presentation the user chose for this visit, over what the rules say. Cleared on every
+    /// navigation, so a rule wins again the next time the folder opens.
+    pub visit: Resolved,
+    /// What each folder was left showing, in the state directory.
+    pub views: Views,
     pub keybinds: Keybinds,
     /// One recorder per action, holding what its field is listening for and any refusal.
     pub recorders: BTreeMap<Action, Recorder>,
+    /// The config folder's documents and the watcher that keeps them current.
+    pub store: Store,
     /// Where the list's viewport is scrolled to and how far it can go, told by its
     /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts from this rather
     /// than from the rows' rects: those are reported a frame late, and only once they have
@@ -124,23 +145,31 @@ impl App {
         app
     }
 
-    /// Opens `path` with a fresh one-entry history and the saved settings.
+    /// Opens `path` with the saved settings, rules, and remembered state.
     pub fn open(path: PathBuf) -> App {
-        App::open_with(path, Settings::load())
-    }
-
-    /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
-    /// that keep them out of the real config folder).
-    pub fn open_with(path: PathBuf, config: Settings) -> App {
-        let mut app = App::blank(config);
+        let store = Store::open();
+        let config = Settings::from_doc(store.doc(config::CONFIG));
+        let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
+        let mut app = App::blank(config, store, keybinds);
+        app.views = Views::load();
+        app.reload_rules();
         app.history.push(path.clone());
         app.at = 0;
         app.enter(path);
         app
     }
 
-    fn blank(config: Settings) -> App {
-        let keybinds = Keybinds::load();
+    /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
+    /// that keep them out of the real config folder).
+    pub fn open_with(path: PathBuf, config: Settings) -> App {
+        let mut app = App::blank(config, Store::none(), Keybinds::defaults());
+        app.history.push(path.clone());
+        app.at = 0;
+        app.enter(path);
+        app
+    }
+
+    fn blank(config: Settings, store: Store, keybinds: Keybinds) -> App {
         let recorders = Keybinds::recorders();
         let mut inspector = PaneState::new(286.0).range(232.0, 420.0);
         inspector.set_open(config.inspector);
@@ -176,8 +205,16 @@ impl App {
             settings: None,
             palette: None,
             config,
+            rules: Rules::default(),
+            rule_error: None,
+            rule_focus: None,
+            rule_drag: None,
+            rules_view: [0.0; 4],
+            visit: Resolved::default(),
+            views: Views::default(),
             keybinds,
             recorders,
+            store,
             scroll_told: Rc::new(Cell::new(ScrollPos::default())),
             rows_view: [0.0; 4],
             scroll: Scroll::default(),
@@ -186,4 +223,107 @@ impl App {
             date_width: 158.0,
         }
     }
+
+    /// Reads the rules out of the config document, keeping the last good ones when the file no
+    /// longer parses.
+    pub fn reload_rules(&mut self) {
+        if let Some(error) = self.store.error(config::CONFIG) {
+            self.rule_error = Some(error.to_owned());
+        }
+        let Some(doc) = self.store.doc(config::CONFIG) else {
+            return;
+        };
+        match Rules::parse(doc) {
+            Ok(rules) => {
+                self.rules = rules;
+                if self.store.error(config::CONFIG).is_none() {
+                    self.rule_error = None;
+                }
+            }
+            Err(error) => self.rule_error = Some(error),
+        }
+    }
+
+    /// Applies a change made to the config folder from outside: the settings, the keybinds, the
+    /// rules, and whatever the open folder now resolves to.
+    pub fn apply_config(&mut self) {
+        self.config = Settings::from_doc(self.store.doc(config::CONFIG));
+        self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
+        self.recorders = Keybinds::recorders();
+        self.inspector.set_open(self.config.inspector);
+        self.reload_rules();
+        self.reload();
+    }
+
+    /// The presentation the folder resolves to, before this visit's override.
+    pub fn rule_view(&self) -> Resolved {
+        self.rules.resolve(&self.cwd, self.entries.len())
+    }
+
+    /// Applies the visit's override, then the rules, then what the folder was left showing,
+    /// and last the global defaults.
+    fn apply_rules(&mut self) {
+        let rule = self.rule_view();
+        let remembered = self.views.get(&self.cwd);
+        let view = self
+            .visit
+            .view
+            .or(rule.view)
+            .or(remembered.view)
+            .unwrap_or(if self.config.grid {
+                ViewMode::Grid
+            } else {
+                ViewMode::List
+            });
+        let sort = self
+            .visit
+            .sort
+            .or(rule.sort)
+            .or(remembered.sort)
+            .unwrap_or(SortKey::Name);
+        let direction = self
+            .visit
+            .direction
+            .or(rule.direction)
+            .or(remembered.direction)
+            .unwrap_or(SortDir::Ascending);
+        self.show_hidden = self
+            .visit
+            .show_hidden
+            .or(rule.show_hidden)
+            .unwrap_or(self.config.show_hidden);
+        self.view = view;
+        self.sort = (sort.as_str().to_owned(), direction);
+    }
+
+    /// Records what this folder is showing, which is what it opens with next time.
+    fn remember_view(&mut self) {
+        let sort = match self.sort.0.as_str() {
+            "size" => SortKey::Size,
+            "modified" => SortKey::Modified,
+            _ => SortKey::Name,
+        };
+        self.views.set(
+            &self.cwd,
+            Resolved {
+                view: Some(self.view),
+                sort: Some(sort),
+                direction: Some(self.sort.1),
+                show_hidden: None,
+            },
+        );
+    }
+
+    /// Saves one setting, leaving every other node in the file as it was.
+    fn save_setting(&mut self, changed: crate::settings::Setting) {
+        let _ = self
+            .store
+            .edit(config::CONFIG, |doc| self.config.write(doc, changed));
+    }
+}
+
+/// `AppSpec::setup`: hands the config folder's watcher the waker the event loop gave the app,
+/// so a change made in a text editor reaches the open window.
+pub fn setup(s: &mut App, wake: Waker) {
+    s.store.watch(wake);
 }

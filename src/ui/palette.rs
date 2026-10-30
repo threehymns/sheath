@@ -173,5 +173,9 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         Action::Cut => &icons::SCISSORS,
         Action::Paste => &icons::CLIPBOARD,
         Action::Duplicate => &theme::icons::OUTLINE_COPY,
+        Action::ViewFolderRules | Action::ViewEntryRules | Action::SaveViewRule => {
+            &theme::icons::EDIT
+        }
+        Action::ShowEntry | Action::HideEntry => k.glyph.eye,
     }
 }

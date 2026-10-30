@@ -6,6 +6,7 @@ mod grid;
 mod inspector;
 mod palette;
 mod path_bar;
+mod rules;
 mod settings;
 mod sidebar;
 mod table;

@@ -1,19 +1,12 @@
-//! The app's keyboard shortcuts: the chord that runs each command, matching a key event to it,
-//! and the KDL file they're saved in. Keybinds have their own file; anything else the app saves
-//! later gets a file of its own rather than sharing this one.
+//! The app's keyboard shortcuts: the chord that runs each command, and matching a key event to
+//! it. They live in `keybinds.kdl`, so editing a shortcut never rewrites the settings.
 
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::PathBuf;
 
-use kdl::{KdlDocument, KdlEntry, KdlNode};
+use kdl::KdlDocument;
 
-use crate::config;
 use crate::recorder::Recorder;
 use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
-
-/// The file name under the config folder. Only keybinds live in it.
-const FILE: &str = "keybinds.kdl";
 
 /// A command a shortcut can run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -33,11 +26,16 @@ pub enum Action {
     Cut,
     Paste,
     Duplicate,
+    ViewFolderRules,
+    ViewEntryRules,
+    SaveViewRule,
+    ShowEntry,
+    HideEntry,
 }
 
 impl Action {
     /// Every action, in the order the settings dialog lists them.
-    pub const ALL: [Action; 15] = [
+    pub const ALL: [Action; 20] = [
         Action::CommandBar,
         Action::OpenSettings,
         Action::Back,
@@ -53,6 +51,11 @@ impl Action {
         Action::Cut,
         Action::Paste,
         Action::Duplicate,
+        Action::ViewFolderRules,
+        Action::ViewEntryRules,
+        Action::SaveViewRule,
+        Action::ShowEntry,
+        Action::HideEntry,
     ];
 
     /// Whether Shift is ignored when matching this action, as editor command bars treat
@@ -79,6 +82,11 @@ impl Action {
             Action::Cut => "cut",
             Action::Paste => "paste",
             Action::Duplicate => "duplicate",
+            Action::ViewFolderRules => "view-folder-rules",
+            Action::ViewEntryRules => "view-entry-rules",
+            Action::SaveViewRule => "save-view-rule",
+            Action::ShowEntry => "show-entry",
+            Action::HideEntry => "hide-entry",
         }
     }
 
@@ -100,6 +108,11 @@ impl Action {
             Action::Cut => "Cut",
             Action::Paste => "Paste",
             Action::Duplicate => "Duplicate",
+            Action::ViewFolderRules => "View Rules for This Folder",
+            Action::ViewEntryRules => "View Rules for This Entry",
+            Action::SaveViewRule => "Save This View as a Rule",
+            Action::ShowEntry => "Always Show This Entry",
+            Action::HideEntry => "Always Hide This Entry",
         }
     }
 
@@ -107,9 +120,21 @@ impl Action {
         Action::ALL.iter().copied().find(|action| action.id() == id)
     }
 
+    /// The chord a fresh install has, or none for a command that has no key of its own.
+    fn default_chord(self) -> Option<&'static str> {
+        match self {
+            Action::ViewFolderRules
+            | Action::ViewEntryRules
+            | Action::SaveViewRule
+            | Action::ShowEntry
+            | Action::HideEntry => None,
+            _ => Some(self.builtin_chord()),
+        }
+    }
+
     /// The chord a fresh install has, as the file stores it. The command bar answers to Ctrl+P
     /// on every platform, shifted or not: [`Action::ignores_shift`].
-    fn default_chord(self) -> &'static str {
+    fn builtin_chord(self) -> &'static str {
         #[cfg(target_os = "macos")]
         {
             match self {
@@ -128,6 +153,7 @@ impl Action {
                 Action::Cut => "super+x",
                 Action::Paste => "super+v",
                 Action::Duplicate => "super+d",
+                _ => "",
             }
         }
         #[cfg(not(target_os = "macos"))]
@@ -148,17 +174,15 @@ impl Action {
                 Action::Cut => "ctrl+x",
                 Action::Paste => "ctrl+v",
                 Action::Duplicate => "ctrl+d",
+                _ => "",
             }
         }
     }
 }
 
-/// The app's keybindings, and the file they came from.
+/// The app's keybindings.
 pub struct Keybinds {
     chords: BTreeMap<Action, Shortcut>,
-    path: Option<PathBuf>,
-    /// Why the file couldn't be read or written, for the settings dialog.
-    pub error: Option<String>,
 }
 
 impl Keybinds {
@@ -167,66 +191,42 @@ impl Keybinds {
     pub fn defaults() -> Keybinds {
         Keybinds {
             chords: default_chords(),
-            path: None,
-            error: None,
         }
     }
 
-    /// The bindings saved for this user, or the defaults when there's no readable file. A file
-    /// with a problem leaves the defaults in place and reports it through [`Keybinds::error`].
-    pub fn load() -> Keybinds {
-        match config::path(FILE) {
-            Some(path) => Keybinds::at(path),
-            None => {
-                let mut binds = Keybinds::defaults();
-                binds.error = Some("Couldn’t find a folder to save keybinds in.".into());
-                binds
-            }
-        }
-    }
-
-    /// The bindings in `path`, for a config directory chosen by the caller.
-    pub fn at(path: PathBuf) -> Keybinds {
-        let mut binds = Keybinds {
-            chords: default_chords(),
-            path: Some(path.clone()),
-            error: None,
+    /// The bindings the document names, over the built-in ones. Unknown actions and unreadable
+    /// chords are skipped, so an edited file degrades instead of breaking the app.
+    pub fn from_doc(doc: Option<&KdlDocument>) -> Keybinds {
+        let mut binds = Keybinds::defaults();
+        let Some(doc) = doc else {
+            return binds;
         };
-        match fs::read_to_string(&path) {
-            Ok(text) => match parse(&text) {
-                Ok(chords) => {
-                    for (action, chord) in chords {
-                        match chord {
-                            Some(chord) => {
-                                binds.chords.insert(action, chord);
-                            }
-                            None => {
-                                binds.chords.remove(&action);
-                            }
-                        }
-                    }
+        for (action, chord) in parse(doc) {
+            match chord {
+                Some(chord) => {
+                    binds.chords.insert(action, chord);
                 }
-                Err(err) => {
-                    binds.error = Some(format!(
-                        "Couldn’t read {}: {err}. Using the defaults.",
-                        path.display()
-                    ));
+                None => {
+                    binds.chords.remove(&action);
                 }
-            },
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                binds.error = Some(format!(
-                    "Couldn’t read {}: {err}. Using the defaults.",
-                    path.display()
-                ));
             }
         }
         binds
     }
 
-    /// The file keybinds are saved in, when there is one.
-    pub fn file() -> Option<PathBuf> {
-        config::path(FILE)
+    /// Writes this action's line: its chord, or no line at all when the built-in chord applies
+    /// again. Every other node keeps its bytes, its comments, and its place.
+    pub fn write(&self, doc: &mut KdlDocument, action: Action) {
+        let current = self.chords.get(&action);
+        if current == default_shortcut(action).as_ref() {
+            crate::settings::remove_child(doc, "keybinds", action.id());
+            return;
+        }
+        let text = match current {
+            Some(chord) => format!("{} \"{chord}\"", action.id()),
+            None => format!("{} \"\"", action.id()),
+        };
+        crate::settings::write_child(doc, "keybinds", action.id(), &text);
     }
 
     pub fn chord(&self, action: Action) -> Option<&Shortcut> {
@@ -295,7 +295,6 @@ impl Keybinds {
                 self.chords.remove(&action);
             }
         }
-        self.save();
         Ok(())
     }
 
@@ -312,26 +311,8 @@ impl Keybinds {
             Some(chord) => self.chords.insert(action, chord),
             None => self.chords.remove(&action),
         };
-        self.save();
     }
 
-    /// Writes the bindings. A failure keeps the change for this session and reports it, so the
-    /// settings dialog can say why the next launch will differ.
-    fn save(&mut self) {
-        let Some(path) = self.path.clone() else {
-            return;
-        };
-        if let Some(dir) = path.parent()
-            && let Err(err) = fs::create_dir_all(dir)
-        {
-            self.error = Some(format!("Couldn’t make {}: {err}", dir.display()));
-            return;
-        }
-        match fs::write(&path, render(&self.chords)) {
-            Ok(()) => self.error = None,
-            Err(err) => self.error = Some(format!("Couldn’t save {}: {err}", path.display())),
-        }
-    }
 }
 
 fn default_chords() -> BTreeMap<Action, Shortcut> {
@@ -346,7 +327,7 @@ fn default_chords() -> BTreeMap<Action, Shortcut> {
 
 /// The chord a fresh install has for `action`.
 fn default_shortcut(action: Action) -> Option<Shortcut> {
-    let text = action.default_chord();
+    let text = action.default_chord()?;
     match text.parse::<Shortcut>() {
         Ok(chord) => Some(chord),
         // A typo in a default is a programming error, but shipping a dead app is worse.
@@ -361,42 +342,13 @@ fn default_shortcut(action: Action) -> Option<Shortcut> {
     }
 }
 
-/// The KDL file: a `keybinds` node whose children are `action "chord"` for the shortcuts that
-/// differ from the built-in ones; an empty string means the action has no shortcut. Actions the
-/// file leaves out keep their defaults, so resetting one is deleting its line.
-fn render(chords: &BTreeMap<Action, Shortcut>) -> String {
-    let mut doc = KdlDocument::new();
-    let mut node = KdlNode::new("keybinds");
-    let mut children = KdlDocument::new();
-    for action in Action::ALL {
-        let chord = chords.get(&action);
-        if chord == default_shortcut(action).as_ref() {
-            continue;
-        }
-        let mut child = KdlNode::new(action.id());
-        child.push(KdlEntry::new(
-            chord.map(ToString::to_string).unwrap_or_default(),
-        ));
-        children.nodes_mut().push(child);
-    }
-    node.set_children(children);
-    doc.nodes_mut().push(node);
-    // The file is meant to be read and edited by hand, so indent it.
-    doc.autoformat();
-    format!(
-        "// Sheath keyboard shortcuts. Only keybinds live in this file; other settings get their\n\
-         // own. It lists the shortcuts that differ from the built-in ones: an empty chord clears\n\
-         // one, and deleting a line gives that action its default back.\n\
-         {doc}"
-    )
-}
-
-/// The actions the file names, with `None` for a cleared chord. Unknown actions and unreadable
-/// chords are skipped, so an edited file degrades instead of breaking the app.
-fn parse(text: &str) -> Result<Vec<(Action, Option<Shortcut>)>, String> {
-    let doc: KdlDocument = text.parse().map_err(|err: kdl::KdlError| err.to_string())?;
+/// The actions the document names, with `None` for a cleared chord.
+fn parse(doc: &KdlDocument) -> Vec<(Action, Option<Shortcut>)> {
     let mut out = Vec::new();
     for node in doc.nodes() {
+        if node.name().value() != "keybinds" {
+            continue;
+        }
         for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
             let Some(action) = Action::from_id(child.name().value()) else {
                 continue;
@@ -417,7 +369,7 @@ fn parse(text: &str) -> Result<Vec<(Action, Option<Shortcut>)>, String> {
             out.push((action, chord));
         }
     }
-    Ok(out)
+    out
 }
 
 /// Whether `event` is `chord`. Rune matches window accelerators by the key's position, so the

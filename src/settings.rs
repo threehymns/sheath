@@ -1,18 +1,11 @@
-//! The settings the app saves between launches, in their own `config.kdl`. Keybinds are not
-//! here: they live in `keybinds.kdl`, so editing one never rewrites the other.
+//! The settings saved under the `settings` node of `config.kdl`. Keybinds live in their own
+//! file, so editing one never rewrites the other. Saves change the one node they are about and
+//! leave every other byte of the file alone.
 
-use std::fs;
-use std::path::PathBuf;
+use kdl::{KdlDocument, KdlNode};
 
-use kdl::{KdlDocument, KdlEntry, KdlNode};
-
-use crate::config;
-
-/// The file name under the config folder. Only these settings live in it.
-const FILE: &str = "config.kdl";
-
-/// A setting the file can name. One the file doesn't name keeps its default, and saving leaves
-/// it out, so resetting a setting is removing its key rather than writing the default down.
+/// A setting the file can name. One the file doesn't name keeps its default, and saving removes
+/// its key, so resetting a setting is deleting a line rather than writing the default down.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Setting {
     ShowHidden,
@@ -98,26 +91,25 @@ impl Setting {
     }
 }
 
-/// What the browser remembers about how it was left.
+/// What the browser remembers about how it was left, apart from the folders that remember their
+/// own presentation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub show_hidden: bool,
     pub inspector: bool,
-    /// The folder shows as a grid of tiles rather than a table of rows.
+    /// The folder shows as a grid of tiles rather than a table of rows when no rule and no
+    /// remembered state says otherwise.
     pub grid: bool,
     /// The list keeps moving after the wheel stops.
     pub scroll_inertia: bool,
     /// The list can be pulled past its first and last row, then springs back.
     pub overscroll: bool,
-    path: Option<PathBuf>,
     /// The settings the file names; the rest are defaults a save leaves out.
     present: [bool; 5],
-    /// Why the file couldn't be read or written, for the settings panel.
-    pub error: Option<String>,
 }
 
 impl Default for Settings {
-    fn default() -> Settings {
+    fn default() -> Self {
         Settings {
             show_hidden: false,
             inspector: true,
@@ -126,65 +118,41 @@ impl Default for Settings {
             // can turn either off.
             scroll_inertia: true,
             overscroll: true,
-            path: None,
             present: [false; 5],
-            error: None,
         }
     }
 }
 
 impl Settings {
-    /// The defaults, with nowhere to save.
+    /// The defaults, for a store with no file.
     pub fn defaults() -> Settings {
         Settings::default()
     }
 
-    /// The settings saved for this user, or the defaults when there's no readable file. A file
-    /// with a problem leaves the defaults in place and reports it through [`Settings::error`].
-    pub fn load() -> Settings {
-        match config::path(FILE) {
-            Some(path) => Settings::at(path),
-            None => {
-                let mut settings = Settings::defaults();
-                settings.error = Some("Couldn’t find a folder to save settings in.".into());
-                settings
-            }
-        }
-    }
-
-    /// The settings in `path`, for a config folder chosen by the caller.
-    pub fn at(path: PathBuf) -> Settings {
-        let mut settings = Settings {
-            path: Some(path.clone()),
-            ..Settings::defaults()
+    /// The settings the `settings` node names. A key the file leaves out, or cannot be read as
+    /// a boolean, keeps its default, so an edited file degrades instead of breaking the app.
+    pub fn from_doc(doc: Option<&KdlDocument>) -> Settings {
+        let mut settings = Settings::defaults();
+        let Some(doc) = doc else {
+            return settings;
         };
-        match fs::read_to_string(&path) {
-            Ok(text) => match parse(&text) {
-                Ok(mut parsed) => {
-                    parsed.path = Some(path);
-                    settings = parsed;
+        for node in doc.nodes() {
+            let children = node
+                .children()
+                .into_iter()
+                .flat_map(|kids| kids.nodes())
+                .filter(|_| node.name().value() == "settings");
+            for child in children {
+                let Some(setting) = Setting::from_name(child.name().value()) else {
+                    continue;
+                };
+                settings.present[setting.index()] = true;
+                if let Some(on) = child.get(0).and_then(|entry| entry.as_bool()) {
+                    setting.set(&mut settings, on);
                 }
-                Err(err) => {
-                    settings.error = Some(format!(
-                        "Couldn’t read {}: {err}. Using the defaults.",
-                        path.display()
-                    ));
-                }
-            },
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
-            Err(err) => {
-                settings.error = Some(format!(
-                    "Couldn’t read {}: {err}. Using the defaults.",
-                    path.display()
-                ));
             }
         }
         settings
-    }
-
-    /// The file settings are saved in, when there is one.
-    pub fn file() -> Option<PathBuf> {
-        config::path(FILE)
     }
 
     /// Whether the file names this setting, so it can be reset.
@@ -192,10 +160,23 @@ impl Settings {
         self.present[setting.index()]
     }
 
-    /// Records the browser's current state and saves it. `changed` is what the user just
-    /// changed: only settings the file names are written, and a changed one is named from now
-    /// on. A failure keeps the value for this session and reports why the next launch won't
-    /// have it.
+    /// Whether the file names any setting, for the panel's reset affordances.
+    pub fn names_anything(&self) -> bool {
+        self.present.iter().any(|present| *present)
+    }
+
+    /// Writes `setting` as a child of the `settings` node, leaving the rest of the document
+    /// exactly as it was: the node keeps its own whitespace and the comments above it.
+    pub fn write(&self, doc: &mut KdlDocument, setting: Setting) {
+        let body = format!(
+            "{} {}",
+            setting.name(),
+            if setting.value(self) { "#true" } else { "#false" }
+        );
+        write_child(doc, "settings", setting.name(), &body);
+    }
+
+    /// Records the browser's current switches, naming `changed` in the file from now on.
     pub fn remember(
         &mut self,
         changed: Setting,
@@ -211,70 +192,81 @@ impl Settings {
         self.scroll_inertia = scroll_inertia;
         self.overscroll = overscroll;
         self.present[changed.index()] = true;
-        self.save();
     }
 
-    /// Takes a setting back to its default and removes its key, so the file only names what
-    /// the user chose.
+    /// Takes a setting back to its default, so the file no longer names it.
     pub fn reset(&mut self, setting: Setting) {
         setting.set(self, setting.default_on());
         self.present[setting.index()] = false;
-        self.save();
     }
 
-    fn save(&mut self) {
-        let Some(path) = self.path.clone() else {
-            return;
-        };
-        if let Some(dir) = path.parent()
-            && let Err(err) = fs::create_dir_all(dir)
+    /// Takes a setting's key out, so the default applies again.
+    pub fn clear(doc: &mut KdlDocument, setting: Setting) {
+        remove_child(doc, "settings", setting.name());
+    }
+}
+
+/// The `settings` node's position, if the document has one.
+fn parent_index(doc: &KdlDocument, parent: &str) -> Option<usize> {
+    doc.nodes()
+        .iter()
+        .position(|node| node.name().value() == parent)
+}
+
+/// Writes `name value` under `parent`, replacing the node that names it and keeping that node's
+/// leading whitespace and comments. A missing parent or child is created from parsed text, so it
+/// picks up the indentation a hand-written file has.
+pub fn write_child(doc: &mut KdlDocument, parent: &str, name: &str, body: &str) {
+    let Some(index) = parent_index(doc, parent) else {
+        let text = format!("\n{parent} {{\n    {body}\n}}\n");
+        if let Ok(parsed) = text.parse::<KdlDocument>()
+            && let Some(node) = parsed.nodes().first()
         {
-            self.error = Some(format!("Couldn’t make {}: {err}", dir.display()));
-            return;
+            doc.nodes_mut().push(node.clone());
         }
-        match fs::write(&path, render(self)) {
-            Ok(()) => self.error = None,
-            Err(err) => self.error = Some(format!("Couldn’t save {}: {err}", path.display())),
+        return;
+    };
+    let has_children = doc.nodes()[index].children().is_some();
+    let existing = doc.nodes()[index]
+        .children()
+        .into_iter()
+        .flat_map(|kids| kids.nodes())
+        .find(|node| node.name().value() == name)
+        .and_then(|node| node.format().map(|format| format.leading.clone()));
+    let leading = existing.unwrap_or_else(|| "\n    ".to_owned());
+    if !has_children {
+        let text = format!("{leading}{parent} {{\n    {body}\n}}\n");
+        if let Ok(parsed) = text.parse::<KdlDocument>()
+            && let Some(node) = parsed.nodes().first()
+        {
+            doc.nodes_mut()[index] = node.clone();
         }
+        return;
+    }
+    let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() else {
+        return;
+    };
+    let text = format!("{leading}{body}\n");
+    let Ok(node) = text.parse::<KdlNode>() else {
+        return;
+    };
+    if let Some(slot) = children
+        .nodes_mut()
+        .iter_mut()
+        .find(|child| child.name().value() == name)
+    {
+        *slot = node;
+    } else {
+        children.nodes_mut().push(node);
     }
 }
 
-/// The written form: a `settings` node of `name value` pairs, for the settings the file names.
-fn render(settings: &Settings) -> String {
-    let mut doc = KdlDocument::new();
-    let mut node = KdlNode::new("settings");
-    let mut children = KdlDocument::new();
-    for setting in Setting::ALL {
-        if !settings.is_set(setting) {
-            continue;
-        }
-        let mut child = KdlNode::new(setting.name());
-        child.push(KdlEntry::new(setting.value(settings)));
-        children.nodes_mut().push(child);
+/// Removes `name` from `parent`, leaving the parent and everything else in place.
+pub fn remove_child(doc: &mut KdlDocument, parent: &str, name: &str) {
+    let Some(index) = parent_index(doc, parent) else {
+        return;
+    };
+    if let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() {
+        children.nodes_mut().retain(|node| node.name().value() != name);
     }
-    node.set_children(children);
-    doc.nodes_mut().push(node);
-    // The file is meant to be read and edited by hand, so indent it.
-    doc.autoformat();
-    format!("// Sheath settings. Keybinds live in keybinds.kdl, not here.\n{doc}")
-}
-
-/// The settings the file names; anything missing or unreadable keeps its default, so an
-/// edited file degrades instead of breaking the app. A named setting is remembered even when
-/// its value can't be read, so resetting it still takes the key out.
-fn parse(text: &str) -> Result<Settings, String> {
-    let doc: KdlDocument = text.parse().map_err(|err: kdl::KdlError| err.to_string())?;
-    let mut settings = Settings::defaults();
-    for node in doc.nodes() {
-        for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
-            let Some(setting) = Setting::from_name(child.name().value()) else {
-                continue;
-            };
-            settings.present[setting.index()] = true;
-            if let Some(on) = child.get(0).and_then(|value| value.as_bool()) {
-                setting.set(&mut settings, on);
-            }
-        }
-    }
-    Ok(settings)
 }

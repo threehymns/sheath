@@ -2,7 +2,6 @@
 
 use super::helpers::*;
 use crate::app::{App, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
-use crate::settings::Settings;
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
 use std::fs;
@@ -245,7 +244,7 @@ fn the_sort_chevron_turns_over_when_the_direction_reverses() {
 }
 
 #[test]
-fn the_grid_choice_is_saved_and_restored() {
+fn the_grid_choice_is_remembered_for_the_folder() {
     let dir = fixture();
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
@@ -253,13 +252,9 @@ fn the_grid_choice_is_saved_and_restored() {
 
     click(&mut rt, "toggle-view");
     assert!(rt.state.is_grid());
-    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
-    assert!(config.contains("grid #true"), "{config}");
+    let views = fs::read_to_string(dir.path().join("views.kdl")).unwrap();
+    assert!(views.contains("view grid"), "{views}");
 
-    let saved = Settings::at(dir.path().join("config.kdl"));
-    assert!(saved.grid);
-    assert!(
-        App::open_with(dir.path().to_path_buf(), saved).is_grid(),
-        "the next launch opens in the grid"
-    );
+    let remembered = crate::views::Views::at(dir.path().join("views.kdl")).get(dir.path());
+    assert_eq!(remembered.view, Some(crate::app::ViewMode::Grid));
 }

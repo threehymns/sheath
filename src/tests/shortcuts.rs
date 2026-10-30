@@ -77,14 +77,16 @@ fn keybinds_round_trip_through_their_own_kdl_file() {
     app.set_binding(Action::Move, None).unwrap();
     let text = fs::read_to_string(&path).unwrap();
     assert!(text.contains("keybinds {"), "the file is KDL: {text}");
-    assert!(text.contains("rename f5"), "the chord is written: {text}");
+    assert!(
+        text.contains("rename \"f5\""),
+        "the chord is written: {text}"
+    );
     assert!(
         text.contains("move \"\""),
         "a cleared shortcut stays cleared: {text}"
     );
 
-    let saved = Keybinds::at(path.clone());
-    assert_eq!(saved.error, None);
+    let saved = saved_keybinds(&dir);
     assert_eq!(saved.chord(Action::Rename), Some(&f5));
     assert_eq!(saved.chord(Action::Move), None);
     assert_eq!(
@@ -99,13 +101,13 @@ fn a_broken_keybinds_file_keeps_the_defaults_and_says_so() {
     let path = dir.path().join("keybinds.kdl");
     fs::write(&path, "keybinds { rename \"f5\"").unwrap();
 
-    let binds = Keybinds::at(path);
+    let store = crate::config::Store::at(dir.path().to_path_buf());
     assert!(
-        binds
-            .error
-            .as_deref()
+        store
+            .error(crate::config::KEYBINDS)
             .is_some_and(|e| e.contains("Couldn’t read"))
     );
+    let binds = Keybinds::from_doc(store.doc(crate::config::KEYBINDS));
     assert_eq!(
         binds.chord(Action::Rename),
         Keybinds::defaults().chord(Action::Rename)

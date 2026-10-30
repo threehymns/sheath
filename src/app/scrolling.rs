@@ -66,13 +66,19 @@ impl App {
     /// Steps the list's momentum and overscroll once per frame, asking for the next frame while
     /// either still moves. True when the rows moved, so the view draws them where they are.
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
+        // A file the app did not write changed on disk: re-read it and apply what it says.
+        let mut redraw = false;
+        if self.store.poll() {
+            self.apply_config();
+            redraw = true;
+        }
         let limits = self.limits();
         self.scroll.observe(self.told_offset());
         let dt = self.scroll.frame(t);
         let push = self.drag_push(dt);
         let nudged = self.scroll.nudge(push, limits.max);
         let stepped = self.scroll.step(limits);
-        let redraw = nudged.redraw || stepped.redraw;
+        let redraw = redraw || nudged.redraw || stepped.redraw;
         self.apply(nudged, tx);
         self.apply(stepped, tx);
         self.follow_drag();

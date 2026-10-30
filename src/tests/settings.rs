@@ -173,8 +173,7 @@ fn saved_settings_load_at_launch() {
     )
     .unwrap();
 
-    let saved = Settings::at(path);
-    assert_eq!(saved.error, None);
+    let saved = saved_settings(&dir);
     assert!(saved.show_hidden);
     assert!(!saved.inspector);
 
@@ -197,8 +196,7 @@ fn saved_scroll_settings_load_at_launch() {
     )
     .unwrap();
 
-    let saved = Settings::at(path);
-    assert_eq!(saved.error, None);
+    let saved = saved_settings(&dir);
     assert!(saved.scroll_inertia);
     assert!(saved.overscroll);
     assert!(!saved.show_hidden, "the rest keep their defaults");
@@ -242,15 +240,15 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
     let path = dir.path().join("config.kdl");
     fs::write(&path, "settings { show-hidden #true").unwrap();
 
-    let saved = Settings::at(path);
+    let store = crate::config::Store::at(dir.path().to_path_buf());
     assert!(
-        saved
-            .error
-            .as_deref()
+        store
+            .error(crate::config::CONFIG)
             .is_some_and(|e| e.contains("Couldn’t read")),
         "{:?}",
-        saved.error
+        store.error(crate::config::CONFIG)
     );
+    let saved = Settings::from_doc(store.doc(crate::config::CONFIG));
     assert!(!saved.show_hidden);
     assert!(saved.inspector);
     assert!(saved.scroll_inertia);
@@ -286,7 +284,7 @@ fn recording_a_chord_in_the_settings_binds_and_saves_it() {
 
     let f5: rune::Shortcut = "f5".parse().unwrap();
     assert_eq!(rt.state.keybinds.chord(Action::Rename), Some(&f5));
-    let saved = Keybinds::at(path);
+    let saved = saved_keybinds(&dir);
     assert_eq!(saved.chord(Action::Rename), Some(&f5), "the file has it");
 }
 
@@ -332,7 +330,7 @@ fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
     press(&mut rt, PhysicalKeyCode::Backspace);
     assert_eq!(rt.state.keybinds.chord(Action::Rename), None);
     assert_eq!(
-        Keybinds::at(path).chord(Action::Rename),
+        saved_keybinds(&dir).chord(Action::Rename),
         None,
         "the file has the cleared chord"
     );
@@ -408,7 +406,7 @@ fn resetting_a_keybind_takes_its_line_out_of_the_file() {
         !text.contains("rename"),
         "the line is out of the file: {text}"
     );
-    assert!(!Keybinds::at(path).is_custom(Action::Rename));
+    assert!(!saved_keybinds(&dir).is_custom(Action::Rename));
 }
 
 /// A setting the config file names can be reset, which takes its key out rather than writing

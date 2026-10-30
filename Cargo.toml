@@ -11,6 +11,7 @@ hot = ["rune/hot"]
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 kdl = { version = "6.7.1", default-features = false }
+notify = "8"
 # Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends.
 rune = { git = "https://github.com/anomalyco/rune", rev = "b85cd7d4c408c30f91c299069624958345c224e4" }
 rune-kit = { git = "https://github.com/anomalyco/rune", rev = "b85cd7d4c408c30f91c299069624958345c224e4" }
