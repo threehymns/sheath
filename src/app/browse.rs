@@ -428,6 +428,10 @@ impl App {
             return "Reading…".into();
         }
         let shown = self.visible.len();
+        // The walk stopped before the folders ran out, so the count is a floor, not a total.
+        if self.search_truncated {
+            return format!("{shown}+ matches");
+        }
         let chosen = self.selection_len();
         if chosen > 1 {
             let size = self.selection_size();
