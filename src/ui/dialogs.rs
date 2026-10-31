@@ -314,6 +314,44 @@ pub(super) fn error_text(k: &Kit, error: &str) -> El {
         .wrap()
 }
 
+/// The menu behind a right click on the header: which columns the list keeps.
+///
+/// Name is always there, since a list of rows with no names says nothing.
+pub(super) fn header_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
+    let Some(at) = s.header_menu else {
+        return;
+    };
+    let column = |on: bool, label: &str| {
+        MenuItem::new(label).icon(if on {
+            &icons::CHECK_SQUARE
+        } else {
+            &icons::SQUARE
+        })
+    };
+    context_menu("header-menu", el(), Some(at))
+        .min_width(200.0)
+        .item(
+            column(s.config.show_kind, "Kind Column").on_select(|s: &mut App| {
+                s.close_header_menu();
+                s.toggle_show_kind();
+            }),
+        )
+        .item(
+            column(s.config.show_size, "Size Column").on_select(|s: &mut App| {
+                s.close_header_menu();
+                s.toggle_show_size();
+            }),
+        )
+        .item(
+            column(s.config.show_modified, "Date Modified Column").on_select(|s: &mut App| {
+                s.close_header_menu();
+                s.toggle_show_modified();
+            }),
+        )
+        .on_close(|s: &mut App| s.close_header_menu())
+        .build(k, layers);
+}
+
 /// The menu behind a right click that landed past the last row: what the folder itself offers.
 pub(super) fn empty_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(at) = s.empty_menu else {

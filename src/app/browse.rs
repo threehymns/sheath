@@ -18,6 +18,7 @@ impl App {
         self.stop_scrolling();
         self.menu = None;
         self.empty_menu = None;
+        self.header_menu = None;
         self.place_menu = None;
         self.marquee = None;
         self.file_drag = None;
@@ -334,6 +335,14 @@ impl App {
     pub fn toggle_confirm_trash(&mut self) {
         self.config.confirm_trash = !self.config.confirm_trash;
         self.remember(Setting::ConfirmTrash, self.config.confirm_trash);
+    }
+
+    pub fn open_header_menu(&mut self, at: rune::PointerPress) {
+        self.header_menu = Some(at);
+    }
+
+    pub fn close_header_menu(&mut self) {
+        self.header_menu = None;
     }
 
     pub fn toggle_show_kind(&mut self) {

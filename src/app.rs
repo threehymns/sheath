@@ -106,6 +106,8 @@ pub struct App {
     pub menu: Option<PointerPress>,
     // The menu for a right click that found no row, over the empty space of the list.
     pub empty_menu: Option<PointerPress>,
+    // The menu for a right click on the header, to keep or drop a column.
+    pub header_menu: Option<PointerPress>,
     pub place_menu: Option<PlaceMenu>,
     pub place_rename: Option<PlaceRename>,
     pub settings: Option<SettingsTab>,
@@ -238,6 +240,7 @@ impl App {
             sheet: None,
             menu: None,
             empty_menu: None,
+            header_menu: None,
             place_menu: None,
             place_rename: None,
             settings: None,

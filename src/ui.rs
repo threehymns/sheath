@@ -21,7 +21,7 @@ use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
 
-use dialogs::{empty_menu, place_menu, row_menu, sheet_layer};
+use dialogs::{empty_menu, header_menu, place_menu, row_menu, sheet_layer};
 use palette::palette_layer;
 use settings::settings_layer;
 use table::{empty_state, file_table};
@@ -105,6 +105,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     if s.empty_menu.is_some() {
         empty_menu(s, k, &mut layers);
+    }
+    if s.header_menu.is_some() {
+        header_menu(s, k, &mut layers);
     }
     if s.place_menu.is_some() {
         place_menu(s, k, &mut layers);

@@ -211,3 +211,33 @@ fn right_clicking_past_the_last_row_opens_the_folders_own_menu() {
     assert!(rt.state.empty_menu.is_none(), "picking an item closes it");
     assert!(dir.path().join("New Folder").is_dir());
 }
+
+#[test]
+fn right_clicking_a_header_keeps_or_drops_a_column() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    assert!(
+        rt.find("kind").is_some(),
+        "the Kind column is there to begin with"
+    );
+
+    let (x, y) = rt.find("name").expect("the name header is on screen");
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    rt.frame(0.1);
+    assert!(rt.state.header_menu.is_some(), "the header menu opens");
+    assert!(
+        rt.find("header-menu-item0").is_some(),
+        "the Kind column is offered"
+    );
+
+    click(&mut rt, "header-menu-item0");
+    assert!(
+        rt.state.header_menu.is_none(),
+        "picking one closes the menu"
+    );
+    assert!(!rt.state.config.show_kind, "the column is dropped");
+    assert!(rt.find("kind").is_none());
+    assert!(rt.find("size").is_some(), "the others stay");
+}

@@ -59,6 +59,7 @@ unsupported by this backend.
 | Search this folder | The search field, or / to focus it; Escape clears it |
 | Search the folders below | The folder button beside the search field |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
+| Keep or drop a column | Right-click a column header |
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Delete for good | Shift+Delete (Shift+Cmd+Backspace on macOS) |

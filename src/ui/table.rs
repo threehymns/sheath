@@ -66,6 +66,7 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
         .w_full()
         .h(style.header_height)
         .center_y()
+        .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.open_header_menu(press))
         .child(
             el().key("header-rule")
                 .pin(Some(0.0), None, Some(0.0), Some(0.0))
