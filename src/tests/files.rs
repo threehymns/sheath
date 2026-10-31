@@ -199,6 +199,25 @@ fn there_is_no_paste_until_something_is_copied() {
 }
 
 #[test]
+fn paste_drops_into_the_folder_that_is_selected() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    let mut tx = Tx::default();
+    app.select_id("f:notes.md");
+    app.run_action(Action::Copy, &mut tx);
+
+    app.select_id("f:alpha");
+    app.paste();
+    app.settle_scan();
+
+    assert!(
+        dir.path().join("alpha").join("notes copy.md").exists(),
+        "the copy lands inside the chosen folder"
+    );
+    assert!(!dir.path().join("notes copy.md").exists());
+}
+
+#[test]
 fn new_file_picks_a_free_name_and_selects_it() {
     let dir = fixture();
     let mut app = app(&dir);

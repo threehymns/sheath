@@ -107,11 +107,22 @@ impl App {
             .is_some_and(|clipboard| clipboard.cut && clipboard.paths.iter().any(|p| p == path))
     }
 
+    // A single chosen folder takes the paste; anything else lands in the folder on screen.
+    fn paste_destination(&self) -> PathBuf {
+        let ids = self.selected_ids();
+        if let [id] = ids.as_slice()
+            && let Some((path, _, true)) = self.entry_snapshot(id)
+        {
+            return path;
+        }
+        self.cwd.clone()
+    }
+
     pub fn paste(&mut self) {
         let Some(clipboard) = self.clipboard.clone() else {
             return;
         };
-        let destination = self.cwd.clone();
+        let destination = self.paste_destination();
         let mut made: Vec<String> = Vec::new();
         let mut error = None;
         if clipboard.cut {

@@ -69,8 +69,9 @@ unsupported by this backend.
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 
-Double-clicking a file opens it with the system opener (`open`, `xdg-open` or `start`). The
-settings panel can change any shortcut.
+Double-clicking a file opens it with the system opener (`open`, `xdg-open` or `start`). Paste
+lands in the folder on screen, or inside it when exactly one folder is selected. The settings
+panel can change any shortcut.
 
 ## Configuration
 
