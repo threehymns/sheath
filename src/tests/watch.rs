@@ -3,6 +3,22 @@
 use super::helpers::*;
 use std::fs;
 
+/// The inotify instances this process holds open: on Linux a live watcher is one of them, so a
+/// number that keeps climbing means watchers are left behind.
+#[cfg(target_os = "linux")]
+fn inotify_instances() -> usize {
+    let Ok(fds) = fs::read_dir("/proc/self/fd") else {
+        return 0;
+    };
+    fds.flatten()
+        .filter(|fd| {
+            fs::read_link(fd.path())
+                .map(|target| target.to_string_lossy().contains("inotify"))
+                .unwrap_or(false)
+        })
+        .count()
+}
+
 /// Whether a row named `name` is in the list on screen.
 fn shown(rt: &rune::Runtime<crate::app::App>, name: &str) -> bool {
     rt.state
@@ -87,4 +103,35 @@ fn the_watcher_follows_the_window_to_another_folder() {
         !shown(&rt, "left-behind.txt"),
         "the folder left behind is not on screen"
     );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn switching_folders_leaves_no_watcher_behind() {
+    let dir = fixture();
+    let other = tempfile::tempdir().unwrap();
+    let mut app = app(&dir);
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    app.watch(wake);
+    app.settle_scan();
+    let first = inotify_instances();
+    assert!(first > 0, "the folder is watched to begin with");
+
+    for _ in 0..20 {
+        app.navigate(other.path().to_path_buf());
+        app.settle_scan();
+        app.navigate(dir.path().to_path_buf());
+        app.settle_scan();
+    }
+    // A dropped watcher closes its inotify instance as its thread winds down, which can trail
+    // the navigation by a moment.
+    let mut left = inotify_instances();
+    for _ in 0..100 {
+        if left <= first {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        left = inotify_instances();
+    }
+    assert_eq!(left, first, "twenty switches hold one watcher, not twenty");
 }
