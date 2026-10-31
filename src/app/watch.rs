@@ -32,11 +32,7 @@ impl Watch {
             let Ok(event) = event else {
                 return;
             };
-            let ours = event
-                .paths
-                .iter()
-                .any(|path| path.parent() == Some(seen.as_path()));
-            if ours && tx.send(()).is_ok() {
+            if changed(&event, &seen) && tx.send(()).is_ok() {
                 wake();
             }
         });
@@ -84,4 +80,12 @@ impl Watch {
         }
         fired
     }
+}
+
+/// Whether an event means the folder's listing or one of its files changed. Opens, reads and
+/// closes are access events: listing the folder and previewing a picture both open files, so
+/// treating those as changes would reload the folder once per preview, in a loop.
+pub(crate) fn changed(event: &notify::Event, dir: &Path) -> bool {
+    !matches!(event.kind, notify::EventKind::Access(_))
+        && event.paths.iter().any(|path| path.parent() == Some(dir))
 }

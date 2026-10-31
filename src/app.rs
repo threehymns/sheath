@@ -18,6 +18,9 @@ mod sheets;
 mod size;
 mod watch;
 
+#[cfg(test)]
+pub(crate) use watch::changed;
+
 pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, list_drag};
 pub use drop::PlaceAt;

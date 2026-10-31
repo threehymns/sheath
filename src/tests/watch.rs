@@ -138,3 +138,34 @@ fn switching_folders_leaves_no_watcher_behind() {
         "twenty switches hold one watcher, not twenty: {left} against {first}"
     );
 }
+
+// A preview opens its picture, and listing a folder reads it: neither may count as a change,
+// or the reload that follows would open the same file again, in a loop.
+#[test]
+fn opening_a_file_is_not_a_change_to_its_folder() {
+    use notify::event::{AccessKind, AccessMode, DataChange, ModifyKind};
+    use notify::{Event, EventKind};
+    use std::path::Path;
+
+    let dir = Path::new("/tmp/photos");
+    let access = Event::new(EventKind::Access(AccessKind::Open(AccessMode::Any)))
+        .add_path(dir.join("photo.jpg"));
+    assert!(
+        !crate::app::changed(&access, dir),
+        "opening a file to read it is not a change"
+    );
+
+    let written = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+        .add_path(dir.join("photo.jpg"));
+    assert!(
+        crate::app::changed(&written, dir),
+        "writing a file is a change"
+    );
+
+    let elsewhere = Event::new(EventKind::Modify(ModifyKind::Data(DataChange::Content)))
+        .add_path(Path::new("/tmp/other/photo.jpg").to_path_buf());
+    assert!(
+        !crate::app::changed(&elsewhere, dir),
+        "another folder's files are not this folder's change"
+    );
+}
