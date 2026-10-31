@@ -7,15 +7,19 @@ pub enum Setting {
     ShowHidden,
     Inspector,
     GridLayout,
+    FoldersFirst,
+    ConfirmTrash,
     ScrollInertia,
     Overscroll,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 5] = [
+    pub const ALL: [Setting; 7] = [
         Setting::ShowHidden,
         Setting::Inspector,
         Setting::GridLayout,
+        Setting::FoldersFirst,
+        Setting::ConfirmTrash,
         Setting::ScrollInertia,
         Setting::Overscroll,
     ];
@@ -25,6 +29,8 @@ impl Setting {
             Setting::ShowHidden => "show-hidden",
             Setting::Inspector => "inspector",
             Setting::GridLayout => "grid",
+            Setting::FoldersFirst => "folders-first",
+            Setting::ConfirmTrash => "confirm-trash",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -35,6 +41,8 @@ impl Setting {
             Setting::ShowHidden => "hidden",
             Setting::Inspector => "inspector",
             Setting::GridLayout => "grid",
+            Setting::FoldersFirst => "folders-first",
+            Setting::ConfirmTrash => "confirm-trash",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -43,7 +51,11 @@ impl Setting {
     pub fn default_on(self) -> bool {
         match self {
             Setting::ShowHidden | Setting::GridLayout => false,
-            Setting::Inspector | Setting::ScrollInertia | Setting::Overscroll => true,
+            Setting::Inspector
+            | Setting::FoldersFirst
+            | Setting::ConfirmTrash
+            | Setting::ScrollInertia
+            | Setting::Overscroll => true,
         }
     }
 
@@ -52,8 +64,10 @@ impl Setting {
             Setting::ShowHidden => 0,
             Setting::Inspector => 1,
             Setting::GridLayout => 2,
-            Setting::ScrollInertia => 3,
-            Setting::Overscroll => 4,
+            Setting::FoldersFirst => 3,
+            Setting::ConfirmTrash => 4,
+            Setting::ScrollInertia => 5,
+            Setting::Overscroll => 6,
         }
     }
 
@@ -68,6 +82,8 @@ impl Setting {
             Setting::ShowHidden => settings.show_hidden,
             Setting::Inspector => settings.inspector,
             Setting::GridLayout => settings.grid,
+            Setting::FoldersFirst => settings.folders_first,
+            Setting::ConfirmTrash => settings.confirm_trash,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
         }
@@ -78,6 +94,8 @@ impl Setting {
             Setting::ShowHidden => settings.show_hidden = on,
             Setting::Inspector => settings.inspector = on,
             Setting::GridLayout => settings.grid = on,
+            Setting::FoldersFirst => settings.folders_first = on,
+            Setting::ConfirmTrash => settings.confirm_trash = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
         }
@@ -89,9 +107,11 @@ pub struct Settings {
     pub show_hidden: bool,
     pub inspector: bool,
     pub grid: bool,
+    pub folders_first: bool,
+    pub confirm_trash: bool,
     pub scroll_inertia: bool,
     pub overscroll: bool,
-    present: [bool; 5],
+    present: [bool; 7],
 }
 
 impl Default for Settings {
@@ -100,9 +120,11 @@ impl Default for Settings {
             show_hidden: false,
             inspector: true,
             grid: false,
+            folders_first: true,
+            confirm_trash: true,
             scroll_inertia: true,
             overscroll: true,
-            present: [false; 5],
+            present: [false; 7],
         }
     }
 }

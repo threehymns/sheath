@@ -106,6 +106,12 @@ impl App {
         let Some(name) = self.sheet_name(&targets) else {
             return;
         };
+        if !self.config.confirm_trash {
+            if let Err(message) = self.trash_targets(&targets) {
+                self.error = Some(message);
+            }
+            return;
+        }
         self.sheet = Some(Sheet {
             kind: SheetKind::Trash,
             targets,
@@ -266,7 +272,22 @@ impl App {
     }
 
     fn trash_entries(&mut self, sheet: &Sheet) -> Result<(), String> {
-        let items = self.sheet_entries(sheet)?;
+        self.sheet_entries(sheet)?;
+        self.trash_targets(&sheet.targets)
+    }
+
+    fn trash_targets(&mut self, targets: &[String]) -> Result<(), String> {
+        let items: Vec<(PathBuf, String, bool)> = targets
+            .iter()
+            .filter_map(|id| self.entry_snapshot(id))
+            .collect();
+        if items.is_empty() {
+            return Err(if targets.len() > 1 {
+                "Those items are no longer in this folder.".into()
+            } else {
+                "That item is no longer in this folder.".into()
+            });
+        }
         for (path, name, _) in &items {
             trash::delete(path)
                 .map_err(|err| format!("Couldn’t move “{name}” to the Trash: {err}"))?;

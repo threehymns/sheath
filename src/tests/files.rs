@@ -197,3 +197,24 @@ fn there_is_no_paste_until_something_is_copied() {
     app.paste();
     assert!(dir.path().join("file2 copy.txt").exists());
 }
+}
+
+#[test]
+fn folders_first_can_be_turned_off() {
+    let dir = fixture();
+    fs::create_dir(dir.path().join("zeta")).unwrap();
+    let mut app = app(&dir);
+    assert_eq!(
+        names(&app).last(),
+        Some(&"notes.md"),
+        "folders sort above files"
+    );
+
+    app.toggle_folders_first();
+    assert!(!app.config.folders_first);
+    assert_eq!(
+        names(&app).last(),
+        Some(&"zeta"),
+        "files come first when the setting is off"
+    );
+}

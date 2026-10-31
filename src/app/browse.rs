@@ -84,15 +84,21 @@ impl App {
         let path = self.cwd.clone();
         let keep = self.selected.clone();
         let sort = self.sort.clone();
-        if let Some(scan) =
-            Scan::try_read(path.clone(), keep.clone(), sort.clone(), SYNC_SCAN_LIMIT)
-        {
+        let folders_first = self.config.folders_first;
+        if let Some(scan) = Scan::try_read(
+            path.clone(),
+            keep.clone(),
+            sort.clone(),
+            SYNC_SCAN_LIMIT,
+            folders_first,
+        ) {
             self.scan.cancel();
             self.apply_scan(scan);
             return;
         }
-        self.scan
-            .request(path, move |path| Scan::read(path, keep, sort));
+        self.scan.request(path, move |path| {
+            Scan::read(path, keep, sort, folders_first)
+        });
     }
 
     pub fn is_scanning(&self) -> bool {
@@ -113,7 +119,7 @@ impl App {
         self.entries = scan.entries;
         self.error = scan.error;
         self.apply_rules();
-        if scan.sort != self.sort {
+        if scan.sort != self.sort || scan.folders_first != self.config.folders_first {
             self.sort_entries();
         }
         self.apply_filter();
@@ -158,7 +164,12 @@ impl App {
     // The read sorted as asked; a sort change since then reorders the rows here.
     pub fn sort_entries(&mut self) {
         let (column, direction) = self.sort.clone();
-        sort_rows(&mut self.entries, &column, direction);
+        sort_rows(
+            &mut self.entries,
+            &column,
+            direction,
+            self.config.folders_first,
+        );
     }
 
     pub fn entry_hidden(&self, entry: &Entry) -> bool {
@@ -260,6 +271,18 @@ impl App {
         }
     }
 
+    pub fn toggle_folders_first(&mut self) {
+        self.config.folders_first = !self.config.folders_first;
+        self.remember(Setting::FoldersFirst, self.config.folders_first);
+        self.sort_entries();
+        self.apply_filter();
+    }
+
+    pub fn toggle_confirm_trash(&mut self) {
+        self.config.confirm_trash = !self.config.confirm_trash;
+        self.remember(Setting::ConfirmTrash, self.config.confirm_trash);
+    }
+
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
         self.remember(Setting::Inspector, self.inspector.is_open());
@@ -292,6 +315,7 @@ impl App {
             crate::settings::Settings::clear(doc, setting)
         });
         self.apply_rules();
+        self.sort_entries();
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
         if !self.config.scroll_inertia {

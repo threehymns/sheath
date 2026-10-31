@@ -1,5 +1,6 @@
 use crate::app::Entry;
 use rune_kit::SortDir;
+use std::cmp::Ordering;
 use std::fs;
 use std::path::PathBuf;
 
@@ -11,11 +12,22 @@ pub(super) struct Scan {
     pub(super) error: Option<String>,
     pub(super) keep: Option<String>,
     pub(super) sort: (String, SortDir),
+    pub(super) folders_first: bool,
 }
 
-pub(super) fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir) {
+pub(super) fn sort_rows(
+    entries: &mut [Entry],
+    column: &str,
+    direction: SortDir,
+    folders_first: bool,
+) {
     entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| {
+        let folders = if folders_first {
+            b.is_dir.cmp(&a.is_dir)
+        } else {
+            Ordering::Equal
+        };
+        folders.then_with(|| {
             let order = match column {
                 "size" => a.size.cmp(&b.size),
                 "modified" => compare_time(a.modified, b.modified),
@@ -30,7 +42,12 @@ pub(super) fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir)
 pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
 
 impl Scan {
-    pub(super) fn read(path: PathBuf, keep: Option<String>, sort: (String, SortDir)) -> Scan {
+    pub(super) fn read(
+        path: PathBuf,
+        keep: Option<String>,
+        sort: (String, SortDir),
+        folders_first: bool,
+    ) -> Scan {
         let mut entries = Vec::new();
         let mut error = None;
         match fs::read_dir(&path) {
@@ -45,13 +62,14 @@ impl Scan {
                 error = Some(format!("Couldn’t open {}: {err}", path.display()));
             }
         }
-        sort_rows(&mut entries, &sort.0, sort.1);
+        sort_rows(&mut entries, &sort.0, sort.1, folders_first);
         Scan {
             path,
             entries,
             error,
             keep,
             sort,
+            folders_first,
         }
     }
 
@@ -60,6 +78,7 @@ impl Scan {
         keep: Option<String>,
         sort: (String, SortDir),
         limit: usize,
+        folders_first: bool,
     ) -> Option<Scan> {
         let read = fs::read_dir(&path).ok()?;
         let mut items = Vec::with_capacity(limit + 1);
@@ -78,13 +97,14 @@ impl Scan {
                 entries.push(entry);
             }
         }
-        sort_rows(&mut entries, &sort.0, sort.1);
+        sort_rows(&mut entries, &sort.0, sort.1, folders_first);
         Some(Scan {
             path,
             entries,
             error: None,
             keep,
             sort,
+            folders_first,
         })
     }
 }

@@ -253,6 +253,39 @@ fn general_settings(s: &App, k: &Kit) -> El {
             ),
         ],
     );
+    let folders_first = Switch::new(s.config.folders_first)
+        .label("Folders first")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_folders_first())
+        .build(k)
+        .key("setting-folders-first");
+    let confirm_trash = Switch::new(s.config.confirm_trash)
+        .label("Confirm before trashing")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_confirm_trash())
+        .build(k)
+        .key("setting-confirm-trash");
+    let behavior = settings_section(
+        k,
+        "settings-behavior",
+        "Behavior",
+        vec![
+            settings_row(
+                k,
+                &icons::LIST,
+                "Folders first",
+                Some("Keep folders above files in the list and the grid."),
+                setting_control(s, k, Setting::FoldersFirst, folders_first),
+            ),
+            settings_row(
+                k,
+                &theme::icons::TRASH,
+                "Confirm before trashing",
+                Some("Ask before moving items to the Trash."),
+                setting_control(s, k, Setting::ConfirmTrash, confirm_trash),
+            ),
+        ],
+    );
     let scrolling = settings_section(
         k,
         "settings-scrolling",
@@ -300,6 +333,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .w_full()
         .gap(24.0)
         .child(browser)
+        .child(behavior)
         .child(scrolling)
         .child(files);
     if let Some(error) = s.store.error(config::CONFIG) {

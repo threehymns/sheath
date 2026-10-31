@@ -454,3 +454,26 @@ fn resetting_a_setting_takes_its_key_out_of_the_config() {
         "the setting left alone stays: {config}"
     );
 }
+
+#[test]
+fn the_behavior_switches_save_their_settings() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    assert!(rt.state.config.folders_first, "folders start above files");
+    click(&mut rt, "setting-folders-first");
+    assert!(!rt.state.config.folders_first);
+    assert!(rt.state.config.confirm_trash, "trashing asks first");
+    click(&mut rt, "setting-confirm-trash");
+    assert!(!rt.state.config.confirm_trash);
+
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("folders-first #false"), "{config}");
+    assert!(config.contains("confirm-trash #false"), "{config}");
+    let saved = saved_settings(&dir);
+    assert!(!saved.folders_first);
+    assert!(!saved.confirm_trash);
+}
