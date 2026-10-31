@@ -438,6 +438,14 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                     s.reveal_selected();
                 }),
         )
+        .item(
+            MenuItem::new("Open Terminal Here")
+                .icon(&icons::TERMINAL)
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.open_terminal_in_selection();
+                }),
+        )
         .separator()
         .item(
             MenuItem::new(if many {

@@ -182,7 +182,21 @@ impl App {
     }
 
     pub fn open_terminal_here(&mut self) {
-        if let Err(err) = super::paths::open_terminal(&self.cwd) {
+        let path = self.cwd.clone();
+        if let Err(err) = super::paths::open_terminal(&path) {
+            self.error = Some(err);
+        }
+    }
+
+    /// Opens a terminal in the chosen folder, or in the folder on screen when the chosen row is a
+    /// file.
+    pub fn open_terminal_in_selection(&mut self) {
+        let path = self
+            .selected_entry()
+            .filter(|entry| entry.is_dir)
+            .map(|entry| entry.path.clone())
+            .unwrap_or_else(|| self.cwd.clone());
+        if let Err(err) = super::paths::open_terminal(&path) {
             self.error = Some(err);
         }
     }

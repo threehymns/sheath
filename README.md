@@ -67,7 +67,7 @@ unsupported by this backend.
 | Copy path | Shift+Cmd/Ctrl+C |
 | Copy name | The row menu, or the command bar: `Copy Name` |
 | Command bar | Cmd/Ctrl+P |
-| Open a terminal here | The command bar: `Open Terminal Here` |
+| Open a terminal here | The row menu, or the command bar: `Open Terminal Here` |
 | Reveal in the system file manager | The row menu, or the command bar: `Reveal in File Manager` |
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places, or the folder menu's `Add This Folder to the Sidebar` |
