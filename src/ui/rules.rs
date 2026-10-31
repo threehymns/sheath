@@ -138,6 +138,9 @@ fn rule_section(s: &App, k: &Kit, kind: Kind, read_only: bool) -> El {
         title,
         add_rule_button(k, kind, read_only),
         rows,
+        // A form springs the card open around it, so the card keeps its rows inside its edge;
+        // a row in hand rides above the card's rows and must not be cut by it.
+        s.rule_drag.dragging().is_none(),
     )
 }
 

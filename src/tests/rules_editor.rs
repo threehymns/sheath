@@ -112,6 +112,9 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
+    // The card springs open around the form, and its own edge reveals the form as it grows, so
+    // the properties at the form's foot are not there to press until the card has reached them.
+    rt.frame(0.3);
 
     // The field beside `layout` lists the values the file accepts: list, grid, inherit.
     click(&mut rt, "prop-select-layout-trigger");
@@ -155,6 +158,9 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
+    // The card reveals the form as it springs open around it, so its foot is pressable once the
+    // card has grown to it.
+    rt.frame(0.3);
 
     // The line reveals its remove button while the pointer rests on it.
     let (x, y) = rt.find("prop-layout").expect("the property has a line");

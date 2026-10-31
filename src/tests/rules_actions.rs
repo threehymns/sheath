@@ -106,6 +106,72 @@ fn typing_that_makes_the_draft_dirty_animates_the_save_button_in() {
 }
 
 #[test]
+fn an_opening_form_is_revealed_by_its_card_instead_of_painting_over_the_section_below() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "folder-rule \"here\" {\n    match path=\"/old\"\n}\n",
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    click(&mut rt, "open-settings");
+    click(&mut rt, "settings-tab-rules");
+    rt.frame(0.3);
+
+    // A press and one frame, to catch the card partway open rather than settled.
+    let (x, y) = rt.find("rule-here-0").expect("the rule is on screen");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+
+    let (form, _) = rt.presented("rule-editor-0").expect("the form is drawn");
+    let (card, _) = rt
+        .presented("settings-folder-rules-card")
+        .expect("the card is drawn");
+    let (below, _) = rt
+        .presented("settings-entry-rules-label")
+        .expect("the section below is drawn");
+    assert!(
+        form[3] > card[3] + 80.0,
+        "the form is taller than the card holding it yet: {form:?} in {card:?}"
+    );
+    let shown = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("rule-editor-0"))
+        .expect("the form is drawn")
+        .visible;
+    assert!(
+        shown[1] + shown[3] <= card[1] + card[3] + 0.5,
+        "the card's edge is what reveals the form: {shown:?} in {card:?}"
+    );
+    assert!(
+        shown[1] + shown[3] <= below[1] + 0.5,
+        "and no part of it is painted over the section below: {shown:?} over {below:?}"
+    );
+
+    for _ in 0..40 {
+        rt.frame(1.0 / 60.0);
+    }
+    let shown = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("rule-editor-0"))
+        .expect("the form is still drawn")
+        .visible;
+    let (form, _) = rt
+        .presented("rule-editor-0")
+        .expect("the form is still drawn");
+    assert!(
+        (shown[3] - form[3]).abs() < 0.5,
+        "settled, the card holds the whole form: {shown:?} in {form:?}"
+    );
+}
+
+#[test]
 fn an_open_rule_form_takes_the_place_of_its_row() {
     let dir = fixture();
     fs::write(
