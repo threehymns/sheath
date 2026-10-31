@@ -42,10 +42,13 @@ pub enum Action {
     CopyName,
     AddPlace,
     MakeAlias,
+    ToggleLayout,
+    ToggleInspector,
+    ToggleFoldersFirst,
 }
 
 impl Action {
-    pub const ALL: [Action; 35] = [
+    pub const ALL: [Action; 38] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -81,6 +84,9 @@ impl Action {
         Action::CopyName,
         Action::AddPlace,
         Action::MakeAlias,
+        Action::ToggleLayout,
+        Action::ToggleInspector,
+        Action::ToggleFoldersFirst,
     ];
 
     pub fn ignores_shift(self) -> bool {
@@ -124,6 +130,9 @@ impl Action {
             Action::CopyName => "copy-name",
             Action::AddPlace => "add-place",
             Action::MakeAlias => "make-alias",
+            Action::ToggleLayout => "toggle-layout",
+            Action::ToggleInspector => "toggle-inspector",
+            Action::ToggleFoldersFirst => "toggle-folders-first",
         }
     }
 
@@ -164,6 +173,9 @@ impl Action {
             Action::CopyName => "Copy Name",
             Action::AddPlace => "Add This Folder to the Sidebar",
             Action::MakeAlias => "Make Alias",
+            Action::ToggleLayout => "List or Grid Layout",
+            Action::ToggleInspector => "Show or Hide the Inspector",
+            Action::ToggleFoldersFirst => "Keep Folders First",
         }
     }
 
@@ -185,7 +197,10 @@ impl Action {
             | Action::SearchSubfolders
             | Action::CopyName
             | Action::AddPlace
-            | Action::MakeAlias => None,
+            | Action::MakeAlias
+            | Action::ToggleLayout
+            | Action::ToggleInspector
+            | Action::ToggleFoldersFirst => None,
             _ => Some(self.builtin_chord()),
         }
     }

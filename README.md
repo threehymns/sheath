@@ -60,7 +60,8 @@ unsupported by this backend.
 | Search the folders below | The folder button beside the search field |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | Keep or drop a column, or sort folders first | Right-click a column header |
-| List or grid | The layout button in the toolbar |
+| List or grid | The layout button in the toolbar, or the command bar |
+| Inspector on or off | The inspector button in the toolbar, or the command bar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Delete for good | Shift+Delete (Shift+Cmd+Backspace on macOS) |
 | New folder | Shift+Cmd/Ctrl+N, the toolbar button, or an empty folder's button |
@@ -189,7 +190,8 @@ command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forwa
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
 `copy-path`, `copy-name`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
-`search-subfolders`, `add-place`, `make-alias`,
+`search-subfolders`, `add-place`, `make-alias`, `toggle-layout`, `toggle-inspector`,
+`toggle-folders-first`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.

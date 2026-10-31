@@ -308,3 +308,35 @@ fn the_command_bar_draws_shortcuts_as_keycaps() {
         "the rename row draws its chord {first:?} on a key in a tray"
     );
 }
+
+#[test]
+fn the_command_bar_reaches_the_toolbars_switches() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    // The list is longer than the bar, so each command is filtered to before it is picked.
+    let run = |rt: &mut rune::Runtime<crate::app::App>, query: &str, key: &str| {
+        rt.key(command_bar_event(&rt.state, false));
+        rt.frame(0.1);
+        for ch in query.chars() {
+            rt.key(KeyEvent {
+                key: Key::Text(ch.to_string()),
+                mods: Mods::default(),
+            });
+            rt.frame(0.05);
+        }
+        assert!(rt.find(key).is_some(), "{key} is listed for {query:?}");
+        click(rt, key);
+    };
+
+    run(&mut rt, "layout", "command-toggle-layout");
+    assert!(rt.state.is_grid(), "the command flips the layout");
+
+    run(&mut rt, "inspector", "command-toggle-inspector");
+    assert!(!rt.state.inspector.is_open(), "the inspector closes");
+
+    run(&mut rt, "folders", "command-toggle-folders-first");
+    assert!(!rt.state.config.folders_first);
+}
