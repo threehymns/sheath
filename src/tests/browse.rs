@@ -115,6 +115,23 @@ fn a_reload_reads_the_folder_off_the_main_thread() {
 }
 
 #[test]
+fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    // The read is asked for with the folder's default name/ascending sort...
+    app.reload();
+    // ...and the header is clicked while it runs, as a user would: the rows must arrive in
+    // the sort that is showing, not the one the read applied.
+    app.sort_by("name");
+    app.settle_scan();
+    assert_eq!(
+        names(&app),
+        ["alpha", "notes.md", "file10.txt", "file2.txt"],
+        "folders first, then names descending"
+    );
+}
+
+#[test]
 fn a_header_click_sorts_and_clicking_again_reverses_it() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));

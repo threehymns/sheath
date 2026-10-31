@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::rules::SortKey;
 use crate::settings::Setting;
 use rune_kit::SortDir;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -25,10 +25,28 @@ pub(super) struct Scan {
     error: Option<String>,
     /// The row the read was asked to keep selected, if the folder still has it.
     keep: Option<String>,
+    /// The sort the read applied, so a landing sorts again only when the list's sort moved
+    /// while the read ran.
+    sort: (String, SortDir),
+}
+
+/// Orders a folder's rows: folders first, then the list's sort column and direction. The read
+/// runs it off the main thread, so the frame that opens a folder only filters the rows.
+fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir) {
+    entries.sort_by(|a, b| {
+        b.is_dir.cmp(&a.is_dir).then_with(|| {
+            let order = match column {
+                "size" => a.size.cmp(&b.size),
+                "modified" => compare_time(a.modified, b.modified),
+                _ => rune_kit::natural_cmp(&a.name, &b.name),
+            };
+            direction.apply(order)
+        })
+    });
 }
 
 impl Scan {
-    fn read(path: PathBuf, keep: Option<String>) -> Scan {
+    fn read(path: PathBuf, keep: Option<String>, sort: (String, SortDir)) -> Scan {
         let mut entries = Vec::new();
         let mut error = None;
         match fs::read_dir(&path) {
@@ -43,11 +61,13 @@ impl Scan {
                 error = Some(format!("Couldn’t open {}: {err}", path.display()));
             }
         }
+        sort_rows(&mut entries, &sort.0, sort.1);
         Scan {
             path,
             entries,
             error,
             keep,
+            sort,
         }
     }
 }
@@ -129,8 +149,9 @@ impl App {
     pub fn reload(&mut self) {
         let path = self.cwd.clone();
         let keep = self.selected.clone();
+        let sort = self.sort.clone();
         self.scan
-            .request(path.clone(), move |path| Scan::read(path, keep));
+            .request(path.clone(), move |path| Scan::read(path, keep, sort));
     }
 
     /// Applies the folder read that landed, if one did: its rows, its error, the presentation
@@ -147,7 +168,11 @@ impl App {
         self.entries = scan.entries;
         self.error = scan.error;
         self.apply_rules();
-        self.sort_entries();
+        // The read sorted with the list's sort when it was asked for it; a rule or a header
+        // click that moved the sort since then orders the rows here.
+        if scan.sort != self.sort {
+            self.sort_entries();
+        }
         self.apply_filter();
         // What a file operation made or renamed outranks what the read kept: those rows are
         // what the user just asked for.
@@ -201,16 +226,7 @@ impl App {
     /// Folders first, then the list's sort column and direction.
     pub fn sort_entries(&mut self) {
         let (column, direction) = self.sort.clone();
-        self.entries.sort_by(|a, b| {
-            b.is_dir.cmp(&a.is_dir).then_with(|| {
-                let order = match column.as_str() {
-                    "size" => a.size.cmp(&b.size),
-                    "modified" => compare_time(a.modified, b.modified),
-                    _ => rune_kit::natural_cmp(&a.name, &b.name),
-                };
-                direction.apply(order)
-            })
-        });
+        sort_rows(&mut self.entries, &column, direction);
     }
 
     /// Whether the rules or the folder's own policy hide `entry`: an entry rule's `hidden`
@@ -242,14 +258,19 @@ impl App {
                 !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
             })
             .collect();
-        // The hidden and filtered rows drop out of the selection with the row itself.
-        let visible: BTreeSet<String> = self
+        // The hidden and filtered rows drop out of the selection with the row itself. The set
+        // borrows the rows' ids, so pruning a selection allocates nothing per row.
+        let visible: HashSet<&str> = self
             .visible
             .iter()
-            .map(|&i| self.entries[i].id.clone())
+            .map(|&i| self.entries[i].id.as_str())
             .collect();
-        self.selection.retain(|id| visible.contains(id));
-        if self.anchor.as_ref().is_some_and(|id| !visible.contains(id)) {
+        self.selection.retain(|id| visible.contains(id.as_str()));
+        if self
+            .anchor
+            .as_ref()
+            .is_some_and(|id| !visible.contains(id.as_str()))
+        {
             self.anchor = None;
         }
         if self
