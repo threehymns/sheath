@@ -1,4 +1,5 @@
 use super::helpers::*;
+use rune::WheelEvent;
 use std::fs;
 
 /// The inotify instances this process holds open; a count that keeps climbing means leaked
@@ -45,6 +46,52 @@ fn a_file_added_by_someone_else_lands_in_the_list() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert!(landed, "the watcher reloaded the folder the file landed in");
+}
+
+// A watch update above the reading position must not push the rows the reader is on.
+#[test]
+fn a_file_added_above_the_view_leaves_the_rows_where_they_are() {
+    let dir = long_folder(60);
+    let mut app = app(&dir);
+    app.config.scroll_inertia = false;
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    app.watch(wake);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    let (x, y) = rt.find("files-table").expect("the list is on screen");
+    for _ in 0..3 {
+        rt.wheel_event(WheelEvent::new(0.0, -120.0).at(x, y));
+        rt.frame(1.0 / 60.0);
+    }
+    for _ in 0..30 {
+        rt.frame(1.0 / 60.0);
+    }
+    let scrolled = scroll_offset(&rt);
+    assert!(scrolled > 100.0, "the list is scrolled down: {scrolled}");
+    let row = rt
+        .find("f:file20.txt")
+        .expect("a row below the top is on screen")
+        .1;
+
+    fs::write(dir.path().join("000-arrived.txt"), "x").unwrap();
+    let mut landed = false;
+    for _ in 0..100 {
+        rt.frame(0.1);
+        if shown(&rt, "000-arrived.txt") {
+            landed = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(landed, "the watcher landed a file above the view");
+    let after = rt
+        .find("f:file20.txt")
+        .expect("the same row is still on screen")
+        .1;
+    assert!(
+        (after - row).abs() < 1.0,
+        "the row the reader was on stayed put: {row} -> {after}"
+    );
 }
 
 #[test]
