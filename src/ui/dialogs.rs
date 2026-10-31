@@ -48,6 +48,17 @@ pub(super) fn sheet_layer(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>)
             "A folder path. Use ~ for your home folder.",
         ),
         SheetKind::Trash => trash_sheet(s, sheet, k, layers),
+        SheetKind::Navigate => prompt_sheet(
+            sheet,
+            k,
+            layers,
+            "go-to",
+            "Go to Folder",
+            "Type a path to open its folder.",
+            "Go",
+            "Folder path",
+            "Use ~ for your home folder. Press Return to go. Escape cancels.",
+        ),
     }
 }
 
@@ -75,14 +86,17 @@ fn prompt_sheet(
         .w_full()
         .px(16.0)
         .pb(16.0)
-        .gap(10.0)
-        .child(
+        .gap(10.0);
+    if !sheet.name.is_empty() {
+        body = body.child(
             text(sheet.name.clone())
                 .font(k.ty.ui_medium)
                 .color(k.c.text_base)
                 .max_lines(2)
                 .w_full(),
-        )
+        );
+    }
+    body = body
         .child(input)
         .child(text(hint).font(k.ty.caption()).color(k.c.text_faint).wrap());
     if let Some(error) = &sheet.error {

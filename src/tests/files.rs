@@ -197,6 +197,26 @@ fn there_is_no_paste_until_something_is_copied() {
     app.paste();
     assert!(dir.path().join("file2 copy.txt").exists());
 }
+
+#[test]
+fn new_file_picks_a_free_name_and_selects_it() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    let mut tx = Tx::default();
+
+    app.new_file(&mut tx);
+    app.settle_scan();
+    assert!(dir.path().join("New File.txt").is_file());
+    assert_eq!(app.selected.as_deref(), Some("f:New File.txt"));
+    assert_eq!(
+        fs::read_to_string(dir.path().join("New File.txt")).unwrap(),
+        ""
+    );
+
+    app.new_file(&mut tx);
+    app.settle_scan();
+    assert!(dir.path().join("New File 2.txt").is_file());
+    assert_eq!(app.selected.as_deref(), Some("f:New File 2.txt"));
 }
 
 #[test]

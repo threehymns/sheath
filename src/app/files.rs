@@ -38,6 +38,37 @@ fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 impl App {
+    pub fn new_file(&mut self, _tx: &mut Tx) {
+        let mut name = "New File.txt".to_owned();
+        let mut n = 2;
+        while self.cwd.join(&name).exists() {
+            name = format!("New File {n}.txt");
+            n += 1;
+        }
+        match fs::write(self.cwd.join(&name), "") {
+            Ok(()) => {
+                self.pending_select = Some((vec![format!("f:{name}")], true));
+                self.reload();
+                self.error = None;
+            }
+            Err(err) => self.error = Some(format!("Couldn’t create “{name}”: {err}")),
+        }
+    }
+
+    pub fn copy_paths(&mut self, tx: &mut Tx) {
+        let paths: Vec<String> = self
+            .selected_ids()
+            .iter()
+            .filter_map(|id| self.entry_snapshot(id))
+            .map(|(path, _, _)| path.display().to_string())
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        tx.copy(paths.join("\n"));
+        self.error = None;
+    }
+
     pub fn new_folder(&mut self, _tx: &mut Tx) {
         let mut name = "New Folder".to_owned();
         let mut n = 2;

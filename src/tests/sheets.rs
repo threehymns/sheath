@@ -211,3 +211,40 @@ fn the_delete_key_asks_before_trashing() {
     );
     assert!(dir.path().join("file2.txt").exists());
 }
+
+#[test]
+fn go_to_folder_opens_the_typed_path() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    let target = dir.path().join("alpha");
+
+    app.begin_go_to();
+    assert_eq!(
+        app.sheet.as_ref().map(|s| s.kind),
+        Some(SheetKind::Navigate)
+    );
+    app.sheet
+        .as_mut()
+        .unwrap()
+        .edit
+        .replace_text(target.display().to_string());
+    app.submit_sheet(&mut Tx::default());
+    app.settle_scan();
+
+    assert!(app.sheet.is_none());
+    assert_eq!(app.cwd, target);
+}
+
+#[test]
+fn go_to_folder_keeps_the_sheet_open_when_the_path_is_not_a_folder() {
+    let dir = fixture();
+    let mut app = app(&dir);
+
+    app.begin_go_to();
+    app.sheet.as_mut().unwrap().edit.replace_text("nowhere");
+    app.submit_sheet(&mut Tx::default());
+
+    let sheet = app.sheet.as_ref().expect("the sheet stays open");
+    assert!(sheet.error.as_deref().is_some_and(|e| e.contains("folder")));
+    assert_eq!(app.cwd, dir.path());
+}

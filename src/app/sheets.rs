@@ -11,6 +11,7 @@ pub enum SheetKind {
     RenamePlace,
     Move,
     Trash,
+    Navigate,
 }
 
 pub struct Sheet {
@@ -121,6 +122,19 @@ impl App {
         });
     }
 
+    pub fn begin_go_to(&mut self) {
+        let mut edit = TextEdit::new(self.cwd.display().to_string());
+        edit.set_selection(0, edit.text.len());
+        edit.focused = true;
+        self.sheet = Some(Sheet {
+            kind: SheetKind::Navigate,
+            targets: Vec::new(),
+            name: String::new(),
+            edit,
+            error: None,
+        });
+    }
+
     fn sheet_name(&self, targets: &[String]) -> Option<String> {
         match targets {
             [] => None,
@@ -150,6 +164,7 @@ impl App {
             SheetKind::RenamePlace => self.rename_place_on_disk(&sheet),
             SheetKind::Move => self.move_entries(&sheet),
             SheetKind::Trash => self.trash_entries(&sheet),
+            SheetKind::Navigate => self.go_to(&sheet),
         };
         if let Err(message) = result {
             let refocus = sheet.kind != SheetKind::Trash;
@@ -294,6 +309,15 @@ impl App {
         }
         self.reload();
         self.error = None;
+        Ok(())
+    }
+
+    fn go_to(&mut self, sheet: &Sheet) -> Result<(), String> {
+        let destination = destination_path(&sheet.edit.text, &self.cwd)?;
+        if !destination.is_dir() {
+            return Err(format!("“{}” isn’t a folder.", destination.display()));
+        }
+        self.navigate(destination);
         Ok(())
     }
 }

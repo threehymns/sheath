@@ -204,6 +204,7 @@ impl App {
             Action::Forward => self.can_forward(),
             Action::EnclosingFolder => self.can_up(),
             Action::Rename => self.selection_len() == 1,
+            Action::CopyPath => self.selection_len() > 0,
             Action::Move | Action::Trash | Action::Copy | Action::Cut | Action::Duplicate => {
                 self.selection_len() > 0
             }
@@ -230,13 +231,16 @@ impl App {
             Action::Back => self.back(),
             Action::Forward => self.forward(),
             Action::EnclosingFolder => self.up(),
+            Action::GoToFolder => self.begin_go_to(),
             Action::Refresh => self.reload(),
             Action::NewFolder => self.new_folder(tx),
+            Action::NewFile => self.new_file(tx),
             Action::ToggleHidden => self.toggle_hidden(),
             Action::Rename => self.begin_rename(),
             Action::Move => self.begin_move(),
             Action::Trash => self.begin_trash(),
             Action::Copy => self.copy_selection(false),
+            Action::CopyPath => self.copy_paths(tx),
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
