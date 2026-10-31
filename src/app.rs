@@ -93,8 +93,10 @@ pub struct App {
     // Why the preview is not a picture, when this app's decoder could not read it.
     pub preview_error: Option<String>,
     previews: preview::Previewer,
-    // Only a folder on demand: walking a tree costs too much to do for every row.
+    // Only a folder on demand: walking a tree costs too much to do for every row. The walk runs
+    // on a worker, so the frame that asks for it never waits.
     pub folder_size: Option<(u64, usize)>,
+    sizer: size::Sizer,
     // Whether a search reaches the folders below the one on screen.
     pub search_all: bool,
     pub search_truncated: bool,
@@ -233,6 +235,7 @@ impl App {
             preview_error: None,
             previews: preview::Previewer::default(),
             folder_size: None,
+            sizer: size::Sizer::default(),
             search_all: false,
             search_truncated: false,
             parked: None,
@@ -418,6 +421,11 @@ impl App {
         self.watch.start(&self.cwd, wake);
     }
 
+    /// Whether a folder's size is still being walked, so the inspector can say so.
+    pub fn folder_size_pending(&self) -> bool {
+        self.sizer.is_pending()
+    }
+
     #[cfg(test)]
     pub(crate) fn watchers(&self) -> usize {
         self.watch.watchers()
@@ -431,6 +439,7 @@ impl App {
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
+    s.sizer.set_waker(wake.clone());
     s.previews.set_waker(wake.clone());
     s.previews
         .attach(std::sync::Arc::new(rune::ImageCache::new(wake.clone())));

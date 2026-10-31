@@ -254,6 +254,7 @@ fn size_label(s: &App, entry: &crate::app::Entry) -> String {
     }
     match s.folder_size {
         Some((bytes, items)) => format!("{} · {} items", format::size(bytes), items),
+        None if s.folder_size_pending() => "Calculating…".into(),
         None => "—".into(),
     }
 }

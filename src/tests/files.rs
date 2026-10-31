@@ -271,6 +271,11 @@ fn a_folder_size_is_read_on_demand_and_forgotten_with_the_selection() {
         "a folder's size is not read up front"
     );
     app.calculate_folder_size();
+    assert!(
+        app.folder_size.is_none(),
+        "the press starts a walk on a worker instead of doing it in the frame"
+    );
+    assert!(app.settle_size(), "the finished walk lands");
     assert_eq!(
         app.folder_size,
         Some((3, 2)),
@@ -281,6 +286,22 @@ fn a_folder_size_is_read_on_demand_and_forgotten_with_the_selection() {
     assert!(
         app.folder_size.is_none(),
         "choosing another row drops the old answer"
+    );
+}
+
+#[test]
+fn a_folder_size_that_lands_after_the_selection_moved_is_dropped() {
+    let dir = fixture();
+    fs::write(dir.path().join("alpha").join("a.txt"), "abc").unwrap();
+    let mut app = app(&dir);
+
+    app.select_id("f:alpha");
+    app.calculate_folder_size();
+    app.select_id("f:notes.md");
+    assert!(!app.settle_size(), "a stale walk is not taken");
+    assert!(
+        app.folder_size.is_none(),
+        "another row never shows the size of the folder before it"
     );
 }
 

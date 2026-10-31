@@ -26,6 +26,7 @@ impl App {
         self.preview_image = None;
         self.preview_error = None;
         self.previews.cancel();
+        self.sizer.cancel();
         self.folder_size = None;
     }
 
@@ -37,11 +38,36 @@ impl App {
             return;
         }
         let path = entry.path.clone();
-        self.folder_size = Some(super::size::folder_size(&path));
+        self.sizer.request(&path);
+    }
+
+    /// A finished walk, if the folder it measured is still the one chosen.
+    pub(crate) fn land_folder_size(&mut self) -> bool {
+        let Some(total) = self.sizer.take() else {
+            return false;
+        };
+        if self
+            .selected_entry()
+            .is_none_or(|entry| entry.path != total.path)
+        {
+            return false;
+        }
+        self.folder_size = Some((total.bytes, total.items));
+        true
+    }
+
+    /// Wait for the walk, then take its answer. Tests only: a window lands sizes in `poll`.
+    #[cfg(test)]
+    pub(crate) fn settle_size(&mut self) -> bool {
+        while self.sizer.is_pending() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        self.land_folder_size()
     }
 
     pub(super) fn focus_id(&mut self, id: &str) {
         self.selected = Some(id.to_owned());
+        self.sizer.cancel();
         self.folder_size = None;
         let found = self
             .entries
