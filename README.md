@@ -126,7 +126,7 @@ entry-rule "config" {
 }
 ```
 
-A `folder-rule` sets `layout` (`list`, `grid`), `sort` (`name`, `size`, `modified`), `direction`
+A `folder-rule` sets `layout` (`list`, `grid`), `sort` (`name`, `kind`, `size`, `modified`), `direction`
 (`ascending`, `descending`) and `show-hidden`; an `entry-rule` sets `hidden`. Any property takes
 `inherit` to undo what an earlier rule said.
 

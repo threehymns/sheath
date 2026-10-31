@@ -349,6 +349,7 @@ impl App {
 
     pub fn resize_column(&mut self, column: &str, width: f32) {
         match column {
+            "kind" => self.kind_width = width.clamp(80.0, 320.0),
             "size" => self.size_width = width.clamp(64.0, 320.0),
             "modified" => self.date_width = width.clamp(100.0, 420.0),
             _ => {}
@@ -357,6 +358,7 @@ impl App {
 
     pub fn reset_column(&mut self, column: &str) {
         match column {
+            "kind" => self.kind_width = 150.0,
             "size" => self.size_width = 92.0,
             "modified" => self.date_width = 158.0,
             _ => {}

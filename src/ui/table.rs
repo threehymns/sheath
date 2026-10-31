@@ -85,6 +85,16 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
         .child(header_cell(
             k,
             style,
+            "kind",
+            "Kind",
+            Some(s.kind_width),
+            Align::Start,
+            column,
+            direction,
+        ))
+        .child(header_cell(
+            k,
+            style,
             "size",
             "Size",
             Some(s.size_width),
@@ -246,6 +256,7 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle, now: DateTime
         line.hover(style.stripe.mix(style.selected, 0.5))
     };
     line.child(name_cell(s, i, k, style))
+        .child(kind_cell(s, i, style, s.kind_width))
         .child(size_cell(s, i, style, s.size_width))
         .child(modified_cell(s, i, style, s.date_width, now))
 }
@@ -301,6 +312,19 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .px(style.cell_pad)
         .center_y()
         .child(content)
+}
+
+fn kind_cell(s: &App, i: usize, style: TableStyle, width: f32) -> El {
+    let Some(&index) = s.visible.get(i) else {
+        return row();
+    };
+    row().w(width).h_full().px(style.cell_pad).center_y().child(
+        text(s.entries[index].kind().to_owned())
+            .font(style.font)
+            .color(style.muted)
+            .truncate()
+            .shrink(),
+    )
 }
 
 fn size_cell(s: &App, i: usize, style: TableStyle, width: f32) -> El {

@@ -49,7 +49,7 @@ impl RuleProp {
     pub fn options(self) -> &'static [&'static str] {
         match self {
             RuleProp::Layout => &["list", "grid", "inherit"],
-            RuleProp::Sort => &["name", "size", "modified", "inherit"],
+            RuleProp::Sort => &["name", "kind", "size", "modified", "inherit"],
             RuleProp::Direction => &["ascending", "descending", "inherit"],
             RuleProp::ShowHidden | RuleProp::Hidden => &["show", "hide", "inherit"],
         }
@@ -102,6 +102,7 @@ impl RuleProp {
                     Prop::Inherit
                 } else {
                     Prop::Set(match value {
+                        "kind" => SortKey::Kind,
                         "size" => SortKey::Size,
                         "modified" => SortKey::Modified,
                         _ => SortKey::Name,

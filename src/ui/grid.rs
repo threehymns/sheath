@@ -79,6 +79,7 @@ fn grid_toolbar(s: &App, k: &'static Kit) -> El {
                 .fill(style.rule),
         )
         .child(sort("name", "Name"))
+        .child(sort("kind", "Kind"))
         .child(sort("size", "Size"))
         .child(sort("modified", "Date Modified"))
 }

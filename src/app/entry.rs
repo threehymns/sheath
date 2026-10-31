@@ -11,6 +11,8 @@ pub struct Entry {
     pub name_key: String,
     pub name: String,
     pub path: PathBuf,
+    // Read once, so sorting and the Kind column need no per-frame work.
+    kind: String,
     pub is_dir: bool,
     pub is_symlink: bool,
     pub size: u64,
@@ -37,11 +39,13 @@ impl Entry {
         let is_dir = meta.is_dir();
         // A colon keeps the id clear of the `/`-separated key paths Rune uses.
         let id = format!("f:{name}");
+        let kind = crate::format::kind(&name, is_dir, is_symlink);
         Some(Entry {
             name_key: format!("name-{id}"),
             id,
             name,
             path,
+            kind,
             is_dir,
             is_symlink,
             size: if is_dir { 0 } else { meta.len() },
@@ -56,8 +60,8 @@ impl Entry {
         self.name.starts_with('.')
     }
 
-    pub fn kind(&self) -> String {
-        crate::format::kind(&self.name, self.is_dir, self.is_symlink)
+    pub fn kind(&self) -> &str {
+        &self.kind
     }
 }
 

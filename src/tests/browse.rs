@@ -264,3 +264,35 @@ fn typing_a_name_jumps_to_the_row() {
         assert_eq!(rt.state.selected.as_deref(), Some(expected));
     }
 }
+
+#[test]
+fn sorting_by_kind_groups_the_same_kinds_together() {
+    let dir = fixture();
+    let mut app = app(&dir);
+
+    app.sort_by("kind");
+    let kinds: Vec<&str> = app.visible.iter().map(|&i| app.entries[i].kind()).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            "Folder",
+            "Markdown document",
+            "Text document",
+            "Text document"
+        ],
+        "folders lead, then the kinds read alphabetically"
+    );
+
+    app.sort_by("kind");
+    let kinds: Vec<&str> = app.visible.iter().map(|&i| app.entries[i].kind()).collect();
+    assert_eq!(
+        kinds.first(),
+        Some(&"Folder"),
+        "folders stay first when the direction flips"
+    );
+    assert_eq!(
+        kinds.last(),
+        Some(&"Markdown document"),
+        "and the rest read backwards"
+    );
+}

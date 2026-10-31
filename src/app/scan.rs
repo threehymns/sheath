@@ -29,6 +29,10 @@ pub(super) fn sort_rows(
         };
         folders.then_with(|| {
             let order = match column {
+                "kind" => a
+                    .kind()
+                    .cmp(b.kind())
+                    .then_with(|| rune_kit::natural_cmp(&a.name, &b.name)),
                 "size" => a.size.cmp(&b.size),
                 "modified" => compare_time(a.modified, b.modified),
                 _ => rune_kit::natural_cmp(&a.name, &b.name),

@@ -22,6 +22,7 @@ pub enum EntryKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKey {
     Name,
+    Kind,
     Size,
     Modified,
 }
@@ -30,6 +31,7 @@ impl SortKey {
     pub fn as_str(self) -> &'static str {
         match self {
             SortKey::Name => "name",
+            SortKey::Kind => "kind",
             SortKey::Size => "size",
             SortKey::Modified => "modified",
         }
@@ -38,6 +40,7 @@ impl SortKey {
     pub fn from_column(value: &str) -> Option<SortKey> {
         match value {
             "name" => Some(SortKey::Name),
+            "kind" => Some(SortKey::Kind),
             "size" => Some(SortKey::Size),
             "modified" => Some(SortKey::Modified),
             _ => None,
