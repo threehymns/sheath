@@ -92,11 +92,13 @@ impl App {
             .collect()
     }
 
-    /// The filter changed: the first row is selected again.
-    pub fn palette_requery(&mut self) {
+    /// The filter changed: the first row is selected again, and the list goes back to the top
+    /// so the row that is now highlighted is the one in view.
+    pub fn palette_requery(&mut self, tx: &mut Tx) {
         if let Some(palette) = &mut self.palette {
             palette.selected = 0;
         }
+        tx.scroll_to_y("command-scroll", 0.0);
     }
 
     /// Moves the highlight, and scrolls the list so the row it lands on comes into view clear
@@ -104,7 +106,7 @@ impl App {
     pub fn palette_move(&mut self, delta: isize, tx: &mut Tx) {
         let actions = self.palette_actions();
         if actions.is_empty() {
-            self.palette_requery();
+            self.palette_requery(tx);
             return;
         }
         let Some(palette) = &mut self.palette else {

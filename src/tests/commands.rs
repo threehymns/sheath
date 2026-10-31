@@ -210,6 +210,62 @@ fn the_arrows_scroll_the_bar_and_keep_rows_around_the_highlight() {
 }
 
 #[test]
+fn a_new_query_takes_the_bar_back_to_its_first_row() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.state.open_palette();
+    rt.invalidate();
+    rt.frame(0.1);
+
+    let down = KeyEvent {
+        key: Key::Down,
+        mods: Mods::default(),
+    };
+    for _ in 0..10 {
+        rt.key(down.clone());
+        rt.frame(0.1);
+    }
+    let viewport = rt.presented("command-scroll").expect("the list is drawn").0;
+    let first = format!("command-{}", rt.state.palette_actions()[0].id());
+    assert!(
+        rt.presented(&first)
+            .is_none_or(|(row, _)| row[1] < viewport[1]),
+        "the keys have scrolled the list past its first row"
+    );
+
+    rt.key(KeyEvent {
+        key: Key::Text("e".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    // The scroll back to the top glides, so let it come to rest.
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    let actions = rt.state.palette_actions();
+    assert!(
+        actions.len() > 12,
+        "the filtered list is still taller than the bar: {}",
+        actions.len()
+    );
+    assert_eq!(
+        rt.state.palette.as_ref().expect("the bar is open").selected,
+        0,
+        "the first match is highlighted again"
+    );
+    let row = rt
+        .presented(&format!("command-{}", actions[0].id()))
+        .expect("the first row is drawn")
+        .0;
+    assert!(
+        row[1] >= viewport[1] - 0.5,
+        "and back in view at the top of the list: {row:?} in {viewport:?}"
+    );
+}
+
+#[test]
 fn the_command_bar_keys_follow_the_highlighted_row() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));

@@ -28,7 +28,7 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         // The bar itself is the field's frame, so the input carries no fill or border of its own.
         .plain()
         .on_edit(|s: &mut App| s.palette_edit())
-        .on_change(|s: &mut App, _| s.palette_requery())
+        .on_change(|s: &mut App, tx| s.palette_requery(tx))
         .on_submit(|s: &mut App, tx| s.run_palette_command(tx))
         .on_key(|s: &mut App, event, tx| {
             // The field owns the keyboard here, so the bar's keys are the ones it leaves over.
