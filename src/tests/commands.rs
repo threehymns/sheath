@@ -168,6 +168,48 @@ fn the_command_bar_rows_keep_their_padding_from_the_edges() {
 }
 
 #[test]
+fn the_arrows_scroll_the_bar_and_keep_rows_around_the_highlight() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.state.open_palette();
+    rt.invalidate();
+    rt.frame(0.1);
+
+    let actions = rt.state.palette_actions();
+    let down = KeyEvent {
+        key: Key::Down,
+        mods: Mods::default(),
+    };
+    // Enough presses to take the highlight past the fold of the 380-point list.
+    for _ in 0..10 {
+        rt.key(down.clone());
+        rt.frame(0.1);
+    }
+    // The reveal glides, so let it come to rest.
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    let selected = rt.state.palette.as_ref().expect("the bar is open").selected;
+    assert_eq!(selected, 10, "the presses moved the highlight with it");
+    let row = rt
+        .presented(&format!("command-{}", actions[selected].id()))
+        .expect("the highlighted row is drawn")
+        .0;
+    let viewport = rt.presented("command-scroll").expect("the list is drawn").0;
+    let bottom = viewport[1] + viewport[3];
+    assert!(
+        row[1] >= viewport[1] - 0.5 && row[1] + row[3] <= bottom + 0.5,
+        "the highlight is inside the list: {row:?} in {viewport:?}"
+    );
+    assert!(
+        bottom - (row[1] + row[3]) >= 2.0 * 33.0,
+        "and a few rows stay below it: {row:?} in {viewport:?}"
+    );
+}
+
+#[test]
 fn the_command_bar_keys_follow_the_highlighted_row() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));

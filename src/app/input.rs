@@ -19,8 +19,8 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
         match event.key {
-            Key::Down => s.palette_move(1),
-            Key::Up => s.palette_move(-1),
+            Key::Down => s.palette_move(1, tx),
+            Key::Up => s.palette_move(-1, tx),
             Key::Enter => s.run_palette_command(tx),
             _ => return false,
         }

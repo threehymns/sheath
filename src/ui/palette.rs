@@ -7,6 +7,13 @@ use rune::{Cursor, El, Icon, Key, ScrollSpec, Tx, col, el, icon, row, text};
 use rune_kit::{Kit, TextInput, glyphs, scrim};
 use rune_theme_opencode as theme;
 
+/// A row's height and the gap under it: what one arrow press moves the highlight by.
+const ROW_H: f32 = 32.0;
+const ROW_GAP: f32 = 1.0;
+/// The rows the bar keeps between the highlight and the edge it scrolls to, so an arrow key
+/// stops with the rows around the highlight in view instead of pinning it to the edge.
+const CLEARANCE_ROWS: f32 = 3.0;
+
 /// The command bar: a field over the registry's actions, each with its shortcut.
 pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(palette) = &s.palette else {
@@ -37,8 +44,8 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 return false;
             }
             match event.key {
-                Key::Down => s.palette_move(1),
-                Key::Up => s.palette_move(-1),
+                Key::Down => s.palette_move(1, tx),
+                Key::Up => s.palette_move(-1, tx),
                 Key::Enter if !tx.key_repeat() => s.run_palette_command(tx),
                 _ => return false,
             }
@@ -48,7 +55,12 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .key("command-field");
     // The padding lives on the list, not on each row: a row that is `w_full` and also has
     // margins would be wider than the bar and clip at its right edge.
-    let mut list = col().key("command-list").w_full().gap(1.0).px(6.0).py(6.0);
+    let mut list = col()
+        .key("command-list")
+        .w_full()
+        .gap(ROW_GAP)
+        .px(6.0)
+        .py(6.0);
     if actions.is_empty() {
         list = list.child(
             row().key("command-none").px(12.0).py(14.0).child(
@@ -64,7 +76,7 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         let mut row = row()
             .key(format!("command-{}", action.id()))
             .w_full()
-            .h(32.0)
+            .h(ROW_H)
             .px(8.0)
             .gap(10.0)
             .center_y()
@@ -145,6 +157,9 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                     stick_bottom: false,
                 })
                 .scroll_edge_fade(12.0)
+                // The arrows stop the highlight short of the edge, with the rows around it in
+                // view, rather than scrolling it flush against the fade.
+                .scroll_margin(CLEARANCE_ROWS * (ROW_H + ROW_GAP))
                 .child(list),
         );
     layers.push(

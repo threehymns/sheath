@@ -99,16 +99,21 @@ impl App {
         }
     }
 
-    pub fn palette_move(&mut self, delta: isize) {
-        let count = self.palette_actions().len();
-        if count == 0 {
+    /// Moves the highlight, and scrolls the list so the row it lands on comes into view clear
+    /// of the edges (the viewport's `scroll_margin` keeps a few rows of it around the row).
+    pub fn palette_move(&mut self, delta: isize, tx: &mut Tx) {
+        let actions = self.palette_actions();
+        if actions.is_empty() {
             self.palette_requery();
             return;
         }
-        if let Some(palette) = &mut self.palette {
-            let last = count as isize - 1;
-            palette.selected = (palette.selected as isize + delta).clamp(0, last) as usize;
-        }
+        let Some(palette) = &mut self.palette else {
+            return;
+        };
+        let last = actions.len() as isize - 1;
+        palette.selected = (palette.selected as isize + delta).clamp(0, last) as usize;
+        let action = actions[palette.selected];
+        tx.scroll_into_view(format!("command-{}", action.id()));
     }
 
     /// Runs the selected command and closes the bar.
