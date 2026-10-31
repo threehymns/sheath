@@ -34,7 +34,7 @@ pub struct FileDrag {
     pub row: Option<usize>,
     /// The sidebar place under the pointer, if it can take the drop.
     pub place: Option<PathBuf>,
-    pub place_id: Option<&'static str>,
+    pub place_id: Option<String>,
 }
 
 /// A press in the file list and the box it has swept so far, in window points.
@@ -270,7 +270,7 @@ impl App {
         for (id, (rect, path)) in &self.places_at {
             if inside(*rect, x, y) && *path != self.cwd {
                 drag.place = Some(path.clone());
-                drag.place_id = Some(id);
+                drag.place_id = Some(id.clone());
                 return;
             }
         }
@@ -353,8 +353,10 @@ impl App {
     }
 
     /// The sidebar place a drag is over, for the view to highlight it.
-    pub fn drop_place(&self) -> Option<&'static str> {
-        self.file_drag.as_ref().and_then(|drag| drag.place_id)
+    pub fn drop_place(&self) -> Option<&str> {
+        self.file_drag
+            .as_ref()
+            .and_then(|drag| drag.place_id.as_deref())
     }
 
     /// The rows being dragged, once the pointer has moved far enough, and where the pointer

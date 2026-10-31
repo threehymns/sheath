@@ -9,6 +9,7 @@ mod icons;
 mod keybinds;
 mod keycaps;
 mod notice;
+mod places;
 mod recorder;
 mod rules;
 mod settings;

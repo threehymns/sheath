@@ -19,7 +19,7 @@ use rune::{Cx, El, Icon, col, el, icon, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, SplitView, Toolbar};
 use rune_theme_opencode as theme;
 
-use crate::app::{App, home_dir, root_dir};
+use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
 

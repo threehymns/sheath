@@ -1,0 +1,184 @@
+//! The sidebar's places: dragging them into a new order, and the state file that remembers it.
+
+use super::helpers::*;
+use crate::places::{Places, Section};
+use std::fs;
+
+/// A places file naming two folders under `dir`, in that order, plus whatever else the caller
+/// wants at the top. The paths are quoted the way KDL writes strings.
+fn write_places(path: &std::path::Path, rows: &[(String, String)], extra: &str) {
+    let mut text = String::from(extra);
+    text.push_str("favourites {\n");
+    for (id, folder) in rows {
+        text.push_str(&format!(
+            "    place {} name={} path={}\n",
+            crate::rules::quote(id),
+            crate::rules::quote(folder.rsplit('/').next().unwrap_or(folder)),
+            crate::rules::quote(folder),
+        ));
+    }
+    text.push_str("}\n");
+    fs::write(path, text).unwrap();
+}
+
+#[test]
+fn dragging_a_place_down_moves_it_and_writes_the_file() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let second = dir.path().join("second");
+    fs::create_dir(&second).unwrap();
+    let alpha = dir.path().join("alpha");
+    let alpha_id = format!("folder:{}", alpha.display());
+    let second_id = format!("folder:{}", second.display());
+    let file = state.path().join("places.kdl");
+    write_places(
+        &file,
+        &[
+            (alpha_id.clone(), alpha.display().to_string()),
+            (second_id.clone(), second.display().to_string()),
+        ],
+        "",
+    );
+    assert!(!file.exists() || fs::read_to_string(&file).unwrap().contains(&alpha_id));
+
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let alpha_key = format!("place-{alpha_id}");
+    let second_key = format!("place-{second_id}");
+    let (x, y) = rt.find(&alpha_key).expect("the first place is on screen");
+    let (_, below) = rt.find(&second_key).expect("the second place is on screen");
+    rt.pointer_down(x, y);
+    rt.frame(0.02);
+    rt.pointer_move(x, below);
+    // The rows step aside on a spring, so let the gap finish opening.
+    for _ in 0..10 {
+        rt.frame(0.05);
+    }
+    let (_, lifted) = rt
+        .find(&alpha_key)
+        .expect("the row in hand is still on screen");
+    assert!(
+        lifted > y + 20.0,
+        "the row in hand follows the pointer: {lifted} from {y}"
+    );
+
+    rt.pointer_up(x, below);
+    rt.frame(0.05);
+
+    let shown: Vec<&str> = rt
+        .state
+        .places
+        .places(Section::Favourites)
+        .iter()
+        .map(|place| place.id.as_str())
+        .take(2)
+        .collect();
+    assert_eq!(
+        shown,
+        [second_id.as_str(), alpha_id.as_str()],
+        "the drop moved the place below its neighbour"
+    );
+    let text = fs::read_to_string(&file).unwrap();
+    let second_at = text
+        .find(&crate::rules::quote(&second_id))
+        .expect("the second place is in the file");
+    let alpha_at = text
+        .find(&crate::rules::quote(&alpha_id))
+        .expect("the dragged place is still in the file");
+    assert!(second_at < alpha_at, "the file holds the new order: {text}");
+    assert_eq!(
+        rt.state.cwd.as_path(),
+        dir.path(),
+        "the release that ended the drag did not open the dragged place"
+    );
+    assert!(
+        !rt.state.place_dragged,
+        "the release consumed the drag, so it does not eat the next press"
+    );
+}
+
+#[test]
+fn a_place_that_is_not_on_screen_keeps_its_slot_and_unknown_nodes_survive() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let second = dir.path().join("second");
+    fs::create_dir(&second).unwrap();
+    let alpha = dir.path().join("alpha");
+    let missing = dir.path().join("unplugged");
+    let alpha_id = format!("folder:{}", alpha.display());
+    let second_id = format!("folder:{}", second.display());
+    let missing_id = format!("folder:{}", missing.display());
+    let file = state.path().join("places.kdl");
+    write_places(
+        &file,
+        &[
+            (alpha_id.clone(), alpha.display().to_string()),
+            (missing_id.clone(), missing.display().to_string()),
+            (second_id.clone(), second.display().to_string()),
+        ],
+        // A node a later release writes, such as its drive detection: this release keeps it.
+        "drives {\n    detect-external-drives #true\n}\n",
+    );
+
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let alpha_key = format!("place-{alpha_id}");
+    let second_key = format!("place-{second_id}");
+    assert!(
+        rt.find(&format!("place-{missing_id}")).is_none(),
+        "the place whose folder is not there is not drawn"
+    );
+    let (x, y) = rt.find(&alpha_key).expect("the first place is on screen");
+    let (_, below) = rt.find(&second_key).expect("the last place is on screen");
+    rt.pointer_down(x, y);
+    rt.frame(0.02);
+    rt.pointer_move(x, below);
+    rt.frame(0.05);
+    rt.pointer_up(x, below);
+    rt.frame(0.05);
+
+    let text = fs::read_to_string(&file).unwrap();
+    let second_at = text
+        .find(&crate::rules::quote(&second_id))
+        .expect("the second place is in the file");
+    let missing_at = text
+        .find(&crate::rules::quote(&missing_id))
+        .expect("the missing place keeps its row in the file");
+    let alpha_at = text
+        .find(&crate::rules::quote(&alpha_id))
+        .expect("the dragged place is still in the file");
+    assert!(
+        second_at < missing_at && missing_at < alpha_at,
+        "the file holds the new order around the missing place: {text}"
+    );
+    assert!(
+        text.contains("detect-external-drives #true"),
+        "a node this release does not know survives the write: {text}"
+    );
+}
+
+#[test]
+fn a_place_from_a_later_release_keeps_its_id_and_label() {
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("places.kdl");
+    fs::write(
+        &file,
+        "favourites {\n    place \"volume:1A2B-3C4D\" name=\"Backup\" path=\"/run/media/backup\"\n}\n",
+    )
+    .unwrap();
+
+    let places = Places::at(file);
+    let first = &places.places(Section::Favourites)[0];
+    assert_eq!(first.id, "volume:1A2B-3C4D");
+    assert_eq!(first.name, "Backup");
+    assert!(
+        !first.is_available(),
+        "an unplugged drive is remembered but not drawn"
+    );
+}

@@ -1,9 +1,9 @@
 # Sheath
 
 A file manager built with [Rune](https://github.com/anomalyco/rune) for its
-views, layout, input, animation and rendering. It has a sidebar of places, a breadcrumb path
-bar, a sortable file list or tile grid, folder and entry rules in its config, live search, an
-inspector with a text preview, and copy, move, rename and trash operations.
+views, layout, input, animation and rendering. It has a reorderable sidebar of places, a
+breadcrumb path bar, a sortable file list or tile grid, folder and entry rules in its config,
+live search, an inspector with a text preview, and copy, move, rename and trash operations.
 
 ## Run
 
@@ -59,6 +59,7 @@ unsupported by this backend.
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Command bar | Cmd/Ctrl+P |
+| Reorder places | Drag a place in the sidebar |
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 
@@ -173,6 +174,33 @@ config folder:
 
 `views.kdl` is machine-owned and safe to delete: it forgets the remembered folders and nothing
 else, and a damaged file is ignored.
+
+The sidebar's places are kept in `places.kdl` beside it. The file is written when a place is
+dragged, and its order is the order the sidebar shows:
+
+```kdl
+favourites {
+    place "home"
+    place "downloads"
+    place "folder:/home/me/Projects" name="Projects" path="/home/me/Projects"
+}
+
+locations {
+    place "root"
+    place "temp"
+    place "volume:1A2B-3C4D" name="Backup" path="/run/media/me/Backup"
+}
+```
+
+A place is its `id`, never its position: `home`, `desktop`, `documents`, `downloads`,
+`pictures`, `root` and `temp` follow the machine (`path` overrides where one opens), and
+`folder:<path>` is a folder of your own. `name` overrides the label; a missing one is the
+folder's own name. `volume:<id>` is left for drives a later release detects, and a place whose
+folder is not there — an unmounted drive, a deleted folder — keeps its row in the file and
+comes back with the folder. Built-in places the file leaves out are added at the end of their
+section, and top-level nodes the app does not know are written back untouched. Like
+`views.kdl`, the file is machine-owned and safe to delete: the sidebar goes back to its
+built-in places.
 
 ## Not there yet
 

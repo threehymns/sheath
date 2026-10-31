@@ -216,7 +216,7 @@ fn a_drag_onto_a_sidebar_place_moves_the_selection_there() {
     let rect = [20.0, 620.0, 180.0, 40.0];
     rt.state
         .places_at
-        .insert("test-place", (rect, destination.clone()));
+        .insert("test-place".to_owned(), (rect, destination.clone()));
 
     click(&mut rt, "f:file2.txt");
     let (x0, y0) = rt.find("f:file2.txt").expect("the row is on screen");

@@ -41,11 +41,13 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use rune::{Latest, PointerPress, ScrollPos, TextEdit, Tx, Waker};
+use rune_kit::shell::Reorder;
 use rune_kit::{PaneState, SortDir};
 
 use crate::config::{self, Store};
 use crate::keybinds::{Action, Keybinds};
 use crate::notice::Notice;
+use crate::places::{Places, Section};
 use crate::recorder::Recorder;
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
@@ -60,6 +62,10 @@ use watch::Watch;
 
 /// A row's height in the file list, in points. The pointer maths and the view share it.
 pub const ROW_HEIGHT: f32 = 30.0;
+
+/// The space between two sidebar rows, from `SidebarSection`'s own gap. The place drag turns a
+/// pointer's travel into rows with it.
+pub const PLACE_ROW_GAP: f32 = 2.0;
 
 /// The browser.
 pub struct App {
@@ -132,6 +138,14 @@ pub struct App {
     pub visit: Resolved,
     /// What each folder was left showing, in the state directory.
     pub views: Views,
+    /// The sidebar's places, in the order the user left them, from the state directory.
+    pub places: Places,
+    /// The two place lists' drags: each numbers its own rows, so each keeps its own.
+    pub favourites_drag: Reorder,
+    pub locations_drag: Reorder,
+    /// A drop that moved a place, so the press that ends the gesture does not open a folder.
+    /// The drop's callback runs before that press.
+    pub place_dragged: bool,
     /// What the corner is saying about a config file the app cannot read.
     pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
@@ -149,8 +163,8 @@ pub struct App {
     /// The wheel's inertia, the overscroll past the ends, and the drag that pushes the list.
     scroll: Scroll,
     /// The sidebar places' rects in window points and their folders, from the last layout,
-    /// for a dragged row to be dropped on one.
-    pub places_at: BTreeMap<&'static str, ([f32; 4], PathBuf)>,
+    /// keyed by place id, for a dragged row to be dropped on one.
+    pub places_at: BTreeMap<String, ([f32; 4], PathBuf)>,
     /// The Size and Date columns' widths, which header dragging changes.
     pub size_width: f32,
     pub date_width: f32,
@@ -185,6 +199,7 @@ impl App {
         let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
         let mut app = App::blank(config, store, keybinds);
         app.views = Views::load();
+        app.places = Places::load();
         app.reload_rules();
         app.history.push(path.clone());
         app.at = 0;
@@ -251,6 +266,10 @@ impl App {
             rule_dragged: false,
             visit: Resolved::default(),
             views: Views::default(),
+            places: Places::default(),
+            favourites_drag: Reorder::new().gap(PLACE_ROW_GAP),
+            locations_drag: Reorder::new().gap(PLACE_ROW_GAP),
+            place_dragged: false,
             notices: Vec::new(),
             keybinds,
             recorders,
@@ -404,6 +423,20 @@ impl App {
                 show_hidden: None,
             },
         );
+    }
+
+    /// Moves a place within its section, the way a drop does, and writes the order down. `from`
+    /// and `to` count the rows on screen; a place that is not there now keeps its slot in the
+    /// file, so a folder that comes back comes back where it was left.
+    pub fn move_place(&mut self, section: Section, from: usize, to: usize) {
+        if self.places.reorder(section, from, to) {
+            self.places.save();
+        }
+    }
+
+    /// Whether the press now arriving ends a place reorder, which must not also open a folder.
+    pub fn take_place_drag(&mut self) -> bool {
+        std::mem::take(&mut self.place_dragged)
     }
 
     /// Saves one setting, leaving every other node in the file as it was.
