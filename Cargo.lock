@@ -2783,6 +2783,7 @@ name = "sheath"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "image",
  "kdl",
  "notify",
  "rune",

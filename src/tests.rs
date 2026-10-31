@@ -8,6 +8,7 @@ mod marquee;
 mod menu;
 mod notice;
 mod perf;
+mod perf_preview;
 mod place_menu;
 mod ruled_settings;
 mod rules;

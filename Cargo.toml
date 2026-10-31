@@ -19,4 +19,5 @@ rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "1b7871
 trash = "5.2.9"
 
 [dev-dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 tempfile = "3"
