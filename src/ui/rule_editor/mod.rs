@@ -22,8 +22,10 @@ const ACTIONS_HEIGHT: f32 = 20.0;
 const ACTIONS_SPACING: f32 = 6.0;
 const ACTIONS_GAP: f32 = 8.0;
 
+// Card kept around the form, whose radius is set concentric with it.
 const WELL_MARGIN: f32 = 4.0;
 
+// Fixed height of the refusal line, so a message arriving or leaving moves nothing below it.
 const PROBLEM_HEIGHT: f32 = 16.0;
 
 const WELL_WIDTH: f32 = SETTINGS_CARD_WIDTH - 2.0 * WELL_MARGIN;

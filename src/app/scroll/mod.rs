@@ -6,26 +6,37 @@ use std::mem;
 
 use rune::{GesturePhase, WheelEvent};
 
+// Per-second decay of the coast's speed; a larger value stops the rows sooner.
 const SCROLL_DECAY: f32 = 3.5;
 
+// Share of a notched wheel's delta that becomes coast speed.
 const SCROLL_GAIN: f32 = 0.75;
 
+// Fastest coast, in points per second.
 const SCROLL_MAX_VELOCITY: f32 = 6000.0;
 
+// Coast speed, in points per second, at which the rows come to rest.
 const SCROLL_MIN_VELOCITY: f32 = 8.0;
 
+// Seconds for a slower wheel speed to pull the coast down, so a flick's last frame still glides.
 const SCROLL_SPEED_SMOOTH: f32 = 0.15;
 
+// Per-second decay while the fingers rest, much quicker than the coast's.
 const SCROLL_HOLD_DECAY: f32 = 12.0;
 
+// Seconds of stillness after which lifting the fingers starts no glide.
 const SCROLL_HOLD_LIMIT: f32 = 0.12;
 
+// Seconds without a gesture end before the app stops believing the fingers are down.
 const SCROLL_HELD_FORGET: f32 = 1.0;
 
+// How far, in points, the rows can be pulled past the first or last row.
 const MAX_OVERSCROLL: f32 = 72.0;
 
+// Share of a wheel delta past an end that becomes overscroll.
 const OVERSCROLL_GIVE: f32 = 0.45;
 
+// Per-second spring rate that pulls overscroll back.
 const OVERSCROLL_RETURN: f32 = 16.0;
 
 #[derive(Clone, Copy)]

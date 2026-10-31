@@ -4,9 +4,11 @@ use std::collections::BTreeSet;
 pub const TILE_WIDTH: f32 = 104.0;
 pub const TILE_HEIGHT: f32 = 96.0;
 pub const TILE_GAP: f32 = 8.0;
+// Horizontal padding of the tiles inside the viewport.
 pub const GRID_PAD: f32 = 12.0;
 pub const GRID_ROW_HEIGHT: f32 = TILE_HEIGHT + TILE_GAP;
 
+// Space above the first tile row, inside the viewport, so its highlight clears the sort bar.
 pub const GRID_TOP_MARGIN: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

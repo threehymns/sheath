@@ -10,10 +10,13 @@ use super::dialogs::error_text;
 use super::rule_editor::rule_editor;
 use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET, settings_section_action};
 
+// Hairline between rows plus the padding above and below them: one step of a drag.
 const RULE_ROW_GAP: f32 = 1.0 + 2.0 * ROW_PAD;
 
+// Card kept around a row's hover fill, so the fill clears the hairline and the card edge.
 const ROW_MARGIN: f32 = 4.0;
 
+// Padding inside a row, and half the gap a drag opens between rows.
 const ROW_PAD: f32 = 4.0;
 
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {

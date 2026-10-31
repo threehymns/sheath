@@ -16,6 +16,7 @@ pub(crate) const SETTINGS_GUTTER: f32 = 32.0;
 
 pub(crate) const SETTINGS_RADIUS: f32 = 16.0;
 
+// How far the panel sits in from the dialog; the radius loses this much to stay concentric.
 pub(crate) const SETTINGS_INSET: f32 = 8.0;
 
 pub(crate) const DONE_SIZE: (f32, f32) = (76.0, 26.0);

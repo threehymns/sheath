@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+// Seconds a toast stays up, enough to read it and press Copy.
 pub const SECONDS: u64 = 20;
 
 pub struct Notice {

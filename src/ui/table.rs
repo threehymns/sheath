@@ -8,6 +8,7 @@ use rune::{
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
+// Header height, shared by the grid's sort toolbar so both layouts start items at the same y.
 pub(super) const HEADER_HEIGHT: f32 = 32.0;
 
 pub(super) fn browser_style(k: &Kit) -> TableStyle {

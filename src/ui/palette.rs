@@ -7,6 +7,7 @@ use rune_theme_opencode as theme;
 
 const ROW_H: f32 = 32.0;
 const ROW_GAP: f32 = 1.0;
+// Rows kept between the highlight and the edge it scrolls to.
 const CLEARANCE_ROWS: f32 = 3.0;
 
 pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {

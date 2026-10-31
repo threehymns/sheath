@@ -12,6 +12,7 @@ pub use prop::{RuleMenu, RuleProp};
 
 pub const RULE_ROW_HEIGHT: f32 = 48.0;
 
+// Points a rule press must travel before it counts as a drag rather than a click.
 const DRAG_SLOP: f32 = 4.0;
 
 #[derive(Clone, Copy, Debug, Default)]

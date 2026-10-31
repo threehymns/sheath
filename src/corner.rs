@@ -5,8 +5,10 @@
 
 use rune::{Color, El, LineCap, Shape, canvas};
 
+// Segments per quarter-circle, enough that a fillet reads as a curve rather than a bevel.
 const ARC_STEPS: usize = 16;
 
+// Hairline matching the panel border the bite continues.
 const BORDER_WIDTH: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug, PartialEq)]

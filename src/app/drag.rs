@@ -4,14 +4,19 @@ use crate::places::Section;
 use rune::{Drag, Mods, Phase, Tx};
 use std::path::PathBuf;
 
+// Points the pointer travels before a press counts as a drag rather than a click.
 const DRAG_START: f32 = 3.0;
 
+// Points past a laid-out name that still count as its handle.
 const NAME_HANDLE_SLOP: f32 = 6.0;
 
+// Narrowest a name handle gets, in points, so a short name stays grabbable.
 const NAME_HANDLE_MIN: f32 = 88.0;
 
+// Points inside the list's top or bottom edge where a drag begins scrolling the rows.
 const DRAG_SCROLL_EDGE: f32 = 44.0;
 
+// Fastest drag scroll, in points per second, however far past the edge the pointer goes.
 const DRAG_SCROLL_MAX: f32 = 1100.0;
 
 pub struct FileDrag {
