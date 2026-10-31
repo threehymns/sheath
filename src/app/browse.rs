@@ -154,6 +154,12 @@ impl App {
             .request(path.clone(), move |path| Scan::read(path, keep, sort));
     }
 
+    /// Whether a folder read is still in flight, so there are no rows to show yet. The list
+    /// says nothing about the folder until this is false: it is not empty, it is being read.
+    pub fn is_scanning(&self) -> bool {
+        self.scan.is_pending()
+    }
+
     /// Applies the folder read that landed, if one did: its rows, its error, the presentation
     /// the rules and the folder's count decide, and the selection the read asked to keep.
     pub(super) fn land_scan(&mut self) -> bool {
@@ -441,6 +447,10 @@ impl App {
     }
 
     pub fn phrase_for_count(&self) -> String {
+        // The rows are still being read: the count is not zero, it is not known yet.
+        if self.is_scanning() {
+            return "Reading…".into();
+        }
         let shown = self.visible.len();
         let chosen = self.selection_len();
         if chosen > 1 {

@@ -54,6 +54,9 @@ pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
         .w_full()
         .h_full()
         .min_h(0.0)
+        // The table itself lands at once, so a folder that changes between empty and
+        // listed does not cross-fade its whole list.
+        .transition(Transition::none())
         .child(file_header(s, k, &style))
         .child(viewport)
 }
@@ -375,6 +378,9 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
         .h_full()
         .center()
         .gap(6.0)
+        // A folder that turns out empty shows its message at once, rather than fading in
+        // over the list on the way to it.
+        .transition(Transition::none())
         .child(icon(glyph, 40.0).color(k.c.icon_faint))
         .child(text(title).font(k.ty.ui_medium).color(k.c.text_muted))
         .child(

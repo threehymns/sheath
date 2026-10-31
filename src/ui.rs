@@ -289,7 +289,10 @@ fn main(s: &App, k: &'static Kit) -> El {
                 ),
         );
     }
-    if s.visible.is_empty() {
+    // A folder being read has no rows yet, but it is not empty: show the list's frame with no
+    // rows until the read lands, so switching folders doesn't flash the empty state and
+    // cross-fade the whole list around it.
+    if s.visible.is_empty() && !s.is_scanning() {
         content.child(empty_state(s, k).grow(1.0).min_h(0.0))
     } else if s.is_grid() {
         content.child(grid::file_grid(s, k).grow(1.0).min_h(0.0))

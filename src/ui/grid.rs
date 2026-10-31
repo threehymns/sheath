@@ -25,6 +25,9 @@ pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
         .w_full()
         .h_full()
         .min_h(0.0)
+        // The grid itself lands at once, so a folder that changes between empty and listed
+        // does not cross-fade its whole wall.
+        .transition(Transition::none())
         .child(grid_toolbar(s, k))
         .child(
             col()
