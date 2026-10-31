@@ -3,7 +3,10 @@
 use crate::app::{App, ROW_HEIGHT};
 use crate::format;
 use crate::icons;
-use rune::{Align, Cursor, Drag, El, GrowthSpec, Phase, ScrollSpec, Tx, col, el, icon, row, text};
+use rune::{
+    Align, Cursor, Drag, El, GrowthSpec, Phase, ScrollSpec, Spring, Transition, Tx, col, el, icon,
+    row, text,
+};
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
@@ -208,7 +211,17 @@ fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
     col()
         .key("file-rows")
         .w_full()
-        .growth(GrowthSpec::default())
+        // Rows land where they belong: no enter or exit fade, no hover or selection
+        // crossfade, and no glide when a sort, a filter or a refresh moves them. The list's
+        // own motion is the viewport's scroll spring and the app's overshoot, outside this
+        // subtree.
+        .motion(Spring::NONE)
+        .instant_changes()
+        .hover_motion_within(Spring::NONE, Spring::NONE)
+        .growth(GrowthSpec {
+            spring: Spring::NONE,
+            ..GrowthSpec::default()
+        })
         .virtual_rows(
             s.visible.len(),
             ROW_HEIGHT,
@@ -227,7 +240,11 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .role("row")
         .w_full()
         .h(ROW_HEIGHT)
-        .center_y();
+        .center_y()
+        .transition(Transition::none())
+        // The row's own hover overlay lands with the pointer, rather than fading: the
+        // nearest pair wins over anything the shell set above the list.
+        .hover_motion(Spring::NONE, Spring::NONE);
     if s.is_cut(&entry.path) {
         // Cut rows wait, dimmed, for a paste.
         line = line.opacity(0.45);

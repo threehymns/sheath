@@ -2,7 +2,9 @@
 //! box and a drop read the same state the table's rows do.
 
 use crate::app::{App, GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
-use rune::{Align, Cursor, El, GrowthSpec, ScrollSpec, Tx, col, el, icon, row, text};
+use rune::{
+    Align, Cursor, El, GrowthSpec, ScrollSpec, Spring, Transition, Tx, col, el, icon, row, text,
+};
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
 
@@ -47,7 +49,17 @@ pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
                     col()
                         .key("file-grid-rows")
                         .w_full()
-                        .growth(GrowthSpec::default())
+                        // Tiles land where they belong: no enter or exit fade, no hover or
+                        // selection crossfade, and no glide when a sort, a filter or a
+                        // refresh moves them. The grid's own motion is the viewport's
+                        // scroll spring and the app's overshoot, outside this subtree.
+                        .motion(Spring::NONE)
+                        .instant_changes()
+                        .hover_motion_within(Spring::NONE, Spring::NONE)
+                        .growth(GrowthSpec {
+                            spring: Spring::NONE,
+                            ..GrowthSpec::default()
+                        })
                         .virtual_rows(
                             rows,
                             GRID_ROW_HEIGHT,
@@ -119,7 +131,8 @@ fn grid_row(s: &App, row_index: usize, columns: usize, k: &'static Kit) -> El {
         .w_full()
         .h(GRID_ROW_HEIGHT)
         .px(GRID_PAD)
-        .gap(TILE_GAP);
+        .gap(TILE_GAP)
+        .transition(Transition::none());
     for column in 0..columns {
         let index = row_index * columns + column;
         if index >= s.visible.len() {
@@ -159,6 +172,9 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
         .radius(k.radius.sm)
         .items_center()
         .justify_center()
+        .transition(Transition::none())
+        // The tile's own hover overlay lands with the pointer, rather than fading.
+        .hover_motion(Spring::NONE, Spring::NONE)
         .child(icon(glyph, 34.0).color(icon_color))
         .child(
             text(entry.name.clone())
