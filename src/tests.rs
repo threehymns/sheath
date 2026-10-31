@@ -8,6 +8,7 @@ mod grid;
 mod helpers;
 mod marquee;
 mod menu;
+mod notice;
 mod rules;
 mod rules_actions;
 mod rules_drag;

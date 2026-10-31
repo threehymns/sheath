@@ -356,12 +356,18 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
     fs::write(&path, "settings { show-hidden #true").unwrap();
 
     let store = crate::config::Store::at(dir.path().to_path_buf());
+    let problem = store
+        .problem(crate::config::CONFIG)
+        .expect("the file does not parse");
     assert!(
-        store
-            .error(crate::config::CONFIG)
-            .is_some_and(|e| e.contains("Couldn’t read")),
-        "{:?}",
-        store.error(crate::config::CONFIG)
+        problem.detail.starts_with("line "),
+        "the error names the place: {}",
+        problem.detail
+    );
+    assert!(
+        problem.report.contains(&path.display().to_string()),
+        "and the report names the file: {}",
+        problem.report
     );
     let saved = Settings::from_doc(store.doc(crate::config::CONFIG));
     assert!(!saved.show_hidden);

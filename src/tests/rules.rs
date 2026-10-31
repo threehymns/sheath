@@ -242,12 +242,18 @@ fn a_file_that_does_not_parse_is_never_written_back() {
     fs::write(&path, "settings {\n    show-hidden #true\n").unwrap();
 
     let mut store = Store::at(dir.path().to_path_buf());
+    let problem = store
+        .problem(config::CONFIG)
+        .expect("the file does not parse");
     assert!(
-        store
-            .error(config::CONFIG)
-            .is_some_and(|error| error.contains("Couldn’t read")),
-        "{:?}",
-        store.error(config::CONFIG)
+        problem.detail.starts_with("line "),
+        "the error names the place: {}",
+        problem.detail
+    );
+    assert!(
+        problem.report.contains(&path.display().to_string()),
+        "and the report names the file: {}",
+        problem.report
     );
     assert!(
         store

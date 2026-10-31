@@ -72,6 +72,11 @@ impl App {
             self.apply_config();
             redraw = true;
         }
+        // A toast is up: keep frames coming, so it leaves on time rather than at the next event.
+        if !self.notices.is_empty() {
+            self.notices.retain(|notice| !notice.expired());
+            redraw = true;
+        }
         // The rule form's Save follows the draft one frame behind a keystroke: typing lands at
         // once, so the catch-up here is a commit of its own, which can animate. Every other
         // control settles the form in the commit its press causes.

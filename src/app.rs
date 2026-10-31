@@ -38,11 +38,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use rune::{PointerPress, ScrollPos, TextEdit, Waker};
+use rune::{PointerPress, ScrollPos, TextEdit, Tx, Waker};
 use rune_kit::{PaneState, SortDir};
 
 use crate::config::{self, Store};
 use crate::keybinds::{Action, Keybinds};
+use crate::notice::Notice;
 use crate::recorder::Recorder;
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
@@ -122,6 +123,8 @@ pub struct App {
     pub visit: Resolved,
     /// What each folder was left showing, in the state directory.
     pub views: Views,
+    /// What the corner is saying about a config file the app cannot read.
+    pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
     /// One recorder per action, holding what its field is listening for and any refusal.
     pub recorders: BTreeMap<Action, Recorder>,
@@ -228,6 +231,7 @@ impl App {
             rule_dragged: false,
             visit: Resolved::default(),
             views: Views::default(),
+            notices: Vec::new(),
             keybinds,
             recorders,
             store,
@@ -241,22 +245,79 @@ impl App {
     }
 
     /// Reads the rules out of the config document, keeping the last good ones when the file no
-    /// longer parses.
+    /// longer parses, then says in the corner what could not be read.
     pub fn reload_rules(&mut self) {
         if let Some(error) = self.store.error(config::CONFIG) {
             self.rule_error = Some(error.to_owned());
         }
-        let Some(doc) = self.store.doc(config::CONFIG) else {
-            return;
-        };
-        match Rules::parse(doc) {
-            Ok(rules) => {
+        let outcome = self.store.doc(config::CONFIG).map(Rules::parse);
+        match outcome {
+            Some(Ok(rules)) => {
                 self.rules = rules;
                 if self.store.error(config::CONFIG).is_none() {
                     self.rule_error = None;
                 }
             }
-            Err(error) => self.rule_error = Some(error),
+            Some(Err(error)) => self.rule_error = Some(error),
+            None => {}
+        }
+        self.raise_config_notices();
+    }
+
+    /// Says, in the corner, which config file the app cannot read and where it stopped. A file
+    /// already up is refreshed rather than stacked, and one that parses again takes its toast
+    /// away.
+    pub fn raise_config_notices(&mut self) {
+        let mut found = Vec::new();
+        for name in [config::CONFIG, config::KEYBINDS] {
+            if let Some(problem) = self.store.problem(name) {
+                found.push(Notice::new(
+                    name,
+                    format!("{name} does not parse"),
+                    problem.detail.clone(),
+                    problem.report.clone(),
+                ));
+            }
+        }
+        if let Some(error) = self.rule_error.clone() {
+            let report = config::schema_problem(
+                config::CONFIG,
+                self.store.path(config::CONFIG).as_deref(),
+                &error,
+            );
+            found.push(Notice::new(
+                config::CONFIG,
+                format!("{} has a rule it cannot read", config::CONFIG),
+                error,
+                report,
+            ));
+        }
+        self.notices
+            .retain(|notice| found.iter().any(|problem| problem.file == notice.file));
+        for notice in found {
+            match self.notices.iter_mut().find(|up| up.file == notice.file) {
+                Some(up) if up.report != notice.report => *up = notice,
+                Some(_) => {}
+                None => self.notices.push(notice),
+            }
+        }
+    }
+
+    /// Puts a notice's report on the clipboard, whole, so the problem can be pasted wherever it
+    /// will be fixed, and leaves the toast saying so.
+    pub fn copy_notice(&mut self, index: usize, tx: &mut Tx) {
+        let Some(notice) = self.notices.get_mut(index) else {
+            return;
+        };
+        tx.copy(notice.clipboard());
+        notice.copied = true;
+        notice.shown = Instant::now();
+    }
+
+    /// Takes one toast away, for its close button.
+    pub fn dismiss_notice(&mut self, index: usize) {
+        if index < self.notices.len() {
+            self.notices.remove(index);
         }
     }
 

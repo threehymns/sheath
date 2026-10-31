@@ -101,6 +101,28 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if s.settings.is_some() {
         settings_layer(s, k, &mut layers);
     }
+    // A config file the app cannot read says so in the corner: which file, where it stopped, and
+    // a Copy that hands over the whole report.
+    if !s.notices.is_empty() {
+        let mut region = rune_kit::ToastRegion::new();
+        for (index, notice) in s.notices.iter().enumerate() {
+            let mut toast = rune_kit::Toast::new(notice.key(), notice.title.clone())
+                .description(notice.detail.clone());
+            toast = toast.action(
+                k,
+                if notice.copied {
+                    "Copied"
+                } else {
+                    "Copy details"
+                },
+                !notice.copied,
+                move |s: &mut App, tx: &mut rune::Tx| s.copy_notice(index, tx),
+            );
+            toast = toast.on_close(move |s: &mut App| s.dismiss_notice(index));
+            region = region.toast(toast.build(k));
+        }
+        layers.push(region.build(k));
+    }
     rune_kit::root(shell, layers)
 }
 

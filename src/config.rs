@@ -97,6 +97,137 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     })
 }
 
+/// A file the app could not read: one line for the panels, and a report that has to stand on its
+/// own away from the app, because Copy hands it to an editor or an assistant.
+#[derive(Clone, Debug)]
+pub struct Problem {
+    /// One line, for the settings panels and the toast's body.
+    pub detail: String,
+    /// The file, the place, the line itself, and what the file is meant to hold.
+    pub report: String,
+}
+
+/// What `name` is meant to hold, so a report read out of context still says what was being
+/// parsed. The README has the long version.
+fn schema(name: &str) -> &'static str {
+    match name {
+        CONFIG => {
+            "top-level nodes: `settings { show-hidden inspector grid scroll-inertia overscroll }`,\n\
+             `folder-rule \"name\" { match path=\"~/x/**\" layout grid sort name direction descending }`,\n\
+             and `entry-rule \"name\" { match path=\"~/x/y\" hidden #true }`.\n\
+             A rule takes `match` and `exclude` directives plus the properties its kind allows,\n\
+             and every property also takes `inherit`. See README > Configuration."
+        }
+        KEYBINDS => {
+            "one `keybinds { <command> \"<chord>\" }` node. A chord is ctrl, alt, shift or super\n\
+             then a key name, and an empty chord clears the shortcut. See README > Configuration."
+        }
+        _ => "",
+    }
+}
+
+/// A report for a rule the schema refuses. The parser names the rule's problem in a sentence but
+/// has no line to point at, so the report says what the file holds instead.
+pub fn schema_problem(name: &str, path: Option<&Path>, error: &str) -> String {
+    let mut report = format!("{name} has a rule it cannot read.\n\n  error: {error}\n");
+    if let Some(path) = path {
+        report.push_str(&format!("  file:  {}\n", path.display()));
+    }
+    report.push_str(&format!("\nwhat this file holds:\n  {}\n", schema(name)));
+    report
+}
+
+/// The whole report for a file that does not parse: the place, the line the parser stopped on,
+/// and the shape the file was being read against.
+fn syntax_problem(name: &str, path: &Path, err: &kdl::KdlError) -> Problem {
+    let Some(diagnostic) = err.diagnostics.first() else {
+        return Problem {
+            detail: format!("{name} does not parse"),
+            report: format!(
+                "{name} does not parse.\n\n  file: {}\n\nwhat this file holds:\n  {}\n",
+                path.display(),
+                schema(name)
+            ),
+        };
+    };
+    let (line, column) = line_column(diagnostic.input.as_str(), diagnostic.span.offset());
+    let message = diagnostic
+        .message
+        .clone()
+        .or_else(|| diagnostic.label.clone())
+        .unwrap_or_else(|| "the document does not parse".to_owned());
+    let mut report = format!(
+        "{name} does not parse.\n\n  file:  {}\n  place: line {line}, column {column}\n  error: {message}\n\n{}",
+        path.display(),
+        excerpt(
+            diagnostic.input.as_str(),
+            line,
+            column,
+            diagnostic.span.len()
+        ),
+    );
+    if let Some(help) = &diagnostic.help {
+        report.push_str(&format!("  help:  {help}\n"));
+    }
+    report.push_str(&format!("\nwhat this file holds:\n  {}\n", schema(name)));
+    Problem {
+        detail: format!("line {line}, column {column}: {message}"),
+        report,
+    }
+}
+
+/// A file that exists but could not be read at all: no place to point at.
+fn read_problem(name: &str, path: &Path, err: &std::io::Error) -> Problem {
+    Problem {
+        detail: format!("Couldn’t read {name}: {err}"),
+        report: format!(
+            "{name} could not be read.\n\n  file:  {}\n  error: {err}\n",
+            path.display()
+        ),
+    }
+}
+
+/// Where a character offset falls, one-based, as an editor counts lines and columns.
+fn line_column(input: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut column = 1;
+    for (seen, ch) in input.chars().enumerate() {
+        if seen >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+        } else {
+            column += 1;
+        }
+    }
+    (line, column)
+}
+
+/// The line the parser stopped on between its neighbours, with a caret under the place it named.
+fn excerpt(input: &str, line: usize, column: usize, length: usize) -> String {
+    let lines: Vec<&str> = input.lines().collect();
+    let mut out = String::new();
+    for at in line.saturating_sub(1).max(1)..=(line + 1).min(lines.len()) {
+        let Some(text) = lines.get(at - 1) else {
+            continue;
+        };
+        out.push_str(&format!("  {at:>4} | {text}\n"));
+        if at == line {
+            let indent = column.saturating_sub(1);
+            let remaining = text.chars().count().saturating_sub(indent);
+            let carets = length.max(1).min(remaining.max(1));
+            out.push_str(&format!(
+                "       | {}{}\n",
+                " ".repeat(indent),
+                "^".repeat(carets)
+            ));
+        }
+    }
+    out
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Stamp {
     modified: Option<SystemTime>,
@@ -113,7 +244,7 @@ fn stamp_of(path: &Path) -> Option<Stamp> {
 
 struct Loaded {
     doc: Option<KdlDocument>,
-    error: Option<String>,
+    problem: Option<Problem>,
     stamp: Option<Stamp>,
 }
 
@@ -145,7 +276,7 @@ impl Store {
                 name,
                 Loaded {
                     doc: None,
-                    error: None,
+                    problem: None,
                     stamp: None,
                 },
             );
@@ -179,16 +310,24 @@ impl Store {
         self.files.get(name).and_then(|file| file.doc.as_ref())
     }
 
-    /// Why a file could not be read, for the panels that show it.
+    /// Why a file could not be read, in one line, for the panels that show it.
     pub fn error(&self, name: &str) -> Option<&str> {
-        self.files.get(name).and_then(|file| file.error.as_deref())
+        self.files
+            .get(name)
+            .and_then(|file| file.problem.as_ref())
+            .map(|problem| problem.detail.as_str())
+    }
+
+    /// The whole problem with a file, for the toast's Copy button.
+    pub fn problem(&self, name: &str) -> Option<&Problem> {
+        self.files.get(name).and_then(|file| file.problem.as_ref())
     }
 
     /// Whether a file parses, so its nodes can be edited.
     pub fn writable(&self, name: &str) -> bool {
         self.files
             .get(name)
-            .is_some_and(|file| file.doc.is_some() && file.error.is_none())
+            .is_some_and(|file| file.doc.is_some() && file.problem.is_none())
     }
 
     /// Edits the document and writes it back. The edit lands on a copy, so a failed write leaves
@@ -233,7 +372,7 @@ impl Store {
         if let Some(file) = self.files.get_mut(name) {
             file.doc = Some(doc);
             file.stamp = stamp_of(&path);
-            file.error = None;
+            file.problem = None;
         }
         Ok(())
     }
@@ -291,12 +430,12 @@ impl Store {
             return;
         };
         let stamp = stamp_of(&path);
-        let (doc, error) = match fs::read_to_string(&path) {
+        let (doc, problem) = match fs::read_to_string(&path) {
             Ok(text) => match text.parse::<KdlDocument>() {
                 Ok(doc) => (Some(doc), None),
                 Err(err) => (
                     self.files.get(name).and_then(|file| file.doc.clone()),
-                    Some(format!("Couldn’t read {}: {err}", path.display())),
+                    Some(syntax_problem(name, &path, &err)),
                 ),
             },
             Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
@@ -304,10 +443,17 @@ impl Store {
             }
             Err(err) => (
                 self.files.get(name).and_then(|file| file.doc.clone()),
-                Some(format!("Couldn’t read {}: {err}", path.display())),
+                Some(read_problem(name, &path, &err)),
             ),
         };
-        self.files.insert(name, Loaded { doc, error, stamp });
+        self.files.insert(
+            name,
+            Loaded {
+                doc,
+                problem,
+                stamp,
+            },
+        );
         // A file that does not parse has its stamp recorded too, so every later poll does not
         // re-read it until it changes again.
     }

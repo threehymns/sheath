@@ -102,10 +102,18 @@ fn a_broken_keybinds_file_keeps_the_defaults_and_says_so() {
     fs::write(&path, "keybinds { rename \"f5\"").unwrap();
 
     let store = crate::config::Store::at(dir.path().to_path_buf());
+    let problem = store
+        .problem(crate::config::KEYBINDS)
+        .expect("the file does not parse");
     assert!(
-        store
-            .error(crate::config::KEYBINDS)
-            .is_some_and(|e| e.contains("Couldn’t read"))
+        problem.detail.starts_with("line "),
+        "the error names the place: {}",
+        problem.detail
+    );
+    assert!(
+        problem.report.contains(&path.display().to_string()),
+        "and the report names the file: {}",
+        problem.report
     );
     let binds = Keybinds::from_doc(store.doc(crate::config::KEYBINDS));
     assert_eq!(
