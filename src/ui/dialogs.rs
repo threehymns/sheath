@@ -49,6 +49,7 @@ pub(super) fn sheet_layer(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>)
             "A folder path. Use ~ for your home folder.",
         ),
         SheetKind::Trash => trash_sheet(s, sheet, k, layers),
+        SheetKind::Delete => delete_sheet(s, sheet, k, layers),
         SheetKind::Navigate => prompt_sheet(
             sheet,
             k,
@@ -190,6 +191,62 @@ fn trash_sheet(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>) {
         .build(k, layers);
 }
 
+fn delete_sheet(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>) {
+    let mut body = col()
+        .key("delete-body")
+        .w_full()
+        .px(16.0)
+        .pb(16.0)
+        .gap(10.0)
+        .child(
+            text(sheet.name.clone())
+                .font(k.ty.ui_medium)
+                .color(k.c.text_base)
+                .max_lines(2)
+                .w_full(),
+        );
+    if sheet.many() {
+        body = body.child(selection_names(s, &sheet.targets, k));
+    }
+    if let Some(error) = &sheet.error {
+        body = body.child(error_text(k, error));
+    }
+    let cancel = Button::new("Cancel")
+        .variant(ButtonVariant::GhostMuted)
+        .control_size(ControlSize::Regular)
+        .on_press(|s: &mut App| s.close_sheet())
+        .build(k)
+        .key("delete-cancel")
+        .default_button();
+    let confirm = Button::new("Delete")
+        .variant(ButtonVariant::Danger)
+        .icon(&theme::icons::TRASH)
+        .control_size(ControlSize::Regular)
+        .on_press_tx(|s: &mut App, tx| s.submit_sheet(tx))
+        .build(k)
+        .key("delete-submit");
+    body = body.child(
+        row()
+            .w_full()
+            .justify_end()
+            .gap(8.0)
+            .child(cancel)
+            .child(confirm),
+    );
+    Dialog::new("delete", "Delete Permanently?")
+        .description(if sheet.many() {
+            "The items will be deleted and cannot be recovered from the Trash."
+        } else {
+            "The item will be deleted and cannot be recovered from the Trash."
+        })
+        .width(400.0)
+        .fit()
+        .open(true)
+        .child(body)
+        .on_close(|s: &mut App| s.close_sheet())
+        .build(k, layers);
+}
+
 pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(menu) = &s.place_menu else {
         return;
@@ -313,6 +370,19 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
             .on_select(|s: &mut App| {
                 s.close_menu();
                 s.begin_trash();
+            }),
+        )
+        .item(
+            MenuItem::new(if many {
+                format!("Delete {count} Items Permanently")
+            } else {
+                "Delete Permanently".to_owned()
+            })
+            .icon(&theme::icons::WARNING)
+            .shortcut(s.keybinds.menu_label(Action::Delete))
+            .on_select(|s: &mut App| {
+                s.close_menu();
+                s.begin_delete();
             }),
         )
         .item(

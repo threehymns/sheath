@@ -274,3 +274,35 @@ fn rename_starts_on_the_name_and_leaves_the_extension_alone() {
         "a folder name has no extension to keep"
     );
 }
+
+#[test]
+fn deleting_for_good_asks_first_and_then_leaves_nothing_behind() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:file2.txt");
+
+    app.begin_delete();
+    assert_eq!(
+        app.sheet.as_ref().map(|s| s.kind),
+        Some(crate::app::SheetKind::Delete),
+        "the setting asks before deleting"
+    );
+    assert!(
+        dir.path().join("file2.txt").exists(),
+        "and nothing is gone yet"
+    );
+    app.close_sheet();
+
+    app.config.confirm_delete = false;
+    app.begin_delete();
+    assert!(
+        app.sheet.is_none(),
+        "the question is skipped when it is off"
+    );
+    assert!(!dir.path().join("file2.txt").exists());
+    assert!(
+        app.error.is_none(),
+        "deleting a file it can write leaves no error: {:?}",
+        app.error
+    );
+}

@@ -119,6 +119,24 @@ fn the_settings_modal_takes_presses_from_the_browser() {
     );
 }
 
+fn scroll_settings_into_view(rt: &mut rune::Runtime<App>, key: &str) {
+    for _ in 0..10 {
+        let panel = rt.presented("settings-scroll").expect("the page scrolls").0;
+        let inside = rt.presented(key).is_some_and(|(rect, _)| {
+            rect[1] >= panel[1] - 0.5 && rect[1] + rect[3] <= panel[1] + panel[3] + 0.5
+        });
+        if inside {
+            return;
+        }
+        let (x, y) = rt.find("settings-scroll").expect("the page is on screen");
+        rt.wheel_event(rune::WheelEvent::new(0.0, -240.0).at(x, y));
+        for _ in 0..8 {
+            rt.frame(1.0 / 60.0);
+        }
+    }
+    panic!("{key} never scrolled into view");
+}
+
 #[test]
 fn the_general_category_toggles_what_the_browser_shows() {
     let dir = fixture();
@@ -135,12 +153,15 @@ fn the_general_category_toggles_what_the_browser_shows() {
         !rt.state.inspector.is_open(),
         "the switch hides the inspector"
     );
+    // The page is taller than the panel, so the scrolling section starts below the fold.
+    scroll_settings_into_view(&mut rt, "setting-inertia");
     assert!(rt.state.config.scroll_inertia, "inertia starts on");
     click(&mut rt, "setting-inertia");
     assert!(
         !rt.state.config.scroll_inertia,
         "the switch turns inertia off"
     );
+    scroll_settings_into_view(&mut rt, "setting-overscroll");
     assert!(rt.state.config.overscroll, "overscroll starts on");
     click(&mut rt, "setting-overscroll");
     assert!(

@@ -43,6 +43,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         Action::Rename,
         Action::Move,
         Action::Trash,
+        Action::Delete,
         Action::Copy,
         Action::Cut,
         Action::Paste,

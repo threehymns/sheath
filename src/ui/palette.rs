@@ -171,6 +171,7 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         Action::Rename => &theme::icons::EDIT,
         Action::Move => &glyphs::FOLDER,
         Action::Trash => &theme::icons::TRASH,
+        Action::Delete => &theme::icons::WARNING,
         Action::Copy => &theme::icons::COPY,
         Action::CopyPath => &icons::CLIPBOARD,
         Action::Cut => &icons::SCISSORS,

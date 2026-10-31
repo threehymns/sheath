@@ -265,6 +265,12 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_confirm_trash())
         .build(k)
         .key("setting-confirm-trash");
+    let confirm_delete = Switch::new(s.config.confirm_delete)
+        .label("Confirm before deleting")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_confirm_delete())
+        .build(k)
+        .key("setting-confirm-delete");
     let behavior = settings_section(
         k,
         "settings-behavior",
@@ -283,6 +289,13 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 "Confirm before trashing",
                 Some("Ask before moving items to the Trash."),
                 setting_control(s, k, Setting::ConfirmTrash, confirm_trash),
+            ),
+            settings_row(
+                k,
+                &theme::icons::WARNING,
+                "Confirm before deleting",
+                Some("Ask before deleting items for good, since the Trash cannot bring them back."),
+                setting_control(s, k, Setting::ConfirmDelete, confirm_delete),
             ),
         ],
     );

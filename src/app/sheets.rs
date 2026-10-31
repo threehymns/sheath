@@ -11,6 +11,7 @@ pub enum SheetKind {
     RenamePlace,
     Move,
     Trash,
+    Delete,
     Navigate,
 }
 
@@ -129,6 +130,26 @@ impl App {
         });
     }
 
+    pub fn begin_delete(&mut self) {
+        let targets = self.selected_ids();
+        let Some(name) = self.sheet_name(&targets) else {
+            return;
+        };
+        if !self.config.confirm_delete {
+            if let Err(message) = self.delete_targets(&targets) {
+                self.error = Some(message);
+            }
+            return;
+        }
+        self.sheet = Some(Sheet {
+            kind: SheetKind::Delete,
+            targets,
+            name,
+            edit: TextEdit::new(""),
+            error: None,
+        });
+    }
+
     pub fn begin_go_to(&mut self) {
         let mut edit = TextEdit::new(self.cwd.display().to_string());
         edit.set_selection(0, edit.text.len());
@@ -171,6 +192,7 @@ impl App {
             SheetKind::RenamePlace => self.rename_place_on_disk(&sheet),
             SheetKind::Move => self.move_entries(&sheet),
             SheetKind::Trash => self.trash_entries(&sheet),
+            SheetKind::Delete => self.delete_entries(&sheet),
             SheetKind::Navigate => self.go_to(&sheet),
         };
         if let Err(message) = result {
@@ -313,6 +335,36 @@ impl App {
         for (path, name, _) in &items {
             trash::delete(path)
                 .map_err(|err| format!("Couldn’t move “{name}” to the Trash: {err}"))?;
+        }
+        self.reload();
+        self.error = None;
+        Ok(())
+    }
+
+    fn delete_entries(&mut self, sheet: &Sheet) -> Result<(), String> {
+        self.sheet_entries(sheet)?;
+        self.delete_targets(&sheet.targets)
+    }
+
+    fn delete_targets(&mut self, targets: &[String]) -> Result<(), String> {
+        let items: Vec<(PathBuf, String, bool)> = targets
+            .iter()
+            .filter_map(|id| self.entry_snapshot(id))
+            .collect();
+        if items.is_empty() {
+            return Err(if targets.len() > 1 {
+                "Those items are no longer in this folder.".into()
+            } else {
+                "That item is no longer in this folder.".into()
+            });
+        }
+        for (path, name, is_dir) in &items {
+            let removed = if *is_dir {
+                fs::remove_dir_all(path)
+            } else {
+                fs::remove_file(path)
+            };
+            removed.map_err(|err| format!("Couldn’t delete “{name}”: {err}"))?;
         }
         self.reload();
         self.error = None;

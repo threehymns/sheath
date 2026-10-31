@@ -142,11 +142,11 @@ fn the_row_menu_copies_and_duplicates_the_clicked_row() {
     rt.frame(0.0);
 
     right_click(&mut rt, "f:notes.md");
-    click(&mut rt, "row-menu-item7");
+    click(&mut rt, "row-menu-item8");
     assert!(rt.state.clipboard.is_some(), "Copy fills the clipboard");
 
     right_click(&mut rt, "f:notes.md");
-    click(&mut rt, "row-menu-item10");
+    click(&mut rt, "row-menu-item11");
     rt.frame(0.1);
     assert!(
         dir.path().join("notes copy.md").exists(),

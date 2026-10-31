@@ -205,9 +205,12 @@ impl App {
             Action::EnclosingFolder => self.can_up(),
             Action::Rename => self.selection_len() == 1,
             Action::CopyPath => self.selection_len() > 0,
-            Action::Move | Action::Trash | Action::Copy | Action::Cut | Action::Duplicate => {
-                self.selection_len() > 0
-            }
+            Action::Move
+            | Action::Trash
+            | Action::Delete
+            | Action::Copy
+            | Action::Cut
+            | Action::Duplicate => self.selection_len() > 0,
             Action::Paste => self.clipboard.is_some(),
             Action::SelectAll => !self.visible.is_empty(),
             Action::OpenTerminal => self.cwd.is_dir(),
@@ -243,6 +246,7 @@ impl App {
             Action::Rename => self.begin_rename(),
             Action::Move => self.begin_move(),
             Action::Trash => self.begin_trash(),
+            Action::Delete => self.begin_delete(),
             Action::Copy => self.copy_selection(false),
             Action::CopyPath => self.copy_paths(tx),
             Action::Cut => self.copy_selection(true),

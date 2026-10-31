@@ -21,6 +21,7 @@ pub enum Action {
     Rename,
     Move,
     Trash,
+    Delete,
     Copy,
     CopyPath,
     Cut,
@@ -40,7 +41,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 30] = [
+    pub const ALL: [Action; 31] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -53,6 +54,7 @@ impl Action {
         Action::Rename,
         Action::Move,
         Action::Trash,
+        Action::Delete,
         Action::Copy,
         Action::Cut,
         Action::Paste,
@@ -93,6 +95,7 @@ impl Action {
             Action::Rename => "rename",
             Action::Move => "move",
             Action::Trash => "trash",
+            Action::Delete => "delete",
             Action::Copy => "copy",
             Action::CopyPath => "copy-path",
             Action::Cut => "cut",
@@ -128,6 +131,7 @@ impl Action {
             Action::Rename => "Rename",
             Action::Move => "Move to Folder",
             Action::Trash => "Move to Trash",
+            Action::Delete => "Delete Permanently",
             Action::Copy => "Copy",
             Action::CopyPath => "Copy Path",
             Action::Cut => "Cut",
@@ -184,6 +188,7 @@ impl Action {
                 Action::Rename => "f2",
                 Action::Move => "shift+super+m",
                 Action::Trash => "super+backspace",
+                Action::Delete => "shift+super+backspace",
                 Action::Copy => "super+c",
                 Action::CopyPath => "shift+super+c",
                 Action::Cut => "super+x",
@@ -211,6 +216,7 @@ impl Action {
                 Action::Rename => "f2",
                 Action::Move => "shift+ctrl+m",
                 Action::Trash => "ctrl+backspace",
+                Action::Delete => "shift+delete",
                 Action::Copy => "ctrl+c",
                 Action::CopyPath => "shift+ctrl+c",
                 Action::Cut => "ctrl+x",

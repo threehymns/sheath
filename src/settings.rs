@@ -9,17 +9,19 @@ pub enum Setting {
     GridLayout,
     FoldersFirst,
     ConfirmTrash,
+    ConfirmDelete,
     ScrollInertia,
     Overscroll,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 7] = [
+    pub const ALL: [Setting; 8] = [
         Setting::ShowHidden,
         Setting::Inspector,
         Setting::GridLayout,
         Setting::FoldersFirst,
         Setting::ConfirmTrash,
+        Setting::ConfirmDelete,
         Setting::ScrollInertia,
         Setting::Overscroll,
     ];
@@ -31,6 +33,7 @@ impl Setting {
             Setting::GridLayout => "grid",
             Setting::FoldersFirst => "folders-first",
             Setting::ConfirmTrash => "confirm-trash",
+            Setting::ConfirmDelete => "confirm-delete",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -43,6 +46,7 @@ impl Setting {
             Setting::GridLayout => "grid",
             Setting::FoldersFirst => "folders-first",
             Setting::ConfirmTrash => "confirm-trash",
+            Setting::ConfirmDelete => "confirm-delete",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -54,6 +58,7 @@ impl Setting {
             Setting::Inspector
             | Setting::FoldersFirst
             | Setting::ConfirmTrash
+            | Setting::ConfirmDelete
             | Setting::ScrollInertia
             | Setting::Overscroll => true,
         }
@@ -66,8 +71,9 @@ impl Setting {
             Setting::GridLayout => 2,
             Setting::FoldersFirst => 3,
             Setting::ConfirmTrash => 4,
-            Setting::ScrollInertia => 5,
-            Setting::Overscroll => 6,
+            Setting::ConfirmDelete => 5,
+            Setting::ScrollInertia => 6,
+            Setting::Overscroll => 7,
         }
     }
 
@@ -84,6 +90,7 @@ impl Setting {
             Setting::GridLayout => settings.grid,
             Setting::FoldersFirst => settings.folders_first,
             Setting::ConfirmTrash => settings.confirm_trash,
+            Setting::ConfirmDelete => settings.confirm_delete,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
         }
@@ -96,6 +103,7 @@ impl Setting {
             Setting::GridLayout => settings.grid = on,
             Setting::FoldersFirst => settings.folders_first = on,
             Setting::ConfirmTrash => settings.confirm_trash = on,
+            Setting::ConfirmDelete => settings.confirm_delete = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
         }
@@ -109,9 +117,10 @@ pub struct Settings {
     pub grid: bool,
     pub folders_first: bool,
     pub confirm_trash: bool,
+    pub confirm_delete: bool,
     pub scroll_inertia: bool,
     pub overscroll: bool,
-    present: [bool; 7],
+    present: [bool; 8],
 }
 
 impl Default for Settings {
@@ -122,9 +131,10 @@ impl Default for Settings {
             grid: false,
             folders_first: true,
             confirm_trash: true,
+            confirm_delete: true,
             scroll_inertia: true,
             overscroll: true,
-            present: [false; 7],
+            present: [false; 8],
         }
     }
 }

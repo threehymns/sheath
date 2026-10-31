@@ -59,6 +59,7 @@ unsupported by this backend.
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
+| Delete for good | Shift+Delete (Shift+Cmd+Backspace on macOS) |
 | New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Copy path | Shift+Cmd/Ctrl+C |
@@ -93,6 +94,7 @@ settings {
     grid #false
     folders-first #true
     confirm-trash #true
+    confirm-delete #true
     scroll-inertia #true
     overscroll #true
 }
@@ -100,7 +102,8 @@ settings {
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
 bar of the header's height, and is also the toolbar's layout button. `folders-first` keeps folders
-above files in either layout, and `confirm-trash` asks before trashing. `scroll-inertia` lets every
+above files in either layout, `confirm-trash` asks before trashing, and `confirm-delete` asks
+before deleting something for good. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 
@@ -171,7 +174,7 @@ name, written the way Rune's shortcuts read them, so the file can be edited by h
 command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forward`,
 `enclosing-folder`, `go-to-folder`,
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
-`copy-path`, `cut`, `paste`,
+`copy-path`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in

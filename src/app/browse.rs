@@ -289,6 +289,11 @@ impl App {
         self.remember(Setting::ConfirmTrash, self.config.confirm_trash);
     }
 
+    pub fn toggle_confirm_delete(&mut self) {
+        self.config.confirm_delete = !self.config.confirm_delete;
+        self.remember(Setting::ConfirmDelete, self.config.confirm_delete);
+    }
+
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
         self.remember(Setting::Inspector, self.inspector.is_open());
