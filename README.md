@@ -64,6 +64,7 @@ unsupported by this backend.
 | Delete for good | Shift+Delete (Shift+Cmd+Backspace on macOS) |
 | New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
+| Make an alias | The row menu, or the command bar: `Make Alias` |
 | Copy path | Shift+Cmd/Ctrl+C |
 | Copy name | The row menu, or the command bar: `Copy Name` |
 | Command bar | Cmd/Ctrl+P |
@@ -186,7 +187,7 @@ command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forwa
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
 `copy-path`, `copy-name`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
-`search-subfolders`, `add-place`,
+`search-subfolders`, `add-place`, `make-alias`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.

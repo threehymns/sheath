@@ -307,3 +307,43 @@ fn a_picture_previews_as_a_picture_and_not_as_its_bytes() {
         "text still previews as text"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn making_an_alias_points_a_new_name_at_the_row() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:file2.txt");
+    app.make_aliases();
+    app.settle_scan();
+
+    let alias = dir.path().join("file2 alias.txt");
+    assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
+    assert_eq!(fs::read_to_string(&alias).unwrap(), "two");
+    assert_eq!(
+        app.selected.as_deref(),
+        Some("f:file2 alias.txt"),
+        "the alias is chosen"
+    );
+
+    app.select_id("f:file2.txt");
+    app.make_aliases();
+    assert!(
+        dir.path().join("file2 alias 2.txt").exists(),
+        "a second alias numbers itself"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn an_alias_of_a_folder_opens_as_a_folder() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:alpha");
+    app.make_aliases();
+    app.settle_scan();
+
+    let alias = dir.path().join("alpha alias");
+    assert!(alias.symlink_metadata().unwrap().file_type().is_symlink());
+    assert!(alias.is_dir());
+}

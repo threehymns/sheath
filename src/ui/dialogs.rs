@@ -538,6 +538,14 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                 }),
         )
         .item(
+            MenuItem::new("Make Alias")
+                .icon(&icons::LINK)
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.make_aliases();
+                }),
+        )
+        .item(
             MenuItem::new("Copy Name")
                 .icon(&icons::CLIPBOARD)
                 .disabled(count == 0)

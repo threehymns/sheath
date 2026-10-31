@@ -210,7 +210,8 @@ impl App {
             | Action::Delete
             | Action::Copy
             | Action::Cut
-            | Action::Duplicate => self.selection_len() > 0,
+            | Action::Duplicate
+            | Action::MakeAlias => self.selection_len() > 0,
             Action::Paste => self.clipboard.is_some(),
             Action::SelectAll => !self.visible.is_empty(),
             Action::OpenTerminal => self.cwd.is_dir(),
@@ -251,6 +252,7 @@ impl App {
             Action::CopyPath => self.copy_paths(tx),
             Action::CopyName => self.copy_names(tx),
             Action::AddPlace => self.add_current_place(),
+            Action::MakeAlias => self.make_aliases(),
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),

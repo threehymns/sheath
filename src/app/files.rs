@@ -10,18 +10,36 @@ pub struct Clipboard {
     pub cut: bool,
 }
 
-fn free_name(dir: &Path, name: &str) -> String {
+fn free_name_with(dir: &Path, name: &str, suffix: &str) -> String {
     let (stem, extension) = match name.rfind('.') {
         Some(0) | None => (name, ""),
         Some(at) => name.split_at(at),
     };
-    let mut candidate = format!("{stem} copy{extension}");
+    let mut candidate = format!("{stem} {suffix}{extension}");
     let mut n = 2;
     while dir.join(&candidate).exists() {
-        candidate = format!("{stem} copy {n}{extension}");
+        candidate = format!("{stem} {suffix} {n}{extension}");
         n += 1;
     }
     candidate
+}
+
+fn free_name(dir: &Path, name: &str) -> String {
+    free_name_with(dir, name, "copy")
+}
+
+#[cfg(unix)]
+fn make_link(from: &Path, to: &Path) -> io::Result<()> {
+    std::os::unix::fs::symlink(from, to)
+}
+
+#[cfg(windows)]
+fn make_link(from: &Path, to: &Path) -> io::Result<()> {
+    if from.is_dir() {
+        std::os::windows::fs::symlink_dir(from, to)
+    } else {
+        std::os::windows::fs::symlink_file(from, to)
+    }
 }
 
 fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
@@ -177,6 +195,24 @@ impl App {
                     }
                 }
             }
+        }
+        self.finish_paste(made, error);
+    }
+
+    /// Points new names beside the chosen rows at the rows themselves.
+    pub fn make_aliases(&mut self) {
+        let mut made = Vec::new();
+        let mut error = None;
+        for id in self.selected_ids() {
+            let Some((path, name, _)) = self.entry_snapshot(&id) else {
+                continue;
+            };
+            let new_name = free_name_with(&self.cwd, &name, "alias");
+            if let Err(err) = make_link(&path, &self.cwd.join(&new_name)) {
+                error = Some(format!("Couldn’t alias “{name}”: {err}"));
+                break;
+            }
+            made.push(new_name);
         }
         self.finish_paste(made, error);
     }

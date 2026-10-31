@@ -41,10 +41,11 @@ pub enum Action {
     SearchSubfolders,
     CopyName,
     AddPlace,
+    MakeAlias,
 }
 
 impl Action {
-    pub const ALL: [Action; 34] = [
+    pub const ALL: [Action; 35] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -79,6 +80,7 @@ impl Action {
         Action::SearchSubfolders,
         Action::CopyName,
         Action::AddPlace,
+        Action::MakeAlias,
     ];
 
     pub fn ignores_shift(self) -> bool {
@@ -121,6 +123,7 @@ impl Action {
             Action::SearchSubfolders => "search-subfolders",
             Action::CopyName => "copy-name",
             Action::AddPlace => "add-place",
+            Action::MakeAlias => "make-alias",
         }
     }
 
@@ -160,6 +163,7 @@ impl Action {
             Action::SearchSubfolders => "Search Subfolders",
             Action::CopyName => "Copy Name",
             Action::AddPlace => "Add This Folder to the Sidebar",
+            Action::MakeAlias => "Make Alias",
         }
     }
 
@@ -180,7 +184,8 @@ impl Action {
             | Action::Reveal
             | Action::SearchSubfolders
             | Action::CopyName
-            | Action::AddPlace => None,
+            | Action::AddPlace
+            | Action::MakeAlias => None,
             _ => Some(self.builtin_chord()),
         }
     }
