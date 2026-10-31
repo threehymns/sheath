@@ -200,7 +200,11 @@ impl Store {
         edit: impl FnOnce(&mut KdlDocument),
     ) -> Result<(), String> {
         let Some(path) = self.path(name) else {
-            return Ok(());
+            // A store with no folder cannot write anything. Reporting the save instead would
+            // leave the panels saying a rule landed while nothing was written.
+            let error = "Couldn’t find a folder to save the config in.".to_owned();
+            self.write_error = Some(error.clone());
+            return Err(error);
         };
         // The document kept here is the last one that parsed, not what is on disk now. Writing
         // it back would throw away whatever the user is in the middle of typing.
@@ -211,7 +215,12 @@ impl Store {
             ));
         }
         let Some(doc) = self.files.get(name).and_then(|file| file.doc.clone()) else {
-            return Ok(());
+            let error = format!(
+                "{} has not been read, so nothing is written to it",
+                path.display()
+            );
+            self.write_error = Some(error.clone());
+            return Err(error);
         };
         let mut doc = doc;
         edit(&mut doc);

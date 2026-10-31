@@ -80,6 +80,34 @@ fn a_leading_double_star_matches_at_any_depth() {
 }
 
 #[test]
+fn a_store_with_no_config_folder_refuses_the_write_and_says_so() {
+    let mut store = Store::none();
+    assert!(
+        store.edit(config::CONFIG, |_| {}).is_err(),
+        "a store with nowhere to write refuses rather than reporting a save"
+    );
+    assert!(
+        store.write_error.is_some(),
+        "and leaves the reason where the panels show it"
+    );
+}
+
+#[test]
+fn saving_a_rule_with_no_config_folder_reports_it() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.save_layout_rule();
+    assert!(
+        app.store.write_error.is_some(),
+        "the save says why it could not write"
+    );
+    assert!(
+        app.rules.rules.is_empty(),
+        "and no rule is claimed as written"
+    );
+}
+
+#[test]
 fn matchers_or_together_and_keys_inside_one_and_together() {
     let rules = rules(
         "folder-rule \"either\" {\n\
