@@ -16,7 +16,9 @@ pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -
 /// write their own kind of rule, so each carries its own button. `clip` cuts the rows to the box
 /// the card presents, so the Rules tab's card reveals a rule's form as it springs open around it,
 /// instead of painting the form over the section below; a rule drag lifts its row out of the
-/// card, so the tab turns the clip off while a row is in hand.
+/// card, so the tab turns the clip off while a row is in hand. The clip sits on the rows' own
+/// box rather than on the card: the card's edge is the 0.5 pt ring of its raised shadow, which
+/// paints just outside the card, so a rounded clip on the card would all but take the edge away.
 pub(crate) fn settings_section_action(
     k: &Kit,
     key: &str,
@@ -25,23 +27,27 @@ pub(crate) fn settings_section_action(
     rows: Vec<El>,
     clip: bool,
 ) -> El {
-    let base = col()
-        .key(format!("{key}-card"))
-        .w_full()
-        .radius(k.radius.lg)
-        .fill(k.c.bg_base);
-    let card = if clip {
-        base.clip_rounded(k.radius.lg)
-    } else {
-        base
-    };
-    let mut card = k.elevate(card, &k.elevation.raised);
+    let mut body = col().key(format!("{key}-rows")).w_full();
     for (index, row) in rows.into_iter().enumerate() {
         if index > 0 {
-            card = card.child(settings_rule(k));
+            body = body.child(settings_rule(k));
         }
-        card = card.child(row);
+        body = body.child(row);
     }
+    let body = if clip {
+        body.clip_rounded(k.radius.lg)
+    } else {
+        body
+    };
+    let card = k.elevate(
+        col()
+            .key(format!("{key}-card"))
+            .w_full()
+            .radius(k.radius.lg)
+            .fill(k.c.bg_base)
+            .child(body),
+        &k.elevation.raised,
+    );
     // The inset sits on the label and the action, not on the row: margins on a full-width row
     // widen it past the page's edge, leaving the action flush. Each label carries its section's
     // key, so no two sections share one.
