@@ -147,6 +147,43 @@ fn dragging_a_tile_onto_a_folder_tile_moves_it() {
 }
 
 #[test]
+fn a_click_in_the_gaps_between_tiles_clears_the_selection() {
+    let dir = long_folder(24);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-layout");
+    for _ in 0..30 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    let (x, y) = rt.find("f:file00.txt").expect("the first tile");
+    // The gap after the tile in its grid row, and the one below it before the next row.
+    for (gx, gy) in [
+        (x + TILE_WIDTH / 2.0 + TILE_GAP / 2.0, y),
+        (x, y + TILE_HEIGHT / 2.0 + TILE_GAP / 2.0),
+    ] {
+        rt.state.select_id("f:file05.txt");
+        rt.frame(0.05);
+        assert_eq!(
+            rt.state.selection_len(),
+            1,
+            "the click starts from a selection"
+        );
+
+        rt.pointer_down(gx, gy);
+        rt.frame(0.05);
+        rt.pointer_up(gx, gy);
+        rt.frame(0.1);
+        assert_eq!(rt.state.selected, None, "nothing is picked at {gx},{gy}");
+        assert_eq!(
+            rt.state.selection_len(),
+            0,
+            "a click between tiles clears the selection"
+        );
+    }
+}
+
+#[test]
 fn the_gaps_between_tiles_start_a_box_rather_than_a_drag() {
     let dir = long_folder(24);
     let mut rt = runtime(app(&dir));

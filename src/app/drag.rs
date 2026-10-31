@@ -339,7 +339,11 @@ impl App {
             self.aim_drag(&mut drag);
             self.file_drag = Some(drag);
         } else if let Some(marquee) = self.marquee.take() {
-            self.sweep_box(&marquee);
+            // A press that has not travelled is a click, not a box. Sweeping it would cover the
+            // cell its point sits in, so a click in the gap between tiles took the nearest one.
+            if marquee.dragging {
+                self.sweep_box(&marquee);
+            }
             self.marquee = Some(marquee);
         }
     }
