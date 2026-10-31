@@ -41,6 +41,9 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                     stick_bottom: false,
                 })
                 .focusable(true)
+                // Focus shows in the selected tile, so the grid draws no ring: clipped by its
+                // own viewport, it would read as a border under the sort bar.
+                .no_focus_ring()
                 .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
                 .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
                 .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))

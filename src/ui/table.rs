@@ -52,6 +52,9 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
             stick_bottom: false,
         })
         .focusable(true)
+        // Focus shows in the selected row, as it does in a Finder list: a ring around the
+        // viewport would be clipped by it and read as a border under the header.
+        .no_focus_ring()
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
         .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
         .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
