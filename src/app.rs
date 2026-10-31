@@ -67,6 +67,10 @@ pub struct App {
     pub cwd: PathBuf,
     pub entries: Vec<Entry>,
     pub visible: Vec<usize>,
+    // Entries no rule or setting hides, whatever the search shows; the path bar's count.
+    pub unhidden: usize,
+    // Bumped when `visible` changes, so Rune can skip re-reading every row's key.
+    keys_version: u64,
     pub selection: BTreeSet<String>,
     pub selected: Option<String>,
     pub anchor: Option<String>,
@@ -171,6 +175,8 @@ impl App {
             cwd: PathBuf::new(),
             entries: Vec::new(),
             visible: Vec::new(),
+            unhidden: 0,
+            keys_version: 0,
             selection: BTreeSet::new(),
             selected: None,
             anchor: None,

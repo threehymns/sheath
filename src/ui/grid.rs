@@ -54,7 +54,8 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                         None => Cow::Borrowed("grid-row"),
                     },
                     move |s: &App, r| grid_row(s, r, columns, k),
-                ),
+                )
+                .virtual_rows_version((s.keys_version(), columns)),
         ))
 }
 

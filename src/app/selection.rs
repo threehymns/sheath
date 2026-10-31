@@ -62,7 +62,7 @@ impl App {
     }
 
     pub fn selection_len(&self) -> usize {
-        self.selected_ids().len()
+        self.selection.len()
     }
 
     pub fn selection_folders(&self) -> usize {

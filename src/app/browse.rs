@@ -24,6 +24,8 @@ impl App {
         self.clear_selection();
         self.entries.clear();
         self.visible.clear();
+        self.unhidden = 0;
+        self.name_at.clear();
         self.pending_select = None;
         self.layout_cut = true;
         self.apply_rules();
@@ -177,12 +179,14 @@ impl App {
             .iter()
             .map(|entry| self.entry_hidden(entry))
             .collect();
+        self.unhidden = hidden.iter().filter(|hidden| !**hidden).count();
         self.visible = (0..self.entries.len())
             .filter(|&i| {
                 let entry = &self.entries[i];
                 !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
             })
             .collect();
+        self.keys_version = self.keys_version.wrapping_add(1);
         let visible: HashSet<&str> = self
             .visible
             .iter()
@@ -344,11 +348,7 @@ impl App {
         if chosen > 1 {
             return format!("{chosen} of {shown} selected");
         }
-        let total = self
-            .entries
-            .iter()
-            .filter(|entry| !self.entry_hidden(entry))
-            .count();
+        let total = self.unhidden;
         let noun = if shown == 1 { "item" } else { "items" };
         if self.search.text.trim().is_empty() {
             format!("{shown} {noun}")

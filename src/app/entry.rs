@@ -7,6 +7,8 @@ const PREVIEW_LIMIT: u64 = 24 * 1024;
 
 pub struct Entry {
     pub id: String,
+    // The row's name element key, built once so a scrolling frame need not format it.
+    pub name_key: String,
     pub name: String,
     pub path: PathBuf,
     pub is_dir: bool,
@@ -33,9 +35,11 @@ impl Entry {
         };
         let meta = target_meta.as_ref().unwrap_or(&link_meta);
         let is_dir = meta.is_dir();
+        // A colon keeps the id clear of the `/`-separated key paths Rune uses.
+        let id = format!("f:{name}");
         Some(Entry {
-            // A colon keeps the id clear of the `/`-separated key paths Rune uses.
-            id: format!("f:{name}"),
+            name_key: format!("name-{id}"),
+            id,
             name,
             path,
             is_dir,

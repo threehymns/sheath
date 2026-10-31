@@ -23,12 +23,12 @@ pub fn size(bytes: u64) -> String {
     format!("{text} {unit}")
 }
 
-pub fn table_time(time: Option<SystemTime>) -> String {
+// `now` is read once per frame by the caller: a row's label must not cost a timezone lookup.
+pub fn table_time(time: Option<SystemTime>, now: DateTime<Local>) -> String {
     let Some(time) = time else {
         return "—".into();
     };
     let when: DateTime<Local> = time.into();
-    let now = Local::now();
     let days = now
         .date_naive()
         .signed_duration_since(when.date_naive())

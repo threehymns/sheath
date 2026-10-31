@@ -25,6 +25,11 @@ impl Layout {
 }
 
 impl App {
+    // The last `visible` change; the list and grid key their rows by it.
+    pub fn keys_version(&self) -> u64 {
+        self.keys_version
+    }
+
     pub fn is_grid(&self) -> bool {
         self.layout.is_grid()
     }

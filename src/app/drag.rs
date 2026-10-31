@@ -82,7 +82,7 @@ impl App {
         let entry = &self.entries[visible];
         let cell_right = self.rows_view[0] + self.rows_view[2] - self.size_width - self.date_width;
         let widest = (self.rows_view[0] + NAME_HANDLE_MIN).min(cell_right);
-        match self.name_at.get(&entry.path.display().to_string()) {
+        match self.name_at.get(&entry.id) {
             Some(&right) => at.0 <= (right + NAME_HANDLE_SLOP).max(widest).min(cell_right),
             None => at.0 <= cell_right,
         }

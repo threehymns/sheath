@@ -1,6 +1,7 @@
 use crate::app::{App, FILES, ROW_HEIGHT};
 use crate::format;
 use crate::icons;
+use chrono::{DateTime, Local};
 use rune::{
     Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, row, text,
 };
@@ -196,6 +197,8 @@ fn column_resize(id: &'static str, title: &'static str, width: f32, rule: rune::
 }
 
 fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
+    // One clock reading serves every row; the labels only need the day and the hour.
+    let now = Local::now();
     col()
         .key("file-rows")
         .w_full()
@@ -210,11 +213,12 @@ fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
             s.visible.len(),
             ROW_HEIGHT,
             |s: &App, i| Cow::Borrowed(s.entries[s.visible[i]].id.as_str()),
-            move |s: &App, i| file_row(s, i, k, style),
+            move |s: &App, i| file_row(s, i, k, style, now),
         )
+        .virtual_rows_version(s.keys_version())
 }
 
-fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
+fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle, now: DateTime<Local>) -> El {
     let Some(&index) = s.visible.get(i) else {
         return row().key(format!("row-{i}"));
     };
@@ -243,7 +247,7 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
     };
     line.child(name_cell(s, i, k, style))
         .child(size_cell(s, i, style, s.size_width))
-        .child(modified_cell(s, i, style, s.date_width))
+        .child(modified_cell(s, i, style, s.date_width, now))
 }
 
 fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
@@ -263,9 +267,9 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
     } else {
         k.c.icon_muted
     };
-    let path = entry.path.display().to_string();
+    let id = entry.id.clone();
     let name = text(entry.name.clone())
-        .key(format!("name-{}", entry.id))
+        .key(entry.name_key.clone())
         .font(style.font)
         .color(if entry.is_symlink {
             style.muted
@@ -276,7 +280,7 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .min_w(0.0)
         .truncate()
         .on_layout(move |s: &mut App, rect| {
-            s.name_at.insert(path.clone(), rect[0] + rect[2]);
+            s.name_at.insert(id.clone(), rect[0] + rect[2]);
         });
     let mut content = row()
         .gap(8.0)
@@ -318,12 +322,12 @@ fn size_cell(s: &App, i: usize, style: TableStyle, width: f32) -> El {
         .child(text(body).font(font).color(style.muted).truncate().shrink())
 }
 
-fn modified_cell(s: &App, i: usize, style: TableStyle, width: f32) -> El {
+fn modified_cell(s: &App, i: usize, style: TableStyle, width: f32, now: DateTime<Local>) -> El {
     let Some(&index) = s.visible.get(i) else {
         return row();
     };
     row().w(width).h_full().px(style.cell_pad).center_y().child(
-        text(format::table_time(s.entries[index].modified))
+        text(format::table_time(s.entries[index].modified, now))
             .font(style.font)
             .color(style.muted)
             .truncate()
