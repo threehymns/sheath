@@ -41,6 +41,14 @@ impl App {
         }
     }
 
+    /// Puts the folder on screen at the top of the sidebar's favourites.
+    pub fn add_current_place(&mut self) {
+        let path = self.cwd.clone();
+        if self.places.insert(Section::Favourites, 0, &[path]) {
+            self.places.save();
+        }
+    }
+
     pub fn open_place(&mut self, path: PathBuf) {
         self.commit_place_rename();
         if path.is_dir() {

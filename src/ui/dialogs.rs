@@ -386,6 +386,14 @@ pub(super) fn empty_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
             }),
         )
         .item(
+            MenuItem::new("Add This Folder to the Sidebar")
+                .icon(&icons::FOLDER_PLUS)
+                .on_select(|s: &mut App| {
+                    s.close_empty_menu();
+                    s.add_current_place();
+                }),
+        )
+        .item(
             MenuItem::new("Settings")
                 .icon(&theme::icons::SETTINGS_GEAR)
                 .shortcut(s.keybinds.menu_label(Action::OpenSettings))

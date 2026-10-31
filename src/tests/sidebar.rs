@@ -349,3 +349,26 @@ fn a_place_from_a_later_release_keeps_its_id_and_label() {
         "an unplugged drive is remembered but not drawn"
     );
 }
+
+#[test]
+fn the_sidebar_takes_the_folder_on_screen_as_a_place() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.navigate(dir.path().join("alpha"));
+
+    app.add_current_place();
+
+    let id = format!("folder:{}", dir.path().join("alpha").display());
+    let place = app.places.get(&id).expect("the folder is a place now");
+    assert_eq!(place.name, "alpha");
+    assert!(!place.hidden);
+
+    app.add_current_place();
+    let count = app
+        .places
+        .places(crate::places::Section::Favourites)
+        .iter()
+        .filter(|place| place.path == dir.path().join("alpha"))
+        .count();
+    assert_eq!(count, 1, "adding it twice leaves one row");
+}

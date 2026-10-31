@@ -250,6 +250,7 @@ impl App {
             Action::Copy => self.copy_selection(false),
             Action::CopyPath => self.copy_paths(tx),
             Action::CopyName => self.copy_names(tx),
+            Action::AddPlace => self.add_current_place(),
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
