@@ -348,6 +348,13 @@ pub(super) fn header_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 s.toggle_show_modified();
             }),
         )
+        .separator()
+        .item(
+            column(s.config.folders_first, "Folders First").on_select(|s: &mut App| {
+                s.close_header_menu();
+                s.toggle_folders_first();
+            }),
+        )
         .on_close(|s: &mut App| s.close_header_menu())
         .build(k, layers);
 }

@@ -240,4 +240,14 @@ fn right_clicking_a_header_keeps_or_drops_a_column() {
     assert!(!rt.state.config.show_kind, "the column is dropped");
     assert!(rt.find("kind").is_none());
     assert!(rt.find("size").is_some(), "the others stay");
+
+    let (x, y) = rt.find("name").expect("the name header is still there");
+    rt.secondary_down(x, y);
+    rt.secondary_up(x, y);
+    rt.frame(0.1);
+    click(&mut rt, "header-menu-item4");
+    assert!(
+        !rt.state.config.folders_first,
+        "the menu also flips the folders-first setting"
+    );
 }
