@@ -108,6 +108,12 @@ pub static LIST: Icon = Icon {
     body: r#"<path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" stroke-linecap="round"/><circle cx="2.75" cy="4" r=".75" fill="currentColor"/><circle cx="2.75" cy="8" r=".75" fill="currentColor"/><circle cx="2.75" cy="12" r=".75" fill="currentColor"/>"#,
 };
 
+pub static TERMINAL: Icon = Icon {
+    name: "sheath-terminal",
+    view: 16.0,
+    body: r#"<rect x="1.75" y="2.75" width="12.5" height="10.5" rx="1.75" stroke="currentColor"/><path d="M4.5 6.25 6.75 8.25 4.5 10.25M8.25 10.25h3.25" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 pub static CHECK_SQUARE: Icon = Icon {
     name: "sheath-check-square",
     view: 16.0,

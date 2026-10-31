@@ -35,10 +35,11 @@ pub enum Action {
     ShowEntry,
     HideEntry,
     PickRule,
+    OpenTerminal,
 }
 
 impl Action {
-    pub const ALL: [Action; 28] = [
+    pub const ALL: [Action; 29] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -67,6 +68,7 @@ impl Action {
         Action::ShowEntry,
         Action::HideEntry,
         Action::PickRule,
+        Action::OpenTerminal,
     ];
 
     pub fn ignores_shift(self) -> bool {
@@ -103,6 +105,7 @@ impl Action {
             Action::ShowEntry => "show-entry",
             Action::HideEntry => "hide-entry",
             Action::PickRule => "pick-rule",
+            Action::OpenTerminal => "open-terminal",
         }
     }
 
@@ -136,6 +139,7 @@ impl Action {
             Action::ShowEntry => "Always Show This Entry",
             Action::HideEntry => "Always Hide This Entry",
             Action::PickRule => "Show All Rules",
+            Action::OpenTerminal => "Open Terminal Here",
         }
     }
 
@@ -151,7 +155,8 @@ impl Action {
             | Action::ShowEntry
             | Action::HideEntry
             | Action::PickRule
-            | Action::InvertSelection => None,
+            | Action::InvertSelection
+            | Action::OpenTerminal => None,
             _ => Some(self.builtin_chord()),
         }
     }

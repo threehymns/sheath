@@ -55,6 +55,83 @@ pub fn root_dir() -> PathBuf {
     }
 }
 
+/// Opens a terminal with its working folder set here. Linux tries `$TERMINAL`, then the common
+/// emulators; the first one that launches wins.
+pub(super) fn open_terminal(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("open");
+        command.arg("-a").arg("Terminal").arg(path);
+        return spawn_reaped(command, "Terminal");
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("cmd");
+        command
+            .args(["/C", "start", "", "cmd", "/K", "cd", "/d"])
+            .arg(path);
+        return spawn_reaped(command, "Command Prompt");
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let mut failures = Vec::new();
+        for program in terminals() {
+            let mut command = Command::new(&program);
+            command.current_dir(path);
+            match command.spawn() {
+                Ok(mut child) => {
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                    return Ok(());
+                }
+                Err(err) => failures.push(format!("{program}: {err}")),
+            }
+        }
+        Err(format!(
+            "Couldn’t open a terminal here. {}",
+            failures.join("; ")
+        ))
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn terminals() -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(program) = std::env::var_os("TERMINAL") {
+        let program = program.to_string_lossy().trim().to_owned();
+        if !program.is_empty() {
+            out.push(program);
+        }
+    }
+    for program in [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "alacritty",
+        "kitty",
+        "foot",
+        "xterm",
+    ] {
+        out.push(program.to_owned());
+    }
+    out
+}
+
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
+    match command.spawn() {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+            Ok(())
+        }
+        Err(err) => Err(format!("Couldn’t open {label}: {err}")),
+    }
+}
+
 pub(super) fn open_external(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let mut command = Command::new("open");

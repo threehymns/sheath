@@ -172,6 +172,12 @@ impl App {
         );
     }
 
+    pub fn open_terminal_here(&mut self) {
+        if let Err(err) = super::paths::open_terminal(&self.cwd) {
+            self.error = Some(err);
+        }
+    }
+
     pub fn entry_hidden(&self, entry: &Entry) -> bool {
         let path = entry.path.to_string_lossy();
         let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
