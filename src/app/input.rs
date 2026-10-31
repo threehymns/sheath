@@ -30,7 +30,12 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    if s.sheet.is_some() || s.menu.is_some() || s.place_menu.is_some() || s.settings.is_some() {
+    if s.sheet.is_some()
+        || s.menu.is_some()
+        || s.empty_menu.is_some()
+        || s.place_menu.is_some()
+        || s.settings.is_some()
+    {
         return false;
     }
     if s.place_rename.is_some() {

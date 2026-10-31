@@ -71,6 +71,7 @@ unsupported by this backend.
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places |
 | Place menu | Right-click a place in the sidebar |
+| The folder's own menu | Right-click the empty space below the rows |
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 

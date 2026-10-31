@@ -17,6 +17,7 @@ impl App {
         self.visit = Default::default();
         self.stop_scrolling();
         self.menu = None;
+        self.empty_menu = None;
         self.place_menu = None;
         self.marquee = None;
         self.file_drag = None;

@@ -362,15 +362,33 @@ impl App {
 
     pub fn row_menu_at(&mut self, at: PointerPress) {
         let view = self.rows_view;
-        let inside = view[0] <= at.x && at.x <= view[0] + view[2];
+        let inside = view[0] <= at.x
+            && at.x <= view[0] + view[2]
+            && view[1] <= at.y
+            && at.y <= view[1] + view[3];
         match self.index_at_window((at.x, at.y)).filter(|_| inside) {
-            Some(index) => self.open_row_menu(index, at),
-            None => self.menu = None,
+            Some(index) => {
+                self.empty_menu = None;
+                self.open_row_menu(index, at);
+            }
+            // The space past the last row belongs to the folder, not to a row.
+            None if inside => {
+                self.menu = None;
+                self.empty_menu = Some(at);
+            }
+            None => {
+                self.menu = None;
+                self.empty_menu = None;
+            }
         }
     }
 
     pub fn close_menu(&mut self) {
         self.menu = None;
+    }
+
+    pub fn close_empty_menu(&mut self) {
+        self.empty_menu = None;
     }
 
     pub(super) fn entry_snapshot(&self, id: &str) -> Option<(PathBuf, String, bool)> {

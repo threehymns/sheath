@@ -314,6 +314,90 @@ pub(super) fn error_text(k: &Kit, error: &str) -> El {
         .wrap()
 }
 
+/// The menu behind a right click that landed past the last row: what the folder itself offers.
+pub(super) fn empty_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
+    let Some(at) = s.empty_menu else {
+        return;
+    };
+    let any = !s.visible.is_empty();
+    context_menu("empty-menu", el(), Some(at))
+        .min_width(220.0)
+        .item(
+            MenuItem::new("New Folder")
+                .icon(&icons::FOLDER_PLUS)
+                .shortcut(s.keybinds.menu_label(Action::NewFolder))
+                .on_select_tx(|s: &mut App, tx: &mut rune::Tx| {
+                    s.close_empty_menu();
+                    s.new_folder(tx);
+                }),
+        )
+        .item(
+            MenuItem::new("New File")
+                .icon(&glyphs::FILE)
+                .shortcut(s.keybinds.menu_label(Action::NewFile))
+                .on_select_tx(|s: &mut App, tx: &mut rune::Tx| {
+                    s.close_empty_menu();
+                    s.new_file(tx);
+                }),
+        )
+        .separator()
+        .item(
+            MenuItem::new("Paste")
+                .icon(&icons::CLIPBOARD)
+                .shortcut(s.keybinds.menu_label(Action::Paste))
+                .disabled(s.clipboard.is_none())
+                .on_select(|s: &mut App| {
+                    s.close_empty_menu();
+                    s.paste();
+                }),
+        )
+        .separator()
+        .item(
+            MenuItem::new("Select All")
+                .icon(&icons::CHECK_SQUARE)
+                .shortcut(s.keybinds.menu_label(Action::SelectAll))
+                .disabled(!any)
+                .on_select(|s: &mut App| {
+                    s.close_empty_menu();
+                    s.select_all();
+                }),
+        )
+        .item(
+            MenuItem::new("Refresh")
+                .icon(&icons::REFRESH)
+                .shortcut(s.keybinds.menu_label(Action::Refresh))
+                .on_select(|s: &mut App| {
+                    s.close_empty_menu();
+                    s.reload();
+                }),
+        )
+        .separator()
+        .item(
+            MenuItem::new(if s.show_hidden {
+                "Hide Hidden Files"
+            } else {
+                "Show Hidden Files"
+            })
+            .icon(k.glyph.eye)
+            .shortcut(s.keybinds.menu_label(Action::ToggleHidden))
+            .on_select(|s: &mut App| {
+                s.close_empty_menu();
+                s.toggle_hidden();
+            }),
+        )
+        .item(
+            MenuItem::new("Settings")
+                .icon(&theme::icons::SETTINGS_GEAR)
+                .shortcut(s.keybinds.menu_label(Action::OpenSettings))
+                .on_select(|s: &mut App| {
+                    s.close_empty_menu();
+                    s.open_settings();
+                }),
+        )
+        .on_close(|s: &mut App| s.close_empty_menu())
+        .build(k, layers);
+}
+
 pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>) {
     let count = s.selection_len();
     let many = count > 1;

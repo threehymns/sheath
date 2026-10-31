@@ -101,6 +101,8 @@ pub struct App {
     pub error: Option<String>,
     pub sheet: Option<Sheet>,
     pub menu: Option<PointerPress>,
+    // The menu for a right click that found no row, over the empty space of the list.
+    pub empty_menu: Option<PointerPress>,
     pub place_menu: Option<PlaceMenu>,
     pub place_rename: Option<PlaceRename>,
     pub settings: Option<SettingsTab>,
@@ -229,6 +231,7 @@ impl App {
             error: None,
             sheet: None,
             menu: None,
+            empty_menu: None,
             place_menu: None,
             place_rename: None,
             settings: None,

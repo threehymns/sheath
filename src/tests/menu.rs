@@ -180,3 +180,30 @@ fn the_row_menu_keeps_a_selection_it_lands_in() {
         "a right-click outside the selection selects that row alone"
     );
 }
+
+#[test]
+fn right_clicking_past_the_last_row_opens_the_folders_own_menu() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    let ([x, y, w, h], _) = rt.presented("files-table").expect("the list is on screen");
+    let (at_x, at_y) = (x + w * 0.5, y + h - 24.0);
+    rt.secondary_down(at_x, at_y);
+    rt.secondary_up(at_x, at_y);
+    rt.frame(0.1);
+
+    assert!(rt.state.empty_menu.is_some(), "the folder's menu opens");
+    assert!(
+        rt.state.selected.is_none(),
+        "the press left the selection alone"
+    );
+    assert!(
+        rt.find("empty-menu-item0").is_some(),
+        "New Folder is offered"
+    );
+
+    click(&mut rt, "empty-menu-item0");
+    assert!(rt.state.empty_menu.is_none(), "picking an item closes it");
+    assert!(dir.path().join("New Folder").is_dir());
+}
