@@ -66,21 +66,32 @@ fn place_row(
             locations_drag as fn(&mut App) -> &mut Reorder,
         ),
     };
-    SidebarRow::new(place.name.clone())
+    let mut row = SidebarRow::new(place.name.clone())
         .icon(place.icon)
-        .selected(s.cwd == opens || highlight)
-        .on_select(move |s: &mut App, _| {
-            // The release that ends a reorder arrives as a press too, and it must not open the
-            // folder the row was dragged over.
-            if !s.take_place_drag() {
-                s.open_place(path.clone());
-            }
-        })
-        .reorder(drag, index, count, access, move |s: &mut App, from, to| {
-            s.place_dragged = true;
-            s.move_place(section, from, to);
-        })
-        .build(k)
+        .selected(s.cwd == opens || highlight);
+    row = match s.place_rename.as_ref().filter(|rename| rename.id == id) {
+        // The display name is edited in the row itself: the field takes the row's presses, and
+        // the kit ends the edit on Return or Escape.
+        Some(rename) => row.renaming(
+            &rename.edit,
+            crate::app::place_rename_edit,
+            |s: &mut App, _: &mut Tx| s.commit_place_rename(),
+            |s: &mut App, _: &mut Tx| s.cancel_place_rename(),
+        ),
+        None => row
+            .on_select(move |s: &mut App, _| {
+                // The release that ends a reorder arrives as a press too, and it must not open
+                // the folder the row was dragged over.
+                if !s.take_place_drag() {
+                    s.open_place(path.clone());
+                }
+            })
+            .reorder(drag, index, count, access, move |s: &mut App, from, to| {
+                s.place_dragged = true;
+                s.move_place(section, from, to);
+            }),
+    };
+    row.build(k)
         .key(format!("place-{id}"))
         .on_secondary_press(move |s: &mut App, press, _: &mut Tx| {
             s.open_place_menu(menu_id.clone(), press);

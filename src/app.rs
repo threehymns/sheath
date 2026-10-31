@@ -33,7 +33,7 @@ pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WI
 pub use input::{list_key, on_key};
 pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};
-pub use places::PlaceMenu;
+pub use places::{PlaceMenu, PlaceRename, place_rename_edit};
 pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
@@ -117,6 +117,8 @@ pub struct App {
     pub menu: Option<PointerPress>,
     /// The sidebar place menu, while it's up, and the press that opened it.
     pub place_menu: Option<PlaceMenu>,
+    /// The place whose display name is being edited in its sidebar row, while the field is up.
+    pub place_rename: Option<PlaceRename>,
     /// The settings panel's open category, while the panel is up.
     pub settings: Option<SettingsTab>,
     /// The command bar, while it's up.
@@ -266,6 +268,7 @@ impl App {
             sheet: None,
             menu: None,
             place_menu: None,
+            place_rename: None,
             settings: None,
             palette: None,
             config,

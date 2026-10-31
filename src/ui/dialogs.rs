@@ -197,6 +197,12 @@ pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
         )
         .separator()
         .item(
+            // The name the sidebar shows only: the folder keeps its own name on disk.
+            MenuItem::new("Edit Name…")
+                .icon(&theme::icons::EDIT)
+                .on_select(|s: &mut App| s.begin_menu_place_rename()),
+        )
+        .item(
             MenuItem::new("Remove from Sidebar")
                 .icon(&theme::icons::TRASH)
                 .on_select(|s: &mut App| s.remove_menu_place()),

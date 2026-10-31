@@ -43,6 +43,11 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.sheet.is_some() || s.menu.is_some() || s.place_menu.is_some() || s.settings.is_some() {
         return false;
     }
+    // A sidebar place's display name is being typed: the field owns the keyboard, and its row
+    // ends the edit on Return or Escape.
+    if s.place_rename.is_some() {
+        return false;
+    }
     let mods = event.mods;
     let typing = tx.focused().is_some_and(|key| key.ends_with("input"));
     // The commands that change files wait until no field has the keyboard: a shortcut like F2,

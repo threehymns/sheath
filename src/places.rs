@@ -217,6 +217,25 @@ impl Places {
         false
     }
 
+    /// Sets the name the sidebar shows for `id`. Nothing on disk changes: a place's name is a
+    /// label, not the folder's own. True when the label changed.
+    pub fn rename(&mut self, id: &str, name: &str) -> bool {
+        for section in Section::ALL {
+            if let Some(place) = section
+                .list_mut(self)
+                .iter_mut()
+                .find(|place| place.id == id)
+            {
+                if place.name == name {
+                    return false;
+                }
+                place.name = name.to_owned();
+                return true;
+            }
+        }
+        false
+    }
+
     /// Inserts `paths` at `index` among the section's rows on screen, the way a drop between
     /// two places does. Nothing moves on disk; a path that is already shown in either section
     /// is left alone, and one that was removed comes back as the same row. True when something

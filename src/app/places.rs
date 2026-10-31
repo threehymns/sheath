@@ -1,16 +1,32 @@
 //! The sidebar's places as the browser changes them: reordering a section, adding the rows a
-//! drop lets go of, and opening a place. The places themselves and the file that remembers
-//! them live in `crate::places`.
+//! drop lets go of, renaming a label, and opening a place. The places themselves and the file
+//! that remembers them live in `crate::places`.
 
 use super::App;
 use crate::places::Section;
-use rune::PointerPress;
+use rune::{PointerPress, TextEdit};
 use std::path::PathBuf;
 
 /// The sidebar menu a right-click on a place opens: the place it is about, and where it opened.
 pub struct PlaceMenu {
     pub id: String,
     pub press: PointerPress,
+}
+
+/// A place whose display name is being edited in its sidebar row.
+pub struct PlaceRename {
+    pub id: String,
+    pub edit: TextEdit,
+}
+
+/// The field the renaming row binds to. `SidebarRow::renaming` wants a plain function, so the
+/// field is reached through the app's state rather than captured.
+pub fn place_rename_edit(s: &mut App) -> &mut TextEdit {
+    &mut s
+        .place_rename
+        .as_mut()
+        .expect("only the renaming row binds the field")
+        .edit
 }
 
 impl App {
@@ -38,8 +54,10 @@ impl App {
     }
 
     /// Opens a place: a folder shows it, and a file shows the folder holding it with the file
-    /// selected. A place whose path went away does nothing.
+    /// selected. A place whose path went away does nothing. A display name still being typed
+    /// is kept first, the way a click elsewhere ends an edit.
     pub fn open_place(&mut self, path: PathBuf) {
+        self.commit_place_rename();
         if path.is_dir() {
             self.navigate(path);
         } else if path.exists() {
@@ -52,9 +70,42 @@ impl App {
         std::mem::take(&mut self.place_dragged)
     }
 
-    /// Opens the place menu at a right-click on the row `id`.
+    /// Opens the place menu at a right-click on the row `id`, keeping a display name still
+    /// being typed.
     pub fn open_place_menu(&mut self, id: String, press: PointerPress) {
+        self.commit_place_rename();
         self.place_menu = Some(PlaceMenu { id, press });
+    }
+
+    /// Starts editing a place's display name from its menu: the row's label becomes a field
+    /// with the name selected. Only the label changes; the folder keeps its own name.
+    pub fn begin_menu_place_rename(&mut self) {
+        let Some(menu) = self.place_menu.take() else {
+            return;
+        };
+        let Some(name) = self.places.get(&menu.id).map(|place| place.name.clone()) else {
+            return;
+        };
+        let mut edit = TextEdit::new(name.clone());
+        edit.set_selection(0, name.len());
+        edit.focused = true;
+        self.place_rename = Some(PlaceRename { id: menu.id, edit });
+    }
+
+    /// Ends the edit, keeping what was typed as the sidebar's label. An empty field, or the name
+    /// it started with, changes nothing.
+    pub fn commit_place_rename(&mut self) {
+        let Some(rename) = self.place_rename.take() else {
+            return;
+        };
+        let name = rename.edit.text.trim();
+        if !name.is_empty() && self.places.rename(&rename.id, name) {
+            self.places.save();
+        }
+    }
+
+    pub fn cancel_place_rename(&mut self) {
+        self.place_rename = None;
     }
 
     pub fn close_place_menu(&mut self) {

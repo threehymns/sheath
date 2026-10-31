@@ -203,8 +203,9 @@ folder; dropping it between places inserts it there in the section, without movi
 and with a preview of the landing spot. `volume:<id>` is left for drives a later release
 detects, and a place whose folder is not there — an unmounted drive, a deleted folder — keeps
 its row in the file and comes back with the folder. Right-clicking a place opens its menu: open
-it, show it in its folder, or remove it. A removed place keeps its row in the file with
-`hidden #true`, and dragging its folder back restores that same row. Built-in places the file leaves out are added at the end of their
+it, show it in its folder, edit the name it shows, or remove it. That name belongs to the
+sidebar; the folder keeps its own name on disk. A removed place keeps its row in the
+file with `hidden #true`, and dragging its folder back restores that same row. Built-in places the file leaves out are added at the end of their
 section, and top-level nodes the app does not know are written back untouched. Like
 `views.kdl`, the file is machine-owned and safe to delete: the sidebar goes back to its
 built-in places.

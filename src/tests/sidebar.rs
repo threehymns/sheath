@@ -387,7 +387,8 @@ fn right_clicking_a_place_offers_a_menu_and_removing_hides_its_row() {
         rt.find("place-menu-item1").is_some(),
         "Show in Folder is offered"
     );
-    assert!(rt.find("place-menu-item3").is_some(), "Remove is offered");
+    assert!(rt.find("place-menu-item3").is_some(), "Rename is offered");
+    assert!(rt.find("place-menu-item4").is_some(), "Remove is offered");
 
     rt.key(KeyEvent {
         key: Key::Escape,
@@ -398,7 +399,7 @@ fn right_clicking_a_place_offers_a_menu_and_removing_hides_its_row() {
     assert!(rt.find(&key).is_some(), "and leaves the place alone");
 
     right_click(&mut rt, &key);
-    click(&mut rt, "place-menu-item3");
+    click(&mut rt, "place-menu-item4");
     rt.frame(0.1);
 
     assert!(
@@ -421,6 +422,77 @@ fn right_clicking_a_place_offers_a_menu_and_removing_hides_its_row() {
     assert!(
         rt.find(&format!("place-{second_id}")).is_some(),
         "the other place stays"
+    );
+}
+
+#[test]
+fn the_place_menu_renames_the_display_name_in_place() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let alpha = dir.path().join("alpha");
+    let alpha_id = format!("folder:{}", alpha.display());
+    let file = state.path().join("places.kdl");
+    write_places(
+        &file,
+        &[(alpha_id.clone(), alpha.display().to_string())],
+        "",
+    );
+
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let key = format!("place-{alpha_id}");
+    right_click(&mut rt, &key);
+    click(&mut rt, "place-menu-item3");
+    rt.frame(0.1);
+
+    assert!(rt.state.place_menu.is_none(), "the menu closes");
+    let rename = rt
+        .state
+        .place_rename
+        .as_ref()
+        .expect("the row shows a field");
+    assert_eq!(rename.edit.text, "alpha", "the field starts on the name");
+
+    rt.key(KeyEvent {
+        key: Key::Escape,
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert!(rt.state.place_rename.is_none(), "Escape ends the edit");
+    assert_eq!(
+        rt.state.places.get(&alpha_id).unwrap().name,
+        "alpha",
+        "and changes nothing"
+    );
+
+    right_click(&mut rt, &key);
+    click(&mut rt, "place-menu-item3");
+    rt.frame(0.1);
+    rt.key(KeyEvent {
+        key: Key::Text("Projects".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.0);
+    rt.key(KeyEvent {
+        key: Key::Enter,
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+
+    assert!(rt.state.place_rename.is_none(), "Return ends the edit");
+    assert_eq!(
+        rt.state.places.get(&alpha_id).unwrap().name,
+        "Projects",
+        "the sidebar shows the new name"
+    );
+    assert!(alpha.is_dir(), "the folder keeps its own name on disk");
+    let text = fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("name=Projects"),
+        "the file keeps the display name: {text}"
     );
 }
 
