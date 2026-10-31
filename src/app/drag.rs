@@ -97,6 +97,14 @@ impl App {
         (self.rows_view[0] + local.0, self.rows_view[1] + local.1)
     }
 
+    /// Whether a window point on a row lies in its name cell: the icon and the name. The size
+    /// and date columns are for reading, so a drag that starts there sweeps a box instead of
+    /// picking the row up.
+    fn on_name_cell(&self, at: (f32, f32)) -> bool {
+        let name_right = self.rows_view[0] + self.rows_view[2] - self.size_width - self.date_width;
+        at.0 <= name_right
+    }
+
     /// The tile or row under a point in window points inside the list.
     pub fn index_at_window(&self, at: (f32, f32)) -> Option<usize> {
         // The bounce draws the rows where the scroll doesn't, so the pointer follows them.
@@ -108,8 +116,10 @@ impl App {
 
     /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
     /// the selection can be dragged) and a press on the empty space starts a selection box. With
-    /// Option (Alt) held the box starts anywhere, over the rows themselves.
-    /// Points are the window's.
+    /// Option (Alt) held the box starts anywhere, over the rows themselves. In the list only a
+    /// row's name cell — its icon and name — picks the row up; a drag from the size or date
+    /// columns sweeps a box, so reading a row's columns never moves the file. Points are the
+    /// window's.
     pub fn begin_press(&mut self, at: (f32, f32), mods: Mods, tx: &mut Tx) {
         // A box over the rows is the one thing they can't get otherwise: the list only has empty
         // space to start one in when it doesn't scroll, so Option is how a long list gets swept.
@@ -139,6 +149,22 @@ impl App {
             }
             return;
         };
+        if !self.is_grid() && !self.on_name_cell(at) {
+            // The press still reads as a click on the row; the drag that follows sweeps a
+            // box from the selection the press found.
+            let base = self.selection.clone();
+            let rows_at = self.rows_at();
+            self.file_drag = None;
+            self.click_row(index, mods, tx);
+            self.marquee = Some(Marquee::begin(
+                at,
+                rows_at,
+                base,
+                mods.cmd || mods.ctrl,
+                mods.shift,
+            ));
+            return;
+        }
         let plain = !mods.shift && !(mods.cmd || mods.ctrl);
         let inside = self
             .row_id(index)

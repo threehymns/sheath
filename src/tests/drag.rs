@@ -64,6 +64,61 @@ fn dropping_a_row_on_a_file_or_empty_space_moves_nothing() {
 }
 
 #[test]
+fn a_drag_from_a_rows_columns_sweeps_a_box_instead_of_moving_it() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.frame(0.1);
+
+    let (x, y) = rt.find("f:file2.txt").expect("the row is on screen");
+    let view = rt.state.rows_view;
+    let size_x = view[0] + view[2] - rt.state.date_width - rt.state.size_width / 2.0;
+    let date_x = view[0] + view[2] - rt.state.date_width / 2.0;
+    for (column, at) in [("size", size_x), ("date", date_x)] {
+        assert!(
+            at > x,
+            "the {column} column is right of the name cell: {at} against {x}, view {view:?}"
+        );
+
+        // A press in the columns still reads as a click on the row.
+        rt.pointer_down(at, y);
+        rt.pointer_up(at, y);
+        rt.frame(0.1);
+        assert_eq!(
+            rt.state.selected.as_deref(),
+            Some("f:file2.txt"),
+            "a click in the {column} column selects the row"
+        );
+
+        // A drag from there sweeps a box instead of picking the row up.
+        rt.pointer_down(at, y);
+        rt.frame(0.05);
+        rt.pointer_move(at, y + crate::app::ROW_HEIGHT);
+        rt.frame(0.05);
+        assert!(
+            rt.state.marquee.is_some(),
+            "a drag in the {column} column draws a box"
+        );
+        assert!(
+            rt.state.file_drag.is_none(),
+            "no row is picked up in the {column} column"
+        );
+        assert!(rt.find("drag-badge").is_none(), "nothing is dragged");
+        rt.pointer_up(at, y + crate::app::ROW_HEIGHT);
+        rt.frame(0.1);
+        assert_eq!(
+            rt.state.selection_len(),
+            2,
+            "the box swept the pressed row and the one below it"
+        );
+        assert!(
+            dir.path().join("file2.txt").exists(),
+            "the file stayed where it was"
+        );
+    }
+}
+
+#[test]
 fn dragging_a_row_against_an_edge_scrolls_the_rows_under_it() {
     let dir = tempfile::tempdir().unwrap();
     for i in 0..40 {
