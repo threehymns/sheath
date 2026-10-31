@@ -18,6 +18,8 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .placeholder("Type a command")
         .leading_icon(k.glyph.search)
         .width(None)
+        // The bar itself is the field's frame, so the input carries no fill or border of its own.
+        .plain()
         .on_edit(|s: &mut App| s.palette_edit())
         .on_change(|s: &mut App, _| s.palette_requery())
         .on_submit(|s: &mut App, tx| s.run_palette_command(tx))
@@ -125,7 +127,9 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         // A modal, so Escape closes it (rather than just blurring the field) and focus stays
         // inside while it's up.
         .modal(true, |s: &mut App| s.close_palette())
-        .child(row().px(10.0).py(8.0).child(field))
+        // The field pads itself, so the header only adds the list's own inset: the search icon
+        // lands on the same column as the rows' icons and the well of the bar is even all round.
+        .child(row().px(6.0).py(6.0).child(field))
         .child(
             el().key("command-rule")
                 .h(1.0)
