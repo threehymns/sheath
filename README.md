@@ -166,7 +166,7 @@ Each folder also remembers the layout and sort it was left in, in a file of its 
 config folder:
 
 - Linux: `$XDG_STATE_HOME/sheath/views.kdl` (`~/.local/state/sheath` by default)
-- macOS: `~/Library/Application Support/Sheath/views.kdl`
+- macOS: `~/Library/Application Support/Sheath/State/views.kdl`
 - Windows: `%LOCALAPPDATA%\Sheath\views.kdl`
 - Any platform: `$SHEATH_STATE_DIR` overrides the folder
 

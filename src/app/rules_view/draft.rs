@@ -153,18 +153,21 @@ pub(super) fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) ->
             && matcher.min_items.is_none()
             && matcher.max_items.is_none()
     };
+    // A rule is about folders or entries, so each refusal names the kind it would match.
+    let target = match draft.kind {
+        Kind::Folder => "folder",
+        Kind::Entry => "entry",
+    };
     if draft.matches.iter().any(names_nothing) {
-        return Some(
-            "A match with no fields matches every folder. Fill in a path or remove the match."
-                .to_owned(),
-        );
+        return Some(format!(
+            "A match with no fields matches every {target}. Fill in a path or remove the match."
+        ));
     }
     if draft.excludes.iter().any(names_nothing) {
-        return Some(
-            "An exclude with no fields vetoes the rule in every folder. Fill in a path or remove \
-             the exclude."
-                .to_owned(),
-        );
+        return Some(format!(
+            "An exclude with no fields vetoes the rule in every {target}. Fill in a path or \
+             remove the exclude."
+        ));
     }
     // A count the draft could not take lives only in the text, so the fields are checked too.
     for (list, matchers) in [("m", &draft.matches), ("x", &draft.excludes)] {

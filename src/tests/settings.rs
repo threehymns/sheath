@@ -204,7 +204,7 @@ fn the_grid_switch_leaves_a_ruled_folder_alone() {
         rt.state.is_grid(),
         "the rule still decides the layout after the switch"
     );
-    assert!(!saved_settings(&dir).grid, "the setting itself is written");
+    assert!(saved_settings(&dir).grid, "the setting itself is written");
 }
 
 #[test]
@@ -247,7 +247,7 @@ fn the_hidden_switch_leaves_a_ruled_folder_alone() {
         "the rule still decides the hidden files after the switch"
     );
     assert!(
-        !saved_settings(&dir).show_hidden,
+        saved_settings(&dir).show_hidden,
         "the setting itself is written"
     );
 }

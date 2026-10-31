@@ -197,8 +197,10 @@ impl App {
     /// The settings panel's Show hidden files switch: turns the global setting over, then
     /// resolves the open folder again, so a rule or a remembered visit keeps its say.
     pub fn toggle_hidden_setting(&mut self) {
-        self.show_hidden = !self.show_hidden;
-        self.remember(Setting::ShowHidden, self.show_hidden);
+        // The switch turns the setting over, not what the folder resolved to: a rule or a
+        // remembered visit may be what is on screen, and that is not what gets saved.
+        self.config.show_hidden = !self.config.show_hidden;
+        self.remember(Setting::ShowHidden, self.config.show_hidden);
         self.apply_rules();
         self.apply_filter();
     }
@@ -225,15 +227,11 @@ impl App {
     /// The settings panel's Grid layout switch: turns the global setting over, then resolves the
     /// open folder again, so a rule or what the folder was left showing keeps its say.
     pub fn toggle_grid_setting(&mut self) {
-        // The switch shows what the folder resolved to, so that is what it turns over.
         let before = self.layout;
-        self.layout = if before.is_grid() {
-            Layout::List
-        } else {
-            Layout::Grid
-        };
-        // The setting is written from the browser's layout, so the new mode is what it records.
-        self.remember(Setting::GridLayout, self.is_grid());
+        // The switch turns the setting over, not what the folder resolved to: a rule or a
+        // remembered visit may be what is on screen, and that is not what gets saved.
+        self.config.grid = !self.config.grid;
+        self.remember(Setting::GridLayout, self.config.grid);
         // A rule or a remembered visit still outranks the global default.
         self.apply_rules();
         if self.layout != before {
@@ -343,7 +341,7 @@ impl App {
         let total = self
             .entries
             .iter()
-            .filter(|entry| self.show_hidden || !entry.hidden())
+            .filter(|entry| !self.entry_hidden(entry))
             .count();
         let noun = if shown == 1 { "item" } else { "items" };
         if self.search.text.trim().is_empty() {

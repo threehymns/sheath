@@ -36,19 +36,18 @@ pub(super) fn populate(dir: &TempDir) {
 }
 
 pub(super) fn app(dir: &TempDir) -> App {
-    let mut app = App::open(dir.path().to_path_buf());
-    // The defaults, not whatever the machine running the tests has saved.
+    // The test-only opener takes the defaults instead of whatever the machine running the tests
+    // has saved, and reads no remembered folder state.
+    let mut app = App::open_with(dir.path().to_path_buf(), Settings::defaults());
     app.store = crate::config::Store::none();
     app.keybinds = Keybinds::defaults();
     app.recorders = Keybinds::recorders();
-    app.config = Settings::defaults();
-    // The pane was opened with the machine's real config; the defaults are what this app uses.
     app.inspector.set_open(app.config.inspector);
     app.views = crate::views::Views::default();
     app.rules = crate::rules::Rules::default();
     app.rule_error = None;
-    // Opening applied whatever the machine saved, so the list layout is put back by hand.
-    app.layout = crate::app::Layout::List;
+    // The store and the remembered state are the test's now, so the folder is resolved again.
+    app.reload();
     app
 }
 

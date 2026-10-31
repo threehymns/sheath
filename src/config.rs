@@ -56,7 +56,7 @@ pub fn state_dir() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
         std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath"))
+            .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath/State"))
     }
     #[cfg(target_os = "windows")]
     {

@@ -30,39 +30,42 @@ const ROW_PAD: f32 = 4.0;
 /// drawn in two sections, one per kind, each with the button that writes another of it.
 pub(super) fn rules_settings(s: &App, k: &Kit) -> El {
     let mut page = col().key("settings-rules").w_full().gap(24.0);
+    // A stale list must not be edited: its positions are no longer the file's. A failed write
+    // leaves the rules editable, so only a read error makes them read only.
+    let read_only = s.rule_error.is_some();
     if let Some(error) = s
         .store
         .error(config::CONFIG)
         .or(s.store.write_error.as_deref())
         .or(s.rule_error.as_deref())
     {
+        let mut banner = col()
+            .key("rules-error")
+            .w_full()
+            .gap(8.0)
+            .child(error_text(k, error));
+        if read_only {
+            banner = banner.child(
+                text("The rules stay read only until the file parses again.")
+                    .font(k.ty.caption())
+                    .color(k.c.text_muted)
+                    .mx(SETTINGS_ROW_INSET)
+                    .wrap(),
+            );
+        }
         page = page.child(
-            col()
-                .key("rules-error")
-                .w_full()
-                .gap(8.0)
-                .child(error_text(k, error))
-                .child(
-                    text("The rules stay read only until the file parses again.")
-                        .font(k.ty.caption())
-                        .color(k.c.text_muted)
-                        .mx(SETTINGS_ROW_INSET)
-                        .wrap(),
-                )
-                .child(
-                    row().gap(8.0).child(
-                        Button::new("Open in Editor")
-                            .variant(ButtonVariant::Outline)
-                            .control_size(ControlSize::Small)
-                            .on_press(|s: &mut App| s.open_config_in_editor())
-                            .build(k)
-                            .key("open-config-editor"),
-                    ),
+            banner.child(
+                row().gap(8.0).child(
+                    Button::new("Open in Editor")
+                        .variant(ButtonVariant::Outline)
+                        .control_size(ControlSize::Small)
+                        .on_press(|s: &mut App| s.open_config_in_editor())
+                        .build(k)
+                        .key("open-config-editor"),
                 ),
+            ),
         );
     }
-    // A stale list must not be edited: its positions are no longer the file's.
-    let read_only = s.rule_error.is_some();
     // The command that opened the tab found nothing to show.
     if let Some(message) = &s.rule_query {
         page = page.child(

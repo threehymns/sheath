@@ -15,7 +15,7 @@ const FILE: &str = "views.kdl";
 /// How many folders are remembered. Past this, the oldest visit is forgotten.
 const LIMIT: usize = 200;
 
-/// The folders remembered, in the order they were first seen.
+/// The folders remembered, least recently updated first: updating a folder moves it to the end.
 pub struct Views {
     path: Option<PathBuf>,
     entries: Vec<(PathBuf, Resolved)>,
@@ -74,17 +74,12 @@ impl Views {
 
     /// Records what a folder was left showing and writes the file.
     pub fn set(&mut self, path: &Path, state: Resolved) {
-        if let Some(entry) = self
-            .entries
-            .iter_mut()
-            .find(|(remembered, _)| remembered == path)
-        {
-            entry.1 = state;
-        } else {
-            self.entries.push((path.to_path_buf(), state));
-            if self.entries.len() > LIMIT {
-                self.entries.remove(0);
-            }
+        // A folder that is updated moves to the end, so the cap forgets the least recently
+        // visited one rather than whichever folder happened to be seen first.
+        self.entries.retain(|(remembered, _)| remembered != path);
+        self.entries.push((path.to_path_buf(), state));
+        if self.entries.len() > LIMIT {
+            self.entries.remove(0);
         }
         self.save();
     }
