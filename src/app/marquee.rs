@@ -78,9 +78,8 @@ impl App {
     }
 
     /// The rows a box between two window points covers, from the row it started on to the one
-    /// under the pointer. The box is measured on the rows they stand for, not on the screen:
-    /// the ones a drag has scrolled past stay swept, so a box can take in more than one
-    /// viewportful.
+    /// under the pointer. The box follows the rows rather than the screen, so the rows a drag
+    /// has scrolled past stay swept and one box can cover more than a screenful.
     fn rows_in_box(&self, a: (f32, f32), b: (f32, f32)) -> BTreeSet<String> {
         if self.visible.is_empty() {
             return BTreeSet::new();
@@ -127,10 +126,10 @@ impl App {
         self.scroll.current() - self.overshoot()
     }
 
-    /// The box's rect in window points, while a drag is drawing one: the corner it started on
-    /// to the pointer, as tall as the rows it spans. The view clips it to the list, so a drag
-    /// that scrolls draws a box taller than the viewport. A drag straight down (or across)
-    /// still draws: the box keeps a hairline on the side it has no extent on.
+    /// The box's rect in window points while a drag is drawing one, from the corner it started
+    /// on to the pointer and as tall as the rows it spans. The view clips it to the list, so a
+    /// drag that scrolls draws a box taller than the viewport. A drag straight down or across
+    /// still draws, because the box keeps a hairline on the side it has no extent on.
     pub fn marquee_rect(&self) -> Option<[f32; 4]> {
         let marquee = self.marquee.as_ref().filter(|m| m.dragging)?;
         let start = self.marquee_start(marquee);

@@ -1,10 +1,9 @@
 //! A bite taken out of a panel's corner for a control that sits there, with the panel's edge
-//! curving around it instead of running behind it.
+//! curving around it.
 //!
-//! Rune rounds a rectangle's corners outward only (`El::radius`, `El::corners`,
-//! `El::clip_corners`), so the notch's fillets are drawn: the backdrop fills the bite with what
-//! is behind the panel and redraws the panel's border around it. Paint it over the panel's corner
-//! and place the control over that.
+//! Rune only rounds corners outward (`El::radius`, `El::corners`, `El::clip_corners`), so the
+//! fillets are drawn: the backdrop fills the bite with what is behind the panel and redraws the
+//! panel's border around it. Paint it over the corner, then place the control over that.
 
 use rune::{Color, El, LineCap, Shape, canvas};
 
@@ -31,11 +30,9 @@ pub struct CornerCut {
 impl CornerCut {
     /// A notch `size` wide and tall from the panel's top-right corner.
     ///
-    /// `radius` is the panel's own corner radius, used where the notch meets the panel's top and
-    /// right edges, so the two corners it leaves are ordinary ones. `cup` is the fillet at the
-    /// notch's inner corner: a control set in the notch with `gap` of panel kept around its left
-    /// and bottom edges stays concentric with it when `cup` is `gap` plus the control's own
-    /// corner radius.
+    /// `radius` is the panel's own corner radius, used where the notch meets its top and right
+    /// edges. `cup` is the fillet at the notch's inner corner: a control set in the notch with
+    /// `gap` of panel around it stays concentric when `cup` is `gap` plus the control's radius.
     pub fn new(size: (f32, f32), radius: f32, cup: f32) -> CornerCut {
         let (width, height) = (size.0.max(0.0), size.1.max(0.0));
         let radius = radius.clamp(0.0, width.min(height));
@@ -54,13 +51,9 @@ impl CornerCut {
         (self.width + self.radius, self.height + self.radius)
     }
 
-    /// The bite, painted: `backdrop` is what sits behind the panel (it fills the bite and blends
-    /// with the surface around the cut corner), `edge` the panel's border colour, redrawn along
-    /// the fillets and the notch's edges so the panel's own border under the bite goes.
-    ///
-    /// Position the element so the notch's left edge is at the panel's right edge less
-    /// [`bounds`](Self::bounds)'s width plus the notch's width; see
-    /// [`CornerControl`], which places it for you.
+    /// The bite, painted. `backdrop` is what sits behind the panel and fills the bite; `edge` is
+    /// the panel's border colour, redrawn along the fillets and the notch's edges so the border
+    /// under the bite goes. [`CornerControl`] places the result for you.
     pub fn build(&self, backdrop: Color, edge: Color) -> El {
         let (width, height) = self.bounds();
         let shape = Shape::new()
@@ -115,8 +108,8 @@ impl CornerCut {
     }
 }
 
-/// Appends the arc of `radius` around `center` from `from` to `to` degrees (y down, so 270° is
-/// straight up), both ends included.
+/// Appends the arc of `radius` around `center` from `from` to `to` degrees, with y pointing down,
+/// so 270° is straight up. Both ends are included.
 fn arc(points: &mut Vec<[f32; 2]>, center: [f32; 2], radius: f32, from: f32, to: f32) {
     for step in 0..=ARC_STEPS {
         let angle = (from + (to - from) * step as f32 / ARC_STEPS as f32).to_radians();

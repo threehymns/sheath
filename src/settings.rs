@@ -124,7 +124,6 @@ impl Default for Settings {
 }
 
 impl Settings {
-    /// The defaults, for a store with no file.
     pub fn defaults() -> Settings {
         Settings::default()
     }
@@ -195,7 +194,7 @@ impl Settings {
     }
 }
 
-/// The `settings` node's position, if the document has one.
+/// The position of the top-level `parent` node, if the document has one.
 fn parent_index(doc: &KdlDocument, parent: &str) -> Option<usize> {
     doc.nodes()
         .iter()

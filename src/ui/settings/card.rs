@@ -12,13 +12,10 @@ pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -
     settings_section_action(k, key, title, None, rows, true)
 }
 
-/// The same card, with a control at the end of its label line: the Rules tab's sections each
-/// write their own kind of rule, so each carries its own button. `clip` cuts the rows to the box
-/// the card presents, so the Rules tab's card reveals a rule's form as it springs open around it,
-/// instead of painting the form over the section below; a rule drag lifts its row out of the
-/// card, so the tab turns the clip off while a row is in hand. The clip sits on the rows' own
-/// box rather than on the card: the card's edge is the 0.5 pt ring of its raised shadow, which
-/// paints just outside the card, so a rounded clip on the card would all but take the edge away.
+/// The same card, with a control at the end of its label line. The Rules tab's sections each
+/// carry their own button. `clip` cuts the rows to the box the card presents, so a form can
+/// spring open inside it; a rule drag turns the clip off so the lifted row is not cut. The clip
+/// goes on the rows' box rather than the card, whose edge is the ring of its raised shadow.
 pub(crate) fn settings_section_action(
     k: &Kit,
     key: &str,

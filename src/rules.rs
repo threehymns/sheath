@@ -1,5 +1,6 @@
-//! Folder and entry rules: the nodes in `config.kdl` and the presentation a folder resolves to. Everything here is pure: it takes a parsed document and a path, and returns
-//! what the browser should show.
+//! Folder and entry rules: the nodes in `config.kdl` and the presentation a folder resolves to.
+//! Everything here is pure: it takes a parsed document and a path, and returns what the browser
+//! should show.
 
 use crate::app::Layout;
 use kdl::{KdlDocument, KdlNode};
@@ -430,8 +431,8 @@ impl Rules {
             .position(|rule| rule.applies_to_entry(entry))
     }
 
-    /// Whether a rule hides or reveals `entry`, after the folder's own hidden policy has had its
-    /// say. `None` leaves the folder's decision alone.
+    /// Whether a rule hides or reveals `entry`, after the folder's own hidden policy applies.
+    /// `None` leaves the folder's decision alone.
     pub fn hidden(&self, entry: &EntryRef<'_>) -> Option<bool> {
         let mut hidden = None;
         for rule in &self.rules {

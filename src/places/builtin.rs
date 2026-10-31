@@ -29,9 +29,7 @@ pub(super) struct Builtin {
     anchor: Anchor,
 }
 
-/// The places every launch knows about, in their starting order. The file names the ones the
-/// user keeps and where they moved them; anything it leaves out is added at the end of its
-/// section, so a place a later release adds still turns up.
+/// The places every launch knows about, in their starting order.
 pub(super) const BUILTINS: [Builtin; 7] = [
     Builtin {
         id: "home",

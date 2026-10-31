@@ -18,8 +18,8 @@ pub enum SheetKind {
     Trash,
 }
 
-/// A rename, move or trash confirmation. `edit` is the field for rename and move, and is
-/// empty (and unfocused) for the trash confirmation.
+/// A rename, move or trash confirmation. `edit` is the field for rename and move, and is empty
+/// and unfocused for the trash confirmation.
 pub struct Sheet {
     pub kind: SheetKind,
     /// The rows the sheet applies to: one for rename, the whole selection for move and trash.
@@ -32,7 +32,6 @@ pub struct Sheet {
 }
 
 impl Sheet {
-    /// Whether the sheet covers more than one row.
     pub fn many(&self) -> bool {
         self.targets.len() > 1
     }
@@ -151,9 +150,8 @@ impl App {
             .edit
     }
 
-    /// Applies the open sheet. A failure keeps the sheet open with its message. The hooks
-    /// that submit it hand over a `Tx`, which the operations no longer need: the row a
-    /// rename or a move leaves is revealed by the folder read that follows it.
+    /// Applies the open sheet. A failure keeps it open with its message. The `Tx` is unused
+    /// because the folder read after a rename or move reveals the row.
     pub fn submit_sheet(&mut self, _tx: &mut Tx) {
         let Some(sheet) = self.sheet.take() else {
             return;

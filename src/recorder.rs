@@ -1,7 +1,5 @@
 //! What the settings keybinds are listening for: the action's recorder, the modifiers held so
-//! far, and the chord and error a refused change left. Rune Kit's `ShortcutRecorder` keeps the
-//! same state but draws flat chips; keeping it here lets the settings rows draw the app's
-//! keycaps.
+//! far, and the chord and error a refused change left.
 
 use rune::{Mods, PhysicalInput, PhysicalKeyCode, Shortcut, ShortcutError, modifier_keycaps};
 

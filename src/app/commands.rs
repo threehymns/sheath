@@ -1,4 +1,4 @@
-//! The commands the app can run, whatever asked: a shortcut, the command bar, or a menu,
+//! The commands the app can run, whether a shortcut, the command bar, or a menu asks for them,
 //! and the keybinding recorder the settings panel edits.
 
 use crate::app::App;
@@ -40,14 +40,12 @@ impl SettingsTab {
     }
 }
 
-/// The command bar's state: what's typed and which row of the filtered commands is selected.
 pub struct Palette {
     pub query: TextEdit,
     pub selected: usize,
 }
 
 impl App {
-    /// Opens the settings panel on General, or leaves it on the category already showing.
     /// Shows the command bar, empty, with its field ready for typing.
     pub fn open_palette(&mut self) {
         let mut query = TextEdit::new("");
@@ -101,8 +99,8 @@ impl App {
         tx.scroll_to_y("command-scroll", 0.0);
     }
 
-    /// Moves the highlight, and scrolls the list so the row it lands on comes into view clear
-    /// of the edges (the viewport's `scroll_margin` keeps a few rows of it around the row).
+    /// Moves the highlight and scrolls the list so the row it lands on comes into view clear of
+    /// the edges. The viewport's `scroll_margin` keeps a few rows around it.
     pub fn palette_move(&mut self, delta: isize, tx: &mut Tx) {
         let actions = self.palette_actions();
         if actions.is_empty() {
@@ -152,7 +150,7 @@ impl App {
     }
 
     /// Escape out of the settings panel. The Rules tab's open form takes it first, so the form
-    /// closes and the panel behind it stays: the work in it is not lost with the panel.
+    /// closes and the panel behind it stays open. The work in it is not lost with the panel.
     pub fn dismiss_settings(&mut self) {
         if self.settings == Some(SettingsTab::Rules) && self.rule_edit.is_some() {
             self.discard_rule_edit();
@@ -178,8 +176,8 @@ impl App {
         }
     }
 
-    /// A recorder proposed `shortcut` for `action`: refuse a chord another action uses, and
-    /// save the change. The error words itself on the recorder's field.
+    /// A recorder proposed `shortcut` for `action`. Refuse a chord another action uses and save
+    /// the change; the recorder's field shows any error.
     pub fn set_binding(
         &mut self,
         action: Action,
@@ -228,8 +226,8 @@ impl App {
         self.recorders.insert(action, Recorder::default());
     }
 
-    /// Whether `action` has something to do right now (Back needs history, the file operations
-    /// need a selection); the command bar dims the rest.
+    /// Whether `action` has something to do right now: Back needs history, and the file
+    /// operations need a selection. The command bar dims the rest.
     pub fn action_enabled(&self, action: Action) -> bool {
         match action {
             Action::Back => self.can_back(),
@@ -256,7 +254,6 @@ impl App {
         self.perform(action, tx);
     }
 
-    /// Runs a bound command.
     pub(super) fn perform(&mut self, action: Action, tx: &mut Tx) {
         match action {
             Action::CommandBar => self.open_palette(),

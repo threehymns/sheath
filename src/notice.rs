@@ -5,8 +5,8 @@
 
 use std::time::{Duration, Instant};
 
-/// How long a toast stays. Long enough to read the place and press Copy, short enough that it is
-/// gone before it becomes part of the furniture.
+/// How long a toast stays. Long enough to read the place and press Copy, short enough that it
+/// does not linger.
 pub const SECONDS: u64 = 20;
 
 /// One file the app could not read, while it is worth saying so.
@@ -47,8 +47,8 @@ impl Notice {
         format!("notice-{}", self.file)
     }
 
-    /// What Copy puts on the clipboard: the report, with the file it came from at the top, so a
-    /// paste is self-contained even when it starts mid-conversation.
+    /// The report Copy puts on the clipboard. It names the file at the top, so a paste stands on
+    /// its own.
     pub fn clipboard(&self) -> String {
         self.report.clone()
     }

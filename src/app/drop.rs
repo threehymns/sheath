@@ -29,7 +29,6 @@ pub struct DragPreview {
     pub at: (f32, f32),
 }
 
-/// Whether a window point is inside a rect.
 fn inside(rect: [f32; 4], x: f32, y: f32) -> bool {
     x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + rect[3]
 }

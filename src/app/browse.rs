@@ -112,7 +112,8 @@ impl App {
     }
 
     /// Whether a folder read is still in flight, so there are no rows to show yet. The list
-    /// says nothing about the folder until this is false: it is not empty, it is being read.
+    /// says nothing about the folder until this is false, because the folder is being read
+    /// rather than empty.
     pub fn is_scanning(&self) -> bool {
         self.scan.is_pending()
     }
@@ -300,8 +301,8 @@ impl App {
         }
     }
 
-    /// The settings panel's Grid layout switch: turns the global setting over, then resolves the
-    /// open folder again, so a rule or what the folder was left showing keeps its say.
+    /// The settings panel's Grid layout switch. It turns the global setting over and resolves
+    /// the open folder again, so a rule or what the folder was left showing keeps its say.
     pub fn toggle_grid_setting(&mut self) {
         let before = self.layout;
         // The switch is the user's, so a layout it changes fades in as the toggle's does.
@@ -342,8 +343,8 @@ impl App {
     }
 
     /// Saves one setting into `config.kdl`, naming it there from now on. Only that setting is
-    /// recorded: what the open folder shows may be a rule's or a remembered visit's doing, and
-    /// that must not become the global default for the folders those leave alone.
+    /// recorded, because what the open folder shows may come from a rule or a remembered visit,
+    /// and that must not become the global default for the folders those leave alone.
     fn remember(&mut self, changed: Setting, on: bool) {
         self.config.remember(changed, on);
         self.save_setting(changed);

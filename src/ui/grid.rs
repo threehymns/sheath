@@ -1,4 +1,4 @@
-//! The grid layout: a virtualised wall of tiles, one per item, drawn by the app so a press, a
+//! The grid layout: a virtualised grid of tiles, one per item, drawn by the app so a press, a
 //! box and a drop read the same state the table's rows do.
 
 use crate::app::{

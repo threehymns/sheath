@@ -1,9 +1,7 @@
 //! The Rules tab's work: the form that holds a rule as a draft until it is saved, and the
-//! one-shot actions that write a rule at once. Every change goes through the config store, so
-//! the rest of the file keeps its comments and layout.
-//!
-//! `edit` owns the form, its draft, and what the file can accept; `rules` owns saving the layout,
-//! pinning an entry, deleting, reordering, and the picker.
+//! one-shot actions that write a rule at once. Every change goes through the config store, so the
+//! rest of the file keeps its comments and layout. `edit` owns the form and `rules` the layout
+//! saves, pinning, deleting, reordering and the picker.
 
 mod draft;
 mod edit;
@@ -24,10 +22,8 @@ pub const RULE_ROW_HEIGHT: f32 = 48.0;
 const DRAG_SLOP: f32 = 4.0;
 
 /// A rule list's drag to a new place: the row in hand, where it would land, and how far it sits
-/// from its place. This is Rune's own reorder model, `rune_kit::shell::Reorder`, which the kit
-/// only wires up to its sidebar rows; the tab carries its own copy so a rule row keeps its
-/// shape. A row in hand lifts and follows the pointer, and the rows it passes step aside, so
-/// the gap it would drop into is the order it would land in.
+/// from its place. The row in hand lifts and follows the pointer, and the rows it passes step
+/// aside, so the gap it would drop into is the order it would land in.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RuleDrag {
     /// The row in hand, once the pointer has travelled far enough to mean a move: the kind of

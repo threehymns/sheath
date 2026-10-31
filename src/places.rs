@@ -16,17 +16,13 @@
 //! }
 //! ```
 //!
-//! A place is its `id`, never its position: the built-in ids (`home`, `desktop`, `documents`,
-//! `downloads`, `pictures`, `root`, `temp`) follow the platform, `folder:<path>` is a folder of
-//! the user's own, `file:<path>` is one of their files, and `volume:<id>` is left for drives a
-//! later release detects. `path` says
-//! where a place opens and is written only where the app cannot derive it; `name` overrides the
-//! label. A built-in the file does not name is added at the end of its section, so a new one in
-//! a later release still turns up. A place whose folder is not there keeps its place in the
-//! file and comes back with the folder. A place taken out of the sidebar keeps its row too,
-//! with `hidden #true`, so adding the folder again brings back the same row. Top-level nodes
-//! the app does not know are copied back untouched, so a newer release's state survives an
-//! older one's reorder.
+//! A place is its `id`, never its position. The built-in ids (`home`, `desktop`, `documents`,
+//! `downloads`, `pictures`, `root`, `temp`) follow the platform, `folder:<path>` and
+//! `file:<path>` are the user's own, and `volume:<id>` is left for drives a later release
+//! detects. `path` is written only where the app cannot derive it, and `name` overrides the
+//! label. A built-in the file leaves out is added at the end of its section. A place whose
+//! folder is gone, or that the user removed, keeps its row in the file and comes back as the
+//! same row. Nodes the app does not know are copied back untouched.
 
 mod builtin;
 
@@ -83,7 +79,6 @@ impl Section {
     }
 }
 
-/// One row in the sidebar.
 #[derive(Clone)]
 pub struct Place {
     /// The stable name the state file keys on, never its position: a reorder changes the order,
@@ -97,9 +92,9 @@ pub struct Place {
 }
 
 impl Place {
-    /// Whether the place is on screen now. One that is hidden, or whose folder is gone — an
-    /// unmounted drive, a deleted folder — keeps its place in the file and comes back as the
-    /// same row.
+    /// Whether the place is on screen now. One that is hidden, or whose folder is gone because a
+    /// drive was unmounted or a folder deleted, keeps its place in the file and comes back as
+    /// the same row.
     pub fn is_available(&self) -> bool {
         !self.hidden && self.path.exists()
     }

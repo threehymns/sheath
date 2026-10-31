@@ -1,7 +1,6 @@
 //! A shortcut's keys, drawn as low-profile keycaps in a recessed tray, after Hex
 //! (`anomalyco/hex`, `src/rune_ui/controls.rs`): a flat face on a cap whose skirt shows below
-//! it, sitting in a well lit from above so its top edge falls into shadow. Rune Kit's `Keybind`
-//! draws flat chips, so the app draws the depth itself.
+//! it, sitting in a well lit from above so its top edge falls into shadow.
 
 use rune::{Color, El, Shadow, TextStyle, col, row, text};
 use rune_kit::Kit;
@@ -99,10 +98,10 @@ impl Material {
 }
 
 /// `parts` as one chord's keys, in a well recessed into `surface`: the colour the tray is
-/// painted on, such as a row's highlight or a field's fill. The well is that surface sunk —
-/// darker at its top edge, a hair above it at the bottom — so it keeps its depth on any
-/// surface instead of turning into a hole when the surface lightens. `key` names the tray; its
-/// keys are `keycap0`, `keycap1`, …, so tests can find each one.
+/// painted on, such as a row's highlight or a field's fill. The well is that surface sunk,
+/// darker at its top edge and a hair above it at the bottom, so it keeps its depth on any
+/// surface instead of turning into a hole when the surface lightens. `key` names the tray, and
+/// its keys are `keycap0`, `keycap1`, …, so tests can find each one.
 pub fn tray(
     k: &Kit,
     key: impl Into<String>,

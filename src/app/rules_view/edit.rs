@@ -125,9 +125,8 @@ impl App {
             .fields
     }
 
-    /// Reads every text field back into the draft, taking down the last refusal. What would
-    /// stop the draft being saved is judged when Save is pressed, not while it is typed.
-    /// Nothing is written here: the file changes when the form is saved.
+    /// Reads every text field back into the draft and clears the last refusal. Nothing is
+    /// written here, and Save judges whether the draft can be saved.
     pub fn apply_rule_fields(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;

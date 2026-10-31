@@ -142,7 +142,6 @@ impl App {
         self.finish_paste(made, error);
     }
 
-    /// Copies the selection beside itself, as Duplicate does.
     pub fn duplicate_selection(&mut self) {
         let mut made = Vec::new();
         let mut error = None;

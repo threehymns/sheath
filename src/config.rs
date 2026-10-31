@@ -15,7 +15,7 @@ use std::time::SystemTime;
 /// The settings and rules.
 pub const CONFIG: &str = "config.kdl";
 
-/// The keyboard shortcuts, still in a file of their own.
+/// The keyboard shortcuts, in a file of their own.
 pub const KEYBINDS: &str = "keybinds.kdl";
 
 /// The folder the config files go in: `SHEATH_CONFIG_DIR` when set, else the platform's config

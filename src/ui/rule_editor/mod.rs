@@ -22,9 +22,9 @@ use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 const PROP_WIDTH: f32 = 150.0;
 const KIND_WIDTH: f32 = 110.0;
 
-/// The form's actions: each button's width, the space between them, the small control's height
-/// (20 points), and the card kept around them. The bite is cut to whichever are up, so it never
-/// leaves more card around them than the gap.
+/// The form's actions: each button's width, the space between them, the small control's 20-point
+/// height, and the card kept around them. The bite is cut to whichever are up, so it never leaves
+/// more card around them than the gap.
 const CANCEL_WIDTH: f32 = 66.0;
 const SAVE_WIDTH: f32 = 52.0;
 const ACTIONS_HEIGHT: f32 = 20.0;
@@ -142,13 +142,10 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
 }
 
 /// The form's actions in a bite out of its top-right corner, on the card rather than in the
-/// form: the cut is painted over the corner first, so the buttons look set into the card beside
-/// it, as a dialog's Done sits outside its panel. The gap around them is the same on every side
-/// — the bite is the buttons plus a gap all round — and the rounded corners stay concentric:
-/// the buttons' radius is the form's less the gap, and the bite's inner corner is a gap wider
-/// than theirs, so both arcs share a centre. Cancel is always there, so a form with nothing to
-/// write can still be closed, and Save is the form's primary action, up once there is something
-/// to write.
+/// form. The cut is painted first, so the buttons look set into the card, as a dialog's Done
+/// sits outside its panel. The bite is the buttons plus a gap all round, and the corners stay
+/// concentric: the buttons' radius is the form's less the gap, and the bite's inner corner is a
+/// gap wider. Cancel is always up; Save arrives once there is something to write.
 fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
     let mut buttons = row()
         .key("rule-editor-actions")
@@ -284,8 +281,8 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
 }
 
 /// The form's line for what Save refused, in the form's own words. It is drawn whether or not
-/// there is anything to say — an empty one shows nothing — so pressing Save, and typing the
-/// refusal away again, leaves every row under it where it was.
+/// there is anything to say, because an empty one shows nothing, so pressing Save and typing the
+/// refusal away again leaves every row under it where it was.
 fn problem_line(k: &Kit, problem: Option<&str>) -> El {
     let mut line = row()
         .key("rule-editor-problem")
@@ -326,10 +323,10 @@ fn kind_label(kind: Option<EntryKind>) -> &'static str {
     }
 }
 
-/// The properties the rule sets, one line apiece, under their own heading: the field beside
-/// each name lists every value the file accepts, and the button at the line's end — shown
-/// while the pointer is over the line — takes the property back out, so the rules above
-/// decide it. Add Property offers the properties the rule does not set yet.
+/// The properties the rule sets, one line apiece, under their own heading. The field beside each
+/// name lists every value the file accepts, and the button at the line's end, shown while the
+/// pointer is over the line, takes the property back out so the rules above decide it. Add
+/// Property offers the properties the rule does not set yet.
 fn properties(k: &Kit, edit: &RuleEdit) -> El {
     let unset: Vec<&str> = RuleProp::all(edit.draft.kind)
         .iter()

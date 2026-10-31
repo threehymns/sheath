@@ -182,7 +182,7 @@ impl App {
         self.visible.iter().position(|&i| self.entries[i].id == id)
     }
 
-    /// The row under a point in the list's own points, where the first row starts at zero.
+    /// The id of visible row `index`, if the filter leaves one there.
     pub(super) fn row_id(&self, index: usize) -> Option<String> {
         self.visible.get(index).map(|&i| self.entries[i].id.clone())
     }

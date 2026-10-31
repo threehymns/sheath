@@ -129,7 +129,8 @@ pub fn list_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return false;
     }
-    // Cmd/Ctrl+arrow and Alt+arrow belong to the bindings (enclosing folder) or nothing.
+    // Cmd/Ctrl+arrow and Alt+arrow belong to the bindings, which open the enclosing folder,
+    // or to nothing.
     if mods.cmd || mods.ctrl || mods.alt {
         return false;
     }

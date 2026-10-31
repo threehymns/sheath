@@ -15,7 +15,7 @@ pub const GRID_ROW_HEIGHT: f32 = TILE_HEIGHT + TILE_GAP;
 /// flush against the bar above it.
 pub const GRID_TOP_MARGIN: f32 = 4.0;
 
-/// How the list shows the folder: one row per item, or a wall of tiles.
+/// How the list shows the folder: one row per item, or a grid of tiles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Layout {
     #[default]
@@ -107,11 +107,10 @@ impl App {
         (index < self.visible.len()).then_some(index)
     }
 
-    /// The visible indices a box covers, in the list's own points. A tile the box touches
-    /// counts, as a row the box touches does; the gaps around the tiles hold no tile, so a box
-    /// drawn only in them takes nothing. A box with no extent on one axis is measured as the
-    /// hairline the view draws for it, so a drag straight down still sweeps the tiles it runs
-    /// through.
+    /// The visible indices a box covers, in the list's own points. A tile the box touches counts,
+    /// as a row the box touches does, and the gaps around the tiles hold no tile, so a box drawn
+    /// only in them takes nothing. A box with no extent on one axis is measured as the hairline
+    /// the view draws for it, so a drag straight down still sweeps the tiles it runs through.
     pub(super) fn grid_indices_in_rect(
         &self,
         left: f32,

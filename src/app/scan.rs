@@ -9,10 +9,6 @@ use std::path::PathBuf;
 
 use super::entry::compare_time;
 
-/// One folder read, done off the main thread: the rows of a folder and what went wrong
-/// opening it. A folder with tens of thousands of entries takes long enough to read that
-/// doing it in the frame that opens it would stall the window.
-///
 /// `Latest` runs it on Rune's worker pool and drops the answer of a read a later one
 /// superseded, so navigating away mid-read never lands the folder left behind.
 pub(super) struct Scan {

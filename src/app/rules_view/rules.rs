@@ -130,8 +130,6 @@ impl App {
     pub fn delete_rule(&mut self, index: usize) {
         // The confirmed press leaves no question behind, whichever way it got here.
         self.rule_delete_ask = None;
-        // The list on screen came from the last file that parsed, so its positions mean nothing
-        // against a document that has not.
         if self.rule_error.is_some() {
             return;
         }

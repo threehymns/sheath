@@ -10,8 +10,8 @@ use std::path::PathBuf;
 /// How far the pointer travels before a press in the list becomes a selection box.
 const DRAG_START: f32 = 3.0;
 
-/// How far past a row's laid-out name a press still counts as the name: the end of a word
-/// should not be a pixel hunt.
+/// How far past a row's laid-out name a press still counts as the name, so the end of a word
+/// is easy to hit.
 const NAME_HANDLE_SLOP: f32 = 6.0;
 
 /// How wide a row's name handle is at least, so a short name is still a target to grab.
@@ -58,8 +58,8 @@ pub fn list_drag(s: &mut App, drag: &mut Drag, tx: &mut Tx) {
             let mods = tx.mods();
             s.begin_press(at, mods, tx);
             // A modifier-click keeps its selection meaning: only a plain second click opens,
-            // and only once the button comes up — a drag out of it moves the row or sweeps a
-            // box instead.
+            // and only once the button comes up, since a drag out of it moves the row or sweeps
+            // a box instead.
             if drag.clicks >= 2 && !(mods.cmd || mods.ctrl || mods.shift) {
                 if let Some(file_drag) = &mut s.file_drag {
                     file_drag.pending_open = true;
@@ -84,12 +84,11 @@ impl App {
         (self.rows_view[0] + local.0, self.rows_view[1] + local.1)
     }
 
-    /// Whether a window point lies on row `index`'s icon or name, the only part of a row a
-    /// drag picks up. The handle ends a little past where the name was laid out and is at
-    /// least [`NAME_HANDLE_MIN`] wide, instead of being the whole, much wider, name column:
-    /// the blank space beside a short name sweeps a box rather than moving the file. A row
-    /// that has not reported its name yet — it was drawn in the last frame — keeps its whole
-    /// cell, so a press meant for the name still picks the row up.
+    /// Whether a window point lies on row `index`'s icon or name, the only part of a row a drag
+    /// picks up. The handle ends just past where the name was laid out and is at least
+    /// [`NAME_HANDLE_MIN`] wide, so the blank space beside a short name sweeps a box instead of
+    /// moving the file. A row that has not reported its name yet, because it was drawn in the
+    /// last frame, keeps its whole cell so a press meant for the name still picks it up.
     fn on_name_cell(&self, index: usize, at: (f32, f32)) -> bool {
         let Some(&visible) = self.visible.get(index) else {
             return false;
@@ -113,12 +112,11 @@ impl App {
         ))
     }
 
-    /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
-    /// the selection can be dragged) and a press on the empty space starts a selection box. With
-    /// Option (Alt) held the box starts anywhere, over the rows themselves. An unselected row is
-    /// picked up only by its icon and name, so a drag from the space past the name, or from the
-    /// size or date columns, sweeps a box and reading a row never moves the file. A row that is
-    /// already selected is picked up wherever the press lands on it. Points are the window's.
+    /// A press in the list, in window points. A press on a row selects it, or keeps a selection
+    /// it belongs to so the whole selection can be dragged; a press on empty space, or with Alt
+    /// held anywhere, starts a selection box. An unselected row is picked up only by its icon and
+    /// name, so a drag from the space past the name, or from the size or date columns, sweeps a
+    /// box and reading a row never moves the file. A selected row is picked up anywhere on it.
     pub fn begin_press(&mut self, at: (f32, f32), mods: Mods, tx: &mut Tx) {
         // A box over the rows is the one thing they can't get otherwise: the list only has empty
         // space to start one in when it doesn't scroll, so Option is how a long list gets swept.

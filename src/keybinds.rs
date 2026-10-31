@@ -191,7 +191,6 @@ impl Action {
     }
 }
 
-/// The app's keybindings.
 pub struct Keybinds {
     chords: BTreeMap<Action, Shortcut>,
 }

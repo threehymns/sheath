@@ -1,12 +1,10 @@
 //! The browser's state: the folder on screen, its entries, navigation history, the search
-//! filter, and the selected entry's preview. Everything here is plain Rust; `ui` turns it into
-//! Rune elements.
+//! filter, and the selected entry's preview.
 //!
-//! The behaviour is split by job: `browse` reads and orders the folder, `grid` the tile
-//! layout's geometry, `selection` owns which rows are picked, `drag` the pointer gestures,
-//! `drop` where those gestures land, `files` and `sheets` the operations that change files,
-//! `commands` what a shortcut or menu can ask for, `scrolling` the list's momentum, and
-//! `input` the keys the window takes.
+//! Each job has its own module: `browse` reads and orders the folder, `grid` lays out the
+//! tiles, `selection` picks rows, `drag` runs the pointer gestures, `drop` decides where they
+//! land, `files` and `sheets` change files, `commands` runs what a shortcut or menu asks for,
+//! `scrolling` coasts the list, and `input` takes the window's keys.
 
 mod browse;
 mod commands;
@@ -72,15 +70,13 @@ use watch::Watch;
 /// A row's height in the file list, in points. The pointer maths and the view share it.
 pub const ROW_HEIGHT: f32 = 30.0;
 
-/// The space between two sidebar rows, from `SidebarSection`'s own gap. The place drag turns a
-/// pointer's travel into rows with it.
+/// The space between two sidebar rows, from `SidebarSection`'s own gap.
 pub const PLACE_ROW_GAP: f32 = 2.0;
 
 /// A sidebar row's height, from the kit. The insertion preview moves the rows under it by this
-/// plus the gap, exactly one row.
+/// plus the gap.
 pub const PLACE_ROW_HEIGHT: f32 = rune_kit::shell::ROW_HEIGHT;
 
-/// The browser.
 pub struct App {
     pub cwd: PathBuf,
     pub entries: Vec<Entry>,
@@ -124,9 +120,7 @@ pub struct App {
     pub place_menu: Option<PlaceMenu>,
     /// The place whose display name is being edited in its sidebar row, while the field is up.
     pub place_rename: Option<PlaceRename>,
-    /// The settings panel's open category, while the panel is up.
     pub settings: Option<SettingsTab>,
-    /// The command bar, while it's up.
     pub palette: Option<Palette>,
     /// The global settings from `config.kdl`: hidden files, the inspector, and the scrolling.
     pub config: Settings,
@@ -137,14 +131,12 @@ pub struct App {
     /// The rule drag in the tab's list: the row in hand, the place it would land in, and how
     /// far the rows have moved aside for it.
     pub rule_drag: RuleDrag,
-    /// The rule picker's highlighted row, while it is up.
     pub rule_picker: Option<usize>,
     /// The key of the rule the tab should scroll to once its row is laid out, and the frames
     /// left to wait.
     pub rule_reveal: Option<(String, u8)>,
     /// What a command asked about that no rule matches, so the tab can say so.
     pub rule_query: Option<String>,
-    /// The rule open in the tab's editor, while the form is up.
     pub rule_edit: Option<RuleEdit>,
     /// The rule whose delete is waiting on a second press, while the row asks.
     pub rule_delete_ask: Option<usize>,
@@ -171,9 +163,9 @@ pub struct App {
     /// The config folder's documents and the watcher that keeps them current.
     pub store: Store,
     /// Where the list's viewport is scrolled to and how far it can go, told by its
-    /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts from this rather
-    /// than from the rows' rects: those are reported a frame late, and only once they have
-    /// moved far enough, so a fast scroll would jump back by what the last frame moved.
+    /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts here rather than
+    /// from the rows' rects, which are reported a frame late and only once they have moved far
+    /// enough, so a fast scroll would jump back by what the last frame moved.
     pub scroll_told: Rc<Cell<ScrollPos>>,
     /// The list viewport's rect in window points, from the last layout.
     pub rows_view: [f32; 4],
@@ -182,8 +174,8 @@ pub struct App {
     /// The sidebar places' rects in window points and their folders, from the last layout,
     /// keyed by place id, for a dragged row to be dropped on one or between two.
     pub places_at: BTreeMap<String, PlaceAt>,
-    /// Each sidebar section's rect in window points, from the last layout. A row dropped
-    /// there — its heading, or the space between its rows — is added to it as a place.
+    /// Each sidebar section's rect in window points, from the last layout. A row dropped on its
+    /// heading or in the space between its rows is added to it as a place.
     pub sections_at: BTreeMap<Section, [f32; 4]>,
     /// Where each row's name ended, in window points, keyed by path, from the last layout.
     /// Only layout knows how wide the text is, so the press that picks a row up reads its
@@ -231,8 +223,8 @@ impl App {
         app
     }
 
-    /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
-    /// that keep them out of the real config folder).
+    /// Opens `path` with `config`, for a launch that already knows its settings, and for tests
+    /// that keep the real config folder untouched.
     #[cfg(test)]
     pub fn open_with(path: PathBuf, config: Settings) -> App {
         let mut app = App::blank(config, Store::none(), Keybinds::defaults());
@@ -374,8 +366,8 @@ impl App {
         }
     }
 
-    /// Puts a notice's report on the clipboard, whole, so the problem can be pasted wherever it
-    /// will be fixed, and leaves the toast saying so.
+    /// Puts a notice's report on the clipboard whole, so it can be pasted where the problem will
+    /// be fixed, and leaves the toast saying so.
     pub fn copy_notice(&mut self, index: usize, tx: &mut Tx) {
         let Some(notice) = self.notices.get_mut(index) else {
             return;
@@ -466,8 +458,8 @@ impl App {
     }
 }
 
-/// `AppSpec::setup`: hands the config folder's watcher the waker the event loop gave the app,
-/// so a change made in a text editor reaches the open window.
+/// `AppSpec::setup` hands the config folder's watcher the waker the event loop gave the app, so
+/// a change made in a text editor reaches the open window.
 pub fn setup(s: &mut App, wake: Waker) {
     // A folder read that lands wakes the window so `poll` applies it.
     s.scan.set_waker(wake.clone());

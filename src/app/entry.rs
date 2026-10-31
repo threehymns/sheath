@@ -9,7 +9,6 @@ use std::time::SystemTime;
 /// How much of a text file the inspector reads.
 const PREVIEW_LIMIT: u64 = 24 * 1024;
 
-/// One row in the file table.
 pub struct Entry {
     /// Stable row key. Names are unique within a folder, and a colon keeps the key out of the
     /// `/`-separated key paths Rune uses elsewhere.

@@ -14,7 +14,6 @@ const ROW_GAP: f32 = 1.0;
 /// stops with the rows around the highlight in view instead of pinning it to the edge.
 const CLEARANCE_ROWS: f32 = 3.0;
 
-/// The command bar: a field over the registry's actions, each with its shortcut.
 pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(palette) = &s.palette else {
         return;
@@ -136,8 +135,8 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .fill(panel)
         .border(1.0, k.c.border_muted)
         .clip_rounded(10.0)
-        // A modal, so Escape closes it (rather than just blurring the field) and focus stays
-        // inside while it's up.
+        // A modal, so Escape closes the bar rather than just blurring the field, and focus stays
+        // inside while it is up.
         .modal(true, |s: &mut App| s.close_palette())
         // The field pads itself, so the header only adds the list's own inset: the search icon
         // lands on the same column as the rows' icons and the well of the bar is even all round.

@@ -67,7 +67,7 @@ pub(super) struct Step {
 }
 
 impl Step {
-    /// Consumed, but with nothing asked for.
+    /// A step that consumed the input and asks for nothing.
     const NONE: Step = Step {
         scroll_to: None,
         redraw: false,

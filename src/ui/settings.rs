@@ -190,8 +190,8 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     }
 }
 
-/// The pane's title (Hex's pane header). Done is in the dialog's corner, so nothing sits in the
-/// header but the page's name.
+/// The pane's title, after Hex's pane header. Done is in the dialog's corner, so nothing sits in
+/// the header but the page's name.
 fn settings_header(k: &Kit, tab: SettingsTab) -> El {
     row()
         .key("settings-header")

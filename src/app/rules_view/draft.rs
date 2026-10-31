@@ -67,9 +67,9 @@ impl RuleEdit {
     }
 
     /// Whether the form holds changes the file does not: the draft differs from the rule as it
-    /// opened, or a field holds text the draft could not take (a count that is not a number),
-    /// which Save would refuse. The written form is compared because `Rule` carries no equality
-    /// of its own.
+    /// opened, or a field holds text the draft could not take, such as a count that is not a
+    /// number, which Save would refuse. The written form is compared because `Rule` carries no
+    /// equality of its own.
     pub fn dirty(&self) -> bool {
         if self.draft.to_kdl() != self.original.to_kdl() {
             return true;
@@ -90,8 +90,8 @@ impl RuleEdit {
         self.reseed();
     }
 
-    /// Builds the text fields for the draft as it stands now. Structural changes (a matcher
-    /// added or dropped) shift the keys, so the fields are rebuilt from the draft.
+    /// Builds the text fields for the draft as it stands now. A matcher added or dropped shifts
+    /// the keys, so the fields are rebuilt from the draft.
     pub(super) fn reseed(&mut self) {
         // A matcher added or dropped leaves the open menu naming a control that no longer
         // exists.
@@ -141,9 +141,9 @@ fn seed_matcher(
     }
 }
 
-/// What the form cannot save as it stands: a matcher that names nothing (the file reads an
-/// empty `match` as matching every folder, and an empty `exclude` as vetoing the rule
-/// everywhere), and a count that is not a whole number.
+/// What the form cannot save as it stands. One is a matcher that names nothing, since the file
+/// reads an empty `match` as matching every folder and an empty `exclude` as vetoing the rule
+/// everywhere. The other is a count that is not a whole number.
 pub(super) fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) -> Option<String> {
     let names_nothing = |matcher: &Matcher| {
         matcher.path.is_none()
