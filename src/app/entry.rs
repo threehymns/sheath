@@ -15,6 +15,8 @@ pub struct Entry {
     kind: String,
     pub is_dir: bool,
     pub is_symlink: bool,
+    // The folder this row was found in, below the one on screen, when a search reached it.
+    pub relative: Option<String>,
     pub size: u64,
     pub modified: Option<SystemTime>,
     pub created: Option<SystemTime>,
@@ -48,6 +50,7 @@ impl Entry {
             kind,
             is_dir,
             is_symlink,
+            relative: None,
             size: if is_dir { 0 } else { meta.len() },
             modified: meta.modified().or_else(|_| link_meta.modified()).ok(),
             created: meta.created().or_else(|_| link_meta.created()).ok(),

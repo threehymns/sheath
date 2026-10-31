@@ -38,10 +38,11 @@ pub enum Action {
     PickRule,
     OpenTerminal,
     Reveal,
+    SearchSubfolders,
 }
 
 impl Action {
-    pub const ALL: [Action; 31] = [
+    pub const ALL: [Action; 32] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -73,6 +74,7 @@ impl Action {
         Action::PickRule,
         Action::OpenTerminal,
         Action::Reveal,
+        Action::SearchSubfolders,
     ];
 
     pub fn ignores_shift(self) -> bool {
@@ -112,6 +114,7 @@ impl Action {
             Action::PickRule => "pick-rule",
             Action::OpenTerminal => "open-terminal",
             Action::Reveal => "reveal",
+            Action::SearchSubfolders => "search-subfolders",
         }
     }
 
@@ -148,6 +151,7 @@ impl Action {
             Action::PickRule => "Show All Rules",
             Action::OpenTerminal => "Open Terminal Here",
             Action::Reveal => "Reveal in File Manager",
+            Action::SearchSubfolders => "Search Subfolders",
         }
     }
 
@@ -165,7 +169,8 @@ impl Action {
             | Action::PickRule
             | Action::InvertSelection
             | Action::OpenTerminal
-            | Action::Reveal => None,
+            | Action::Reveal
+            | Action::SearchSubfolders => None,
             _ => Some(self.builtin_chord()),
         }
     }

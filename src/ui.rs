@@ -14,7 +14,7 @@ mod table;
 use std::path::Component;
 
 use rune::{Cx, El, Icon, col, el, icon, row, text};
-use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, SplitView, Toolbar};
+use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, SplitView, Toolbar, glyphs};
 use rune_theme_opencode as theme;
 
 use crate::app::App;
@@ -163,8 +163,13 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         k,
     )
     .key("nav-up");
+    let placeholder = if s.search_all {
+        "Search this folder and below"
+    } else {
+        "Search this folder"
+    };
     let mut search = rune_kit::TextInput::new(&s.search)
-        .placeholder("Search this folder")
+        .placeholder(placeholder)
         .leading_icon(k.glyph.search)
         .width(Some(248.0))
         .on_edit(|s: &mut App| &mut s.search)
@@ -188,6 +193,21 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         });
     }
     let search = search.build(k).key("search");
+
+    let scope_label = if s.search_all {
+        "Search This Folder Only"
+    } else {
+        "Search Subfolders"
+    };
+    let scope = IconButton::new(&glyphs::FOLDER_OPEN)
+        .variant(IconButtonVariant::GhostMuted)
+        .control_size(ControlSize::Regular)
+        .label(scope_label)
+        .help(scope_label)
+        .expanded(s.search_all)
+        .on_press(|s: &mut App| s.toggle_search_all())
+        .build(k)
+        .key("search-scope");
 
     let new_folder = IconButton::new(&icons::FOLDER_PLUS)
         .variant(IconButtonVariant::GhostMuted)
@@ -255,6 +275,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .leading(forward)
         .leading(up)
         .center(search)
+        .trailing(scope)
         .trailing(new_folder)
         .trailing(hidden)
         .trailing(layout)

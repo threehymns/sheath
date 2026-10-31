@@ -300,6 +300,15 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .h_full()
         .child(icon(glyph, 16.0).color(icon_color))
         .child(name);
+    if let Some(relative) = &entry.relative {
+        content = content.child(
+            text(relative.clone())
+                .font(style.font)
+                .color(k.c.text_faint)
+                .shrink()
+                .truncate(),
+        );
+    }
     if entry.is_symlink {
         content = content.child(icon(&icons::LINK, 11.0).color(k.c.icon_faint));
     }

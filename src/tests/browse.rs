@@ -314,3 +314,55 @@ fn opening_a_folder_remembers_it_for_the_next_launch() {
         "the folder on screen is the one the next launch opens"
     );
 }
+
+#[test]
+fn a_search_can_reach_the_folders_below_the_one_on_screen() {
+    let dir = fixture();
+    fs::create_dir_all(dir.path().join("alpha").join("deep")).unwrap();
+    fs::write(
+        dir.path()
+            .join("alpha")
+            .join("deep")
+            .join("notes-elsewhere.md"),
+        "x",
+    )
+    .unwrap();
+    let mut app = app(&dir);
+
+    app.search.text = "notes".into();
+    app.apply_filter();
+    assert_eq!(
+        names(&app),
+        vec!["notes.md"],
+        "the folder alone is searched"
+    );
+
+    app.toggle_search_all();
+    let rows: Vec<(&str, Option<&str>)> = app
+        .visible
+        .iter()
+        .map(|&i| {
+            (
+                app.entries[i].name.as_str(),
+                app.entries[i].relative.as_deref(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            ("notes.md", None),
+            ("notes-elsewhere.md", Some("alpha/deep"))
+        ],
+        "the match below is listed with the folder it is in"
+    );
+
+    app.search.clear();
+    app.apply_filter();
+    assert!(
+        names(&app).contains(&"file2.txt"),
+        "clearing the search puts the folder's own rows back: {:?}",
+        names(&app)
+    );
+    assert!(!names(&app).contains(&"notes-elsewhere.md"));
+}

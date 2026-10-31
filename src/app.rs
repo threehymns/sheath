@@ -87,6 +87,11 @@ pub struct App {
     pub preview: Option<Preview>,
     // Only a folder on demand: walking a tree costs too much to do for every row.
     pub folder_size: Option<(u64, usize)>,
+    // Whether a search reaches the folders below the one on screen.
+    pub search_all: bool,
+    pub search_truncated: bool,
+    // The folder's own rows, parked while a search below it replaces the list.
+    parked: Option<Vec<Entry>>,
     pub sidebar: PaneState,
     pub inspector: PaneState,
     pub search: TextEdit,
@@ -212,6 +217,9 @@ impl App {
             typeahead_at: None,
             preview: None,
             folder_size: None,
+            search_all: false,
+            search_truncated: false,
+            parked: None,
             sidebar: PaneState::new(212.0).range(176.0, 330.0),
             inspector,
             search: TextEdit::new(""),

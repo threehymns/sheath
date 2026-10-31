@@ -2,7 +2,7 @@ use crate::app::Entry;
 use rune_kit::SortDir;
 use std::cmp::Ordering;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::entry::compare_time;
 
@@ -44,6 +44,65 @@ pub(super) fn sort_rows(
 
 // A folder bigger than this is read on the worker pool, not in the frame that opens it.
 pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
+
+// How many matches a search below the folder collects before it stops walking.
+pub(super) const SEARCH_LIMIT: usize = 5_000;
+
+pub(super) struct Found {
+    pub(super) entries: Vec<Entry>,
+    pub(super) truncated: bool,
+}
+
+/// Every entry named like `query`, from `root` and the folders below it. Hidden names stay out of
+/// the walk unless asked for, so a search does not crawl through a dot directory's contents.
+pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: usize) -> Found {
+    let mut entries = Vec::new();
+    let mut truncated = false;
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(read) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for item in read.flatten() {
+            let Some(mut entry) = Entry::read(&item) else {
+                continue;
+            };
+            if !show_hidden && entry.hidden() {
+                continue;
+            }
+            if entry.is_dir {
+                stack.push(entry.path.clone());
+            }
+            if !entry.name.to_lowercase().contains(query) {
+                continue;
+            }
+            entry.relative = entry
+                .path
+                .strip_prefix(root)
+                .ok()
+                .and_then(|rest| rest.parent())
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .map(|parent| parent.to_string_lossy().into_owned());
+            entries.push(entry);
+            if entries.len() >= limit {
+                truncated = true;
+                break;
+            }
+        }
+        if truncated {
+            break;
+        }
+    }
+    // The folder's own matches lead, then each folder below in path order.
+    entries.sort_by(|a, b| {
+        a.relative
+            .as_deref()
+            .unwrap_or("")
+            .cmp(b.relative.as_deref().unwrap_or(""))
+            .then_with(|| rune_kit::natural_cmp(&a.name, &b.name))
+    });
+    Found { entries, truncated }
+}
 
 impl Scan {
     pub(super) fn read(

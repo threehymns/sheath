@@ -56,6 +56,7 @@ unsupported by this backend.
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
 | Go to a folder by path | Cmd/Ctrl+L |
 | Search this folder | The search field, or / to focus it; Escape clears it |
+| Search the folders below | The folder button beside the search field |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
@@ -176,6 +177,7 @@ command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forwa
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
 `copy-path`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
+`search-subfolders`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.
@@ -232,5 +234,5 @@ built-in places.
 
 ## Not there yet
 
-No search inside subfolders, no image previews, no per-entry icons or badges. Copy and paste
-use the app's own clipboard rather than the system one.
+No image previews and no per-entry icons or badges. Copy and paste use the app's own clipboard
+rather than the system one.

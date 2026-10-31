@@ -5,7 +5,7 @@ use rune_kit::SortDir;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::scan::{SYNC_SCAN_LIMIT, Scan, sort_rows};
+use super::scan::{SEARCH_LIMIT, SYNC_SCAN_LIMIT, Scan, sort_rows};
 
 use super::*;
 
@@ -28,6 +28,8 @@ impl App {
         self.unhidden = 0;
         self.name_at.clear();
         self.pending_select = None;
+        self.parked = None;
+        self.search_truncated = false;
         self.layout_cut = true;
         self.apply_rules();
         self.reload();
@@ -82,6 +84,11 @@ impl App {
     }
 
     pub fn reload(&mut self) {
+        // The list is showing matches from below, so a read means walking again, not one folder.
+        if self.parked.is_some() || (self.search_all && !self.search.text.trim().is_empty()) {
+            self.apply_filter();
+            return;
+        }
         let path = self.cwd.clone();
         let keep = self.selected.clone();
         let sort = self.sort.clone();
@@ -189,9 +196,33 @@ impl App {
         rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
     }
 
+    pub fn toggle_search_all(&mut self) {
+        self.search_all = !self.search_all;
+        self.apply_filter();
+    }
+
+    /// Shows matches from the folders below while the scope asks for them, and puts the folder's
+    /// own rows back when it does not.
+    fn apply_scope(&mut self, query: &str) {
+        if !self.search_all || query.is_empty() {
+            if let Some(parked) = self.parked.take() {
+                self.entries = parked;
+            }
+            self.search_truncated = false;
+            return;
+        }
+        let found = super::scan::search_below(&self.cwd, query, self.show_hidden, SEARCH_LIMIT);
+        if self.parked.is_none() {
+            self.parked = Some(std::mem::take(&mut self.entries));
+        }
+        self.search_truncated = found.truncated;
+        self.entries = found.entries;
+    }
+
     pub fn apply_filter(&mut self) {
         self.stop_scrolling();
         let query = self.search.text.trim().to_lowercase();
+        self.apply_scope(&query);
         let hidden: Vec<bool> = self
             .entries
             .iter()
