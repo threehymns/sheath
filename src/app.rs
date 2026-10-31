@@ -49,6 +49,8 @@ use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
 use crate::views::Views;
 
+#[cfg(test)]
+pub(crate) use browse::SYNC_SCAN_LIMIT;
 use browse::Scan;
 use paths::start_location;
 use scroll::Scroll;

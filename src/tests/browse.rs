@@ -1,7 +1,7 @@
 //! Listing, sorting, filtering and navigating the folder on screen.
 
 use super::helpers::*;
-use crate::app::Preview;
+use crate::app::{Preview, SYNC_SCAN_LIMIT};
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
 use std::fs;
@@ -99,8 +99,9 @@ fn refreshing_keeps_a_selection_of_several_rows() {
 }
 
 #[test]
-fn a_reload_reads_the_folder_off_the_main_thread() {
-    let dir = fixture();
+fn a_reload_reads_a_big_folder_off_the_main_thread() {
+    // Past the fast path's limit, so the read has to leave the main thread.
+    let dir = long_folder(SYNC_SCAN_LIMIT + 1);
     let mut app = app(&dir);
     fs::write(dir.path().join("late.txt"), "late").unwrap();
 
@@ -109,14 +110,32 @@ fn a_reload_reads_the_folder_off_the_main_thread() {
         !names(&app).contains(&"late.txt"),
         "reload returns before the read does"
     );
+    assert!(app.is_scanning(), "the read is still in flight");
 
     app.settle_scan();
     assert!(names(&app).contains(&"late.txt"), "the read lands its rows");
 }
 
 #[test]
-fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
+fn a_small_folder_switch_has_its_rows_at_once() {
     let dir = fixture();
+    let mut app = app(&dir);
+    let sub = dir.path().join("sub");
+    fs::create_dir(&sub).unwrap();
+    fs::write(sub.join("one.txt"), "1").unwrap();
+
+    app.navigate(sub);
+    // Read in the handler: the very next frame already draws the new folder's rows, so
+    // there is no frame showing the list empty.
+    assert!(!app.is_scanning());
+    assert_eq!(names(&app), ["one.txt"]);
+    assert_eq!(app.phrase_for_count(), "1 item");
+}
+
+#[test]
+fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
+    // Past the fast path, so the read really is in flight while the header is clicked.
+    let dir = long_folder(SYNC_SCAN_LIMIT + 1);
     let mut app = app(&dir);
     // The read is asked for with the folder's default name/ascending sort...
     app.reload();
@@ -124,11 +143,9 @@ fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
     // the sort that is showing, not the one the read applied.
     app.sort_by("name");
     app.settle_scan();
-    assert_eq!(
-        names(&app),
-        ["alpha", "notes.md", "file10.txt", "file2.txt"],
-        "folders first, then names descending"
-    );
+    let names = names(&app);
+    assert_eq!(names.first().copied(), Some("file2000.txt"));
+    assert_eq!(names.last().copied(), Some("file00.txt"));
 }
 
 #[test]

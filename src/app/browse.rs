@@ -45,6 +45,12 @@ fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir) {
     });
 }
 
+/// Folders up to this many entries are read in the handler that opens them, so the frame
+/// after a switch already draws the new rows. At about 8 µs an entry for the read and the
+/// sort, that keeps the work inside a 60 Hz frame; a bigger folder is read on the worker,
+/// where the frame that opens it would otherwise have waited longer than it has.
+pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
+
 impl Scan {
     fn read(path: PathBuf, keep: Option<String>, sort: (String, SortDir)) -> Scan {
         let mut entries = Vec::new();
@@ -69,6 +75,44 @@ impl Scan {
             keep,
             sort,
         }
+    }
+
+    /// Reads the folder here, unless it holds more than `limit` entries: `None` means it is
+    /// big enough that the read belongs on the worker. Only the directory is listed before
+    /// the limit is checked, so a huge folder costs a few hundred entries' names and no
+    /// metadata before it goes off the main thread. A folder that cannot be opened goes to
+    /// the worker too, for the message a failed read gives.
+    fn try_read(
+        path: PathBuf,
+        keep: Option<String>,
+        sort: (String, SortDir),
+        limit: usize,
+    ) -> Option<Scan> {
+        let read = fs::read_dir(&path).ok()?;
+        let mut items = Vec::with_capacity(limit + 1);
+        for item in read {
+            let Ok(item) = item else {
+                continue;
+            };
+            items.push(item);
+            if items.len() > limit {
+                return None;
+            }
+        }
+        let mut entries = Vec::with_capacity(items.len());
+        for item in &items {
+            if let Some(entry) = Entry::read(item) {
+                entries.push(entry);
+            }
+        }
+        sort_rows(&mut entries, &sort.0, sort.1);
+        Some(Scan {
+            path,
+            entries,
+            error: None,
+            keep,
+            sort,
+        })
     }
 }
 
@@ -150,8 +194,17 @@ impl App {
         let path = self.cwd.clone();
         let keep = self.selected.clone();
         let sort = self.sort.clone();
+        // A folder small enough to read within this frame gets its rows here, so the next
+        // frame draws the new listing rather than an empty one.
+        if let Some(scan) = Scan::try_read(path.clone(), keep.clone(), sort.clone(), SYNC_SCAN_LIMIT)
+        {
+            // Whatever read was still in flight belongs to a folder already left.
+            self.scan.cancel();
+            self.apply_scan(scan);
+            return;
+        }
         self.scan
-            .request(path.clone(), move |path| Scan::read(path, keep, sort));
+            .request(path, move |path| Scan::read(path, keep, sort));
     }
 
     /// Whether a folder read is still in flight, so there are no rows to show yet. The list
@@ -166,6 +219,12 @@ impl App {
         let Some(scan) = self.scan.take() else {
             return false;
         };
+        self.apply_scan(scan)
+    }
+
+    /// Puts a read's rows on screen: its error, the presentation the rules and the folder's
+    /// count decide, the selection it asked to keep, and what a file operation made.
+    fn apply_scan(&mut self, scan: Scan) -> bool {
         // `Latest` already drops a superseded answer; the path keeps a read of some other
         // folder off this one all the same.
         if scan.path != self.cwd {
