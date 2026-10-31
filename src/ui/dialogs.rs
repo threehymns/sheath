@@ -1,4 +1,5 @@
 use crate::app::{App, Sheet, SheetKind};
+use crate::icons;
 use crate::keybinds::Action;
 use rune::{El, PointerPress, col, el, row, text};
 use rune_kit::{
@@ -255,6 +256,20 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
     context_menu("row-menu", el(), Some(at))
         .min_width(240.0)
         .item(
+            MenuItem::new(if many {
+                format!("Open {count} Items")
+            } else {
+                "Open".to_owned()
+            })
+            .icon(&glyphs::FILE)
+            .disabled(many)
+            .on_select(|s: &mut App| {
+                s.close_menu();
+                s.open_selected();
+            }),
+        )
+        .separator()
+        .item(
             MenuItem::new("Rename")
                 .icon(&theme::icons::EDIT)
                 .shortcut(s.keybinds.menu_label(Action::Rename))
@@ -290,6 +305,43 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                 s.close_menu();
                 s.begin_trash();
             }),
+        )
+        .item(
+            MenuItem::new("Copy")
+                .icon(&theme::icons::COPY)
+                .shortcut(s.keybinds.menu_label(Action::Copy))
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.copy_selection(false);
+                }),
+        )
+        .item(
+            MenuItem::new("Cut")
+                .icon(&icons::SCISSORS)
+                .shortcut(s.keybinds.menu_label(Action::Cut))
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.copy_selection(true);
+                }),
+        )
+        .item(
+            MenuItem::new("Paste")
+                .icon(&icons::CLIPBOARD)
+                .shortcut(s.keybinds.menu_label(Action::Paste))
+                .disabled(s.clipboard.is_none())
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.paste();
+                }),
+        )
+        .item(
+            MenuItem::new("Duplicate")
+                .icon(&theme::icons::OUTLINE_COPY)
+                .shortcut(s.keybinds.menu_label(Action::Duplicate))
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.duplicate_selection();
+                }),
         )
         .separator()
         .item(
