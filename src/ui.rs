@@ -28,6 +28,7 @@ use table::{empty_state, file_table};
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let k = theme::kit(cx.system_dark());
+    s.begin_view();
     let shell = SplitView::new(main(s, k))
         .sidebar(
             &s.sidebar,

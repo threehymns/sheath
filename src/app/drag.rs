@@ -19,6 +19,21 @@ const DRAG_SCROLL_EDGE: f32 = 44.0;
 // Fastest drag scroll, in points per second, however far past the edge the pointer goes.
 const DRAG_SCROLL_MAX: f32 = 1100.0;
 
+// How far into an area's top or bottom band a pointer has gone: -1 at the top, 1 at the bottom,
+// 0 in between.
+fn edge_depth(rect: [f32; 4], y: f32) -> f32 {
+    let above = (rect[1] + DRAG_SCROLL_EDGE - y) / DRAG_SCROLL_EDGE;
+    let below = (y - (rect[1] + rect[3] - DRAG_SCROLL_EDGE)) / DRAG_SCROLL_EDGE;
+    let depth = if above > 0.0 {
+        -above
+    } else if below > 0.0 {
+        below
+    } else {
+        0.0
+    };
+    depth.clamp(-1.0, 1.0)
+}
+
 pub struct FileDrag {
     pub start: (f32, f32),
     pub pointer: (f32, f32),
@@ -229,30 +244,45 @@ impl App {
             },
         }
     }
-    pub(super) fn drag_push(&self, dt: f32) -> f32 {
+    pub(super) fn drag_push(&self, dt: f32) -> Option<(&'static str, f32)> {
         let pointer = match (&self.file_drag, &self.marquee) {
             (Some(drag), _) if drag.dragging => Some(drag.pointer),
             (_, Some(marquee)) if marquee.dragging => Some(marquee.current),
             _ => None,
         };
-        let Some((x, y)) = pointer else {
-            return 0.0;
-        };
-        let view = self.rows_view;
-        let depth = if x < view[0] || view[3] <= 0.0 {
-            0.0
-        } else {
-            let above = (view[1] + DRAG_SCROLL_EDGE - y) / DRAG_SCROLL_EDGE;
-            let below = (y - (view[1] + view[3] - DRAG_SCROLL_EDGE)) / DRAG_SCROLL_EDGE;
-            if above > 0.0 {
-                -above
-            } else if below > 0.0 {
-                below
-            } else {
-                0.0
+        let (key, depth) = self.area_push(pointer?)?;
+        Some((key, depth * DRAG_SCROLL_MAX * dt))
+    }
+
+    // The scroll area a drag pushes: the one under the pointer, smallest first so a panel over
+    // the list wins, and how far into its top or bottom band the pointer has gone.
+    fn area_push(&self, at: (f32, f32)) -> Option<(&'static str, f32)> {
+        let (x, y) = at;
+        let mut hit: Option<(&'static str, [f32; 4])> = None;
+        for (key, rect) in self.scrolls.visible_regions() {
+            let covers = rect[3] > 0.0
+                && x >= rect[0]
+                && x <= rect[0] + rect[2]
+                && y >= rect[1]
+                && y <= rect[1] + rect[3];
+            if covers && hit.is_none_or(|(_, best)| rect[2] * rect[3] < best[2] * best[3]) {
+                hit = Some((key, rect));
+            }
+        }
+        let (key, rect) = match hit {
+            Some(hit) => hit,
+            // A pointer just past the list's top or bottom edge still pushes it, as it always
+            // has; every other area pushes from inside its own frame only.
+            None => {
+                let rect = self.rows_view;
+                if rect[3] <= 0.0 || x < rect[0] || x > rect[0] + rect[2] {
+                    return None;
+                }
+                (FILES, rect)
             }
         };
-        depth.clamp(-1.0, 1.0) * DRAG_SCROLL_MAX * dt
+        let depth = edge_depth(rect, y);
+        (depth != 0.0).then_some((key, depth))
     }
 
     pub(super) fn follow_drag(&mut self) {

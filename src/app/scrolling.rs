@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -12,12 +12,14 @@ use super::*;
 // The file table and the grid share this viewport, and the drag maths works from its offset.
 pub const FILES: &str = "files-table";
 
-// Every scroll area's physics, and the offset each viewport last reported. A view registers an
-// area when it builds the viewport, so one that is not on screen costs nothing.
+// Every scroll area's physics, the offset each viewport last reported, and where it was drawn.
+// A view registers its areas as it builds them, so one that is not on screen costs nothing.
 #[derive(Default)]
 pub(super) struct Scrolls {
     states: BTreeMap<&'static str, Scroll>,
     told: RefCell<BTreeMap<&'static str, Rc<Cell<ScrollPos>>>>,
+    regions: RefCell<BTreeMap<&'static str, [f32; 4]>>,
+    shown: RefCell<BTreeSet<&'static str>>,
 }
 
 impl Scrolls {
@@ -34,8 +36,30 @@ impl Scrolls {
         self.states.entry(key).or_default()
     }
 
-    fn seen(&self) -> Vec<&'static str> {
+    fn known(&self) -> Vec<&'static str> {
         self.told.borrow().keys().copied().collect()
+    }
+
+    // The areas this build drew, so a panel that closed stops pushing at once.
+    fn begin_view(&self) {
+        self.shown.borrow_mut().clear();
+    }
+
+    fn mark_shown(&self, key: &'static str) {
+        self.shown.borrow_mut().insert(key);
+    }
+
+    fn set_region(&mut self, key: &'static str, rect: [f32; 4]) {
+        self.regions.borrow_mut().insert(key, rect);
+    }
+
+    pub(super) fn visible_regions(&self) -> Vec<(&'static str, [f32; 4])> {
+        let shown = self.shown.borrow();
+        let regions = self.regions.borrow();
+        shown
+            .iter()
+            .filter_map(|key| regions.get(key).map(|rect| (*key, *rect)))
+            .collect()
     }
 
     fn current(&self, key: &str) -> f32 {
@@ -58,6 +82,22 @@ pub fn poll(s: &mut App, t: f64, tx: &mut Tx) -> bool {
 }
 
 impl App {
+    // A view tells every scroll area it builds where it is, so drags know what they are over.
+    pub fn begin_view(&self) {
+        self.scrolls.begin_view();
+    }
+
+    pub fn scrolled_area(&self, key: &'static str) {
+        self.scrolls.mark_shown(key);
+    }
+
+    pub fn area_view(&mut self, key: &'static str, rect: [f32; 4]) {
+        if key == FILES {
+            self.rows_view = rect;
+        }
+        self.scrolls.set_region(key, rect);
+    }
+
     // The offset cell a viewport writes its position into; the view keeps it across frames.
     pub fn told(&self, key: &'static str) -> Rc<Cell<ScrollPos>> {
         self.scrolls.told(key)
@@ -161,7 +201,7 @@ impl App {
                 redraw = true;
             }
         }
-        for key in self.scrolls.seen() {
+        for key in self.scrolls.known() {
             let told = self.told_offset_of(key);
             let limits = self.limits(key);
             let dt = {
@@ -169,12 +209,11 @@ impl App {
                 state.observe(told);
                 state.frame(t)
             };
-            // Only the file list pushes its rows from a drag; the other areas have no drag.
-            let push = if key == FILES {
-                self.drag_push(dt)
-            } else {
-                0.0
-            };
+            // A drag pushes the area under the pointer; the other areas stand still.
+            let push = self
+                .drag_push(dt)
+                .filter(|(target, _)| *target == key)
+                .map_or(0.0, |(_, points)| points);
             let (nudged, stepped) = {
                 let state = self.scrolls.state(key);
                 (state.nudge(push, limits.max), state.step(limits))

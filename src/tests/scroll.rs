@@ -163,6 +163,46 @@ fn the_command_bar_overscrolls_like_the_list() {
 }
 
 #[test]
+fn a_drag_over_the_preview_pushes_the_preview_not_the_list() {
+    let dir = long_folder(40);
+    std::fs::write(
+        dir.path().join("big.txt"),
+        "a line of preview text\n".repeat(600),
+    )
+    .unwrap();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.state.select_id("f:big.txt");
+    rt.frame(0.1);
+    let [px, py, _, ph] = rt
+        .presented("preview-scroll")
+        .expect("the preview is on screen")
+        .0;
+    let list_before = scroll_offset(&rt);
+    let preview_before = rt.state.told("preview-scroll").get().offset[1];
+    let (x0, y0) = name_point(&rt, "f:big.txt");
+    rt.pointer_down(x0, y0);
+    rt.frame(0.05);
+    rt.pointer_move(px + 20.0, py + ph - 2.0);
+    rt.frame(0.05);
+    for _ in 0..12 {
+        rt.frame(1.0 / 60.0);
+    }
+    let preview_after = rt.state.told("preview-scroll").get().offset[1];
+    rt.pointer_up(px + 20.0, py + ph - 2.0);
+    rt.frame(0.1);
+    assert!(
+        preview_after > preview_before + 1.0,
+        "the drag at the preview's bottom edge scrolled it: {preview_before} -> {preview_after}"
+    );
+    assert_eq!(
+        scroll_offset(&rt),
+        list_before,
+        "the list stayed where it was"
+    );
+}
+
+#[test]
 fn without_overscroll_an_end_is_hard() {
     let dir = long_folder(60);
     let mut rt = runtime(app(&dir));

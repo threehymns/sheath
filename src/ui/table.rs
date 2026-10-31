@@ -41,7 +41,6 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
         .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
         .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
-        .on_layout(|s: &mut App, rect| s.rows_view = rect)
         .transition(mount(cut));
     col()
         .key("file-table")
