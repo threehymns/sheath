@@ -1,4 +1,4 @@
-Use `cargo fmt` and `cargo clippy` before commit.
+Use `cargo fmt`, `cargo check`, and `cargo clippy` before commit.
 
 Conventional commit each logical change unless instructed otherwise. 
 
