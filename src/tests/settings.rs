@@ -196,7 +196,7 @@ fn saved_settings_load_at_launch() {
     assert!(!saved.inspector);
 
     let mut app = App::open_with(dir.path().to_path_buf(), saved);
-    // The folder is read off the main thread, so wait it out before reading its rows.
+    // A big folder is read off the main thread, so wait it out before reading its rows.
     app.settle_scan();
     assert!(app.show_hidden);
     assert!(!app.inspector.is_open());

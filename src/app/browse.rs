@@ -6,115 +6,11 @@ use crate::rules::SortKey;
 use crate::settings::Setting;
 use rune_kit::SortDir;
 use std::collections::{BTreeSet, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::entry::compare_time;
+use super::scan::{sort_rows, Scan, SYNC_SCAN_LIMIT};
 
 use super::*;
-
-/// One folder read, done off the main thread: the rows of a folder and what went wrong
-/// opening it. A folder with tens of thousands of entries takes long enough to read that
-/// doing it in the frame that opens it would stall the window.
-///
-/// `Latest` runs it on Rune's worker pool and drops the answer of a read a later one
-/// superseded, so navigating away mid-read never lands the folder left behind.
-pub(super) struct Scan {
-    path: PathBuf,
-    entries: Vec<Entry>,
-    error: Option<String>,
-    /// The row the read was asked to keep selected, if the folder still has it.
-    keep: Option<String>,
-    /// The sort the read applied, so a landing sorts again only when the list's sort moved
-    /// while the read ran.
-    sort: (String, SortDir),
-}
-
-/// Orders a folder's rows: folders first, then the list's sort column and direction. The read
-/// runs it off the main thread, so the frame that opens a folder only filters the rows.
-fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir) {
-    entries.sort_by(|a, b| {
-        b.is_dir.cmp(&a.is_dir).then_with(|| {
-            let order = match column {
-                "size" => a.size.cmp(&b.size),
-                "modified" => compare_time(a.modified, b.modified),
-                _ => rune_kit::natural_cmp(&a.name, &b.name),
-            };
-            direction.apply(order)
-        })
-    });
-}
-
-/// Folders up to this many entries are read in the handler that opens them, so the frame
-/// after a switch already draws the new rows. At about 8 µs an entry for the read and the
-/// sort, that keeps the work inside a 60 Hz frame; a bigger folder is read on the worker,
-/// where the frame that opens it would otherwise have waited longer than it has.
-pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
-
-impl Scan {
-    fn read(path: PathBuf, keep: Option<String>, sort: (String, SortDir)) -> Scan {
-        let mut entries = Vec::new();
-        let mut error = None;
-        match fs::read_dir(&path) {
-            Ok(read) => {
-                for item in read.flatten() {
-                    if let Some(entry) = Entry::read(&item) {
-                        entries.push(entry);
-                    }
-                }
-            }
-            Err(err) => {
-                error = Some(format!("Couldn’t open {}: {err}", path.display()));
-            }
-        }
-        sort_rows(&mut entries, &sort.0, sort.1);
-        Scan {
-            path,
-            entries,
-            error,
-            keep,
-            sort,
-        }
-    }
-
-    /// Reads the folder here, unless it holds more than `limit` entries: `None` means it is
-    /// big enough that the read belongs on the worker. Only the directory is listed before
-    /// the limit is checked, so a huge folder costs a few hundred entries' names and no
-    /// metadata before it goes off the main thread. A folder that cannot be opened goes to
-    /// the worker too, for the message a failed read gives.
-    fn try_read(
-        path: PathBuf,
-        keep: Option<String>,
-        sort: (String, SortDir),
-        limit: usize,
-    ) -> Option<Scan> {
-        let read = fs::read_dir(&path).ok()?;
-        let mut items = Vec::with_capacity(limit + 1);
-        for item in read {
-            let Ok(item) = item else {
-                continue;
-            };
-            items.push(item);
-            if items.len() > limit {
-                return None;
-            }
-        }
-        let mut entries = Vec::with_capacity(items.len());
-        for item in &items {
-            if let Some(entry) = Entry::read(item) {
-                entries.push(entry);
-            }
-        }
-        sort_rows(&mut entries, &sort.0, sort.1);
-        Some(Scan {
-            path,
-            entries,
-            error: None,
-            keep,
-            sort,
-        })
-    }
-}
 
 impl App {
     /// Shows `path` without touching history.
@@ -128,12 +24,15 @@ impl App {
         self.clear_typeahead();
         self.search.clear();
         self.clear_selection();
-        // The rows are read off the main thread, so the last folder's go now rather than
-        // showing under the new path. What the path alone decides is resolved here; the rules
-        // that need the folder's count settle with the read.
+        // The last folder's rows go now rather than showing under the new path; the new
+        // folder's land with the read. What the path alone decides is resolved here; the
+        // rules that need the folder's count settle with the read.
         self.entries.clear();
         self.visible.clear();
         self.pending_select = None;
+        // Whatever layout the new folder resolves to is not the user's choice: it lands with
+        // the folder, without the fade the layout toggle keeps.
+        self.layout_cut = true;
         self.apply_rules();
         self.reload();
     }
@@ -188,8 +87,8 @@ impl App {
 
     /// Asks for a fresh read of the folder, keeping the selected rows when they still exist.
     /// Rows keep their ids through a re-read, so a selection of several survives a refresh
-    /// until something moves them. The read runs off the main thread: `poll` applies its
-    /// answer, so a folder this big never stalls the frame that asked for it.
+    /// until something moves them. A folder too big to read in this frame is read off the main
+    /// thread: `poll` applies its answer, so the frame that asked for it never stalls.
     pub fn reload(&mut self) {
         let path = self.cwd.clone();
         let keep = self.selected.clone();
@@ -385,6 +284,8 @@ impl App {
         } else {
             Layout::Grid
         };
+        // The user asked for this one: it keeps its fade.
+        self.layout_cut = false;
         // The two layouts measure their content differently, so what the old one was coasting
         // toward means nothing in the new one.
         self.scroll.stop();
@@ -401,6 +302,8 @@ impl App {
     /// open folder again, so a rule or what the folder was left showing keeps its say.
     pub fn toggle_grid_setting(&mut self) {
         let before = self.layout;
+        // The switch is the user's, so a layout it changes fades in as the toggle's does.
+        self.layout_cut = false;
         // The switch turns the setting over, not what the folder resolved to: a rule or a
         // remembered visit may be what is on screen, and that is not what gets saved.
         self.config.grid = !self.config.grid;

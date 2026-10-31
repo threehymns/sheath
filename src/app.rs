@@ -16,6 +16,7 @@ mod grid;
 mod input;
 mod paths;
 mod rules_view;
+mod scan;
 mod scroll;
 mod scrolling;
 mod selection;
@@ -50,8 +51,8 @@ use crate::settings::Settings;
 use crate::views::Views;
 
 #[cfg(test)]
-pub(crate) use browse::SYNC_SCAN_LIMIT;
-use browse::Scan;
+pub(crate) use scan::SYNC_SCAN_LIMIT;
+use scan::Scan;
 use paths::start_location;
 use scroll::Scroll;
 
@@ -75,6 +76,9 @@ pub struct App {
     pub sort: (String, SortDir),
     /// Whether the folder is a table of rows or a grid of tiles.
     pub layout: Layout,
+    /// Whether that layout arrived with the folder rather than from the user's toggle. A
+    /// layout a folder brought lands at once; one the user asked for keeps its fade.
+    pub layout_cut: bool,
     /// The drag box, while the pointer is down in the list's empty space.
     pub marquee: Option<Marquee>,
     /// The rows being dragged toward a folder, while the pointer is down on a row.
@@ -213,6 +217,7 @@ impl App {
             anchor: None,
             sort: ("name".to_owned(), SortDir::Ascending),
             layout,
+            layout_cut: true,
             marquee: None,
             file_drag: None,
             clipboard: None,

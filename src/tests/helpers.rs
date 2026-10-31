@@ -48,7 +48,7 @@ pub(super) fn app(dir: &TempDir) -> App {
     app.rule_error = None;
     // The store and the remembered state are the test's now, so the folder is resolved again.
     app.reload();
-    // The folder is read off the main thread, so wait it out: a test starts with its rows.
+    // A big folder is read off the main thread, so wait it out: a test starts with its rows.
     app.settle_scan();
     app
 }

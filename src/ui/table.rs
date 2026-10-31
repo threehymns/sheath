@@ -23,7 +23,18 @@ pub(super) fn browser_style(k: &Kit) -> TableStyle {
     }
 }
 
-pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
+/// How a layout's parts enter. A layout that came with the folder cuts in: Rune fades every
+/// element on mount, so the root's `Transition::none()` alone still let the header, the
+/// viewport and the rows fade in behind it. A layout the user asked for keeps that fade.
+pub(super) fn mount(cut: bool) -> Transition {
+    if cut {
+        Transition::none()
+    } else {
+        Transition::opacity()
+    }
+}
+
+pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
     let style = browser_style(k);
     // The viewport's own offset, told in the frame that scrolls it, so the wheel and its coast
     // start where the rows really are rather than where their rects last reported.
@@ -47,8 +58,13 @@ pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
         .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
         .on_layout(|s: &mut App, rect| s.rows_view = rect)
         .on_scroll_offset(move |at| told.set(at))
+        .transition(mount(cut))
         // The bounce moves the rows without moving the viewport, so its edges stay put.
-        .child(file_rows(s, k, style).offset(0.0, s.overshoot()));
+        .child(
+            file_rows(s, k, style)
+                .transition(mount(cut))
+                .offset(0.0, s.overshoot()),
+        );
     col()
         .key("file-table")
         .w_full()
@@ -57,7 +73,7 @@ pub(super) fn file_table(s: &App, k: &'static Kit) -> El {
         // The table itself lands at once, so a folder that changes between empty and
         // listed does not cross-fade its whole list.
         .transition(Transition::none())
-        .child(file_header(s, k, &style))
+        .child(file_header(s, k, &style).transition(mount(cut)))
         .child(viewport)
 }
 

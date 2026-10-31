@@ -8,13 +8,13 @@ use rune::{
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
 
-use super::table::{HEADER_HEIGHT, browser_style, sort_label};
+use super::table::{HEADER_HEIGHT, browser_style, mount, sort_label};
 
 /// The theme's small control height. The sort buttons run at it inside the header-tall bar, so
 /// they sit with a little room above and below rather than filling it edge to edge.
 const SORT_BUTTON_HEIGHT: f32 = 20.0;
 
-pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
+pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
     let told = s.scroll_told.clone();
     let columns = s.grid_columns();
     let rows = s.grid_rows();
@@ -28,7 +28,7 @@ pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
         // The grid itself lands at once, so a folder that changes between empty and listed
         // does not cross-fade its whole wall.
         .transition(Transition::none())
-        .child(grid_toolbar(s, k))
+        .child(grid_toolbar(s, k).transition(mount(cut)))
         .child(
             col()
                 .key("files-table")
@@ -47,11 +47,13 @@ pub(super) fn file_grid(s: &App, k: &'static Kit) -> El {
                 .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
                 .on_layout(|s: &mut App, rect| s.rows_view = rect)
                 .on_scroll_offset(move |at| told.set(at))
+                .transition(mount(cut))
                 // The bounce moves the tiles without moving the viewport, so its edges stay put.
                 .child(
                     col()
                         .key("file-grid-rows")
                         .w_full()
+                        .transition(mount(cut))
                         // Tiles land where they belong: no enter or exit fade, no hover or
                         // selection crossfade, and no glide when a sort, a filter or a
                         // refresh moves them. The grid's own motion is the viewport's

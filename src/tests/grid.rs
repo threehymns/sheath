@@ -7,6 +7,30 @@ use rune_kit::SortDir;
 use std::fs;
 
 #[test]
+fn a_layout_that_came_with_the_folder_lands_without_a_fade() {
+    let dir = fixture();
+    let alpha = dir.path().join("alpha");
+    let mut app = app(&dir);
+    // The folder was left in the grid, so opening it brings the grid with it.
+    app.views.set(
+        &alpha,
+        crate::rules::Resolved {
+            layout: Some(Layout::Grid),
+            ..Default::default()
+        },
+    );
+
+    app.navigate(alpha);
+    assert_eq!(app.layout, Layout::Grid);
+    assert!(app.layout_cut, "the folder's own layout lands at once");
+
+    // Asking for the other layout is the user's change, and keeps its fade.
+    app.toggle_layout();
+    assert_eq!(app.layout, Layout::List);
+    assert!(!app.layout_cut);
+}
+
+#[test]
 fn the_toolbar_switches_between_the_list_and_the_grid() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
