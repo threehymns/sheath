@@ -129,17 +129,12 @@ impl Matcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Prop<T> {
+    #[default]
     Unset,
     Inherit,
     Set(T),
-}
-
-impl<T> Default for Prop<T> {
-    fn default() -> Self {
-        Prop::Unset
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

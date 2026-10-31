@@ -110,6 +110,7 @@ impl Previewer {
         self.jobs.take()
     }
 
+    #[cfg(test)]
     pub(super) fn is_pending(&self) -> bool {
         self.jobs.is_pending()
     }

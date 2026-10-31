@@ -12,20 +12,11 @@ const FILE: &str = "views.kdl";
 
 const LIMIT: usize = 200;
 
+#[derive(Default)]
 pub struct Views {
     path: Option<PathBuf>,
     entries: Vec<(PathBuf, Resolved)>,
     pub error: Option<String>,
-}
-
-impl Default for Views {
-    fn default() -> Self {
-        Views {
-            path: None,
-            entries: Vec::new(),
-            error: None,
-        }
-    }
 }
 
 impl Views {
