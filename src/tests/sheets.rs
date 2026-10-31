@@ -14,6 +14,7 @@ fn renaming_moves_the_file_and_selects_the_new_name() {
     app.begin_rename();
     app.sheet.as_mut().unwrap().edit.replace_text("renamed.md");
     app.submit_sheet(&mut Tx::default());
+    app.settle_scan();
 
     assert!(app.sheet.is_none());
     assert!(!dir.path().join("notes.md").exists());
@@ -59,6 +60,7 @@ fn moving_puts_the_file_in_the_destination_folder() {
         .edit
         .replace_text(destination.display().to_string());
     app.submit_sheet(&mut Tx::default());
+    app.settle_scan();
 
     assert!(app.sheet.is_none());
     assert!(!dir.path().join("file2.txt").exists());

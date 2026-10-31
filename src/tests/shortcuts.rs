@@ -21,6 +21,8 @@ fn the_default_shortcuts_run_their_commands() {
     fs::write(dir.path().join("late.txt"), "late").unwrap();
     let refresh = event_for(&app, Action::Refresh, Key::Command('r'));
     assert!(crate::app::on_key(&mut app, &refresh, &mut tx));
+    // A refresh reads the folder off the main thread.
+    app.settle_scan();
     assert!(names(&app).contains(&"late.txt"));
 
     let settings = event_for(&app, Action::OpenSettings, Key::Command(','));

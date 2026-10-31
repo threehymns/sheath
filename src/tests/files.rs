@@ -12,10 +12,12 @@ fn new_folder_picks_a_free_name_and_selects_it() {
     let mut tx = Tx::default();
 
     app.new_folder(&mut tx);
+    app.settle_scan();
     assert!(dir.path().join("New Folder").is_dir());
     assert_eq!(app.selected.as_deref(), Some("f:New Folder"));
 
     app.new_folder(&mut tx);
+    app.settle_scan();
     assert!(dir.path().join("New Folder 2").is_dir());
     assert_eq!(app.selected.as_deref(), Some("f:New Folder 2"));
     assert!(names(&app).contains(&"New Folder 2"));
@@ -31,6 +33,8 @@ fn the_toolbar_button_creates_and_selects_a_folder() {
         .expect("the New Folder button is in the toolbar");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
+    rt.frame(0.1);
+    // The folder is read off the main thread: the frame after the press lands its row.
     rt.frame(0.1);
     assert!(dir.path().join("New Folder").is_dir());
     assert_eq!(rt.state.selected.as_deref(), Some("f:New Folder"));
@@ -80,6 +84,7 @@ fn copy_and_paste_puts_a_copy_beside_the_file() {
         "copying leaves the file alone"
     );
     app.paste();
+    app.settle_scan();
 
     assert_eq!(
         fs::read_to_string(dir.path().join("notes copy.md")).unwrap(),
@@ -112,6 +117,7 @@ fn cut_and_paste_moves_the_file_into_the_folder_on_screen() {
 
     app.navigate(dir.path().join("alpha"));
     app.paste();
+    app.settle_scan();
 
     assert!(dir.path().join("alpha").join("file2.txt").exists());
     assert!(!dir.path().join("file2.txt").exists());
@@ -149,6 +155,7 @@ fn copying_a_selection_copies_every_row() {
 
     app.run_action(Action::Copy, &mut tx);
     app.paste();
+    app.settle_scan();
 
     assert!(dir.path().join("file2 copy.txt").exists());
     assert!(dir.path().join("file10 copy.txt").exists());

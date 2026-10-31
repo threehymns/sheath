@@ -66,8 +66,16 @@ impl App {
     /// Steps the list's momentum and overscroll once per frame, asking for the next frame while
     /// either still moves. True when the rows moved, so the view draws them where they are.
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
-        // A file the app did not write changed on disk: re-read it and apply what it says.
-        let mut redraw = false;
+        // Tests run frames on a virtual clock, so wait the folder read out: an assertion must
+        // never race the worker. A window is woken when the read lands instead.
+        #[cfg(test)]
+        self.settle_scan();
+        // A folder read that landed replaces the rows, and the row a file operation made is
+        // revealed once it is among them.
+        let mut redraw = self.land_scan();
+        if let Some(id) = self.pending_reveal.take() {
+            tx.scroll_into_view_in("files-table", id);
+        }
         if self.store.poll() {
             self.apply_config();
             redraw = true;

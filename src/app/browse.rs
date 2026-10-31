@@ -13,6 +13,45 @@ use super::entry::compare_time;
 
 use super::*;
 
+/// One folder read, done off the main thread: the rows of a folder and what went wrong
+/// opening it. A folder with tens of thousands of entries takes long enough to read that
+/// doing it in the frame that opens it would stall the window.
+///
+/// `Latest` runs it on Rune's worker pool and drops the answer of a read a later one
+/// superseded, so navigating away mid-read never lands the folder left behind.
+pub(super) struct Scan {
+    path: PathBuf,
+    entries: Vec<Entry>,
+    error: Option<String>,
+    /// The row the read was asked to keep selected, if the folder still has it.
+    keep: Option<String>,
+}
+
+impl Scan {
+    fn read(path: PathBuf, keep: Option<String>) -> Scan {
+        let mut entries = Vec::new();
+        let mut error = None;
+        match fs::read_dir(&path) {
+            Ok(read) => {
+                for item in read.flatten() {
+                    if let Some(entry) = Entry::read(&item) {
+                        entries.push(entry);
+                    }
+                }
+            }
+            Err(err) => {
+                error = Some(format!("Couldn’t open {}: {err}", path.display()));
+            }
+        }
+        Scan {
+            path,
+            entries,
+            error,
+            keep,
+        }
+    }
+}
+
 impl App {
     /// Shows `path` without touching history.
     pub(super) fn enter(&mut self, path: PathBuf) {
@@ -25,6 +64,13 @@ impl App {
         self.clear_typeahead();
         self.search.clear();
         self.clear_selection();
+        // The rows are read off the main thread, so the last folder's go now rather than
+        // showing under the new path. What the path alone decides is resolved here; the rules
+        // that need the folder's count settle with the read.
+        self.entries.clear();
+        self.visible.clear();
+        self.pending_select = None;
+        self.apply_rules();
         self.reload();
     }
 
@@ -76,39 +122,80 @@ impl App {
         self.cwd.parent().is_some()
     }
 
-    /// Re-reads the folder, keeping the selected rows when they still exist. Rows keep their
-    /// ids through a re-read, so a selection of several survives a refresh until something
-    /// moves them.
+    /// Asks for a fresh read of the folder, keeping the selected rows when they still exist.
+    /// Rows keep their ids through a re-read, so a selection of several survives a refresh
+    /// until something moves them. The read runs off the main thread: `poll` applies its
+    /// answer, so a folder this big never stalls the frame that asked for it.
     pub fn reload(&mut self) {
+        let path = self.cwd.clone();
         let keep = self.selected.clone();
-        self.read_dir();
+        self.scan
+            .request(path.clone(), move |path| Scan::read(path, keep));
+    }
+
+    /// Applies the folder read that landed, if one did: its rows, its error, the presentation
+    /// the rules and the folder's count decide, and the selection the read asked to keep.
+    pub(super) fn land_scan(&mut self) -> bool {
+        let Some(scan) = self.scan.take() else {
+            return false;
+        };
+        // `Latest` already drops a superseded answer; the path keeps a read of some other
+        // folder off this one all the same.
+        if scan.path != self.cwd {
+            return false;
+        }
+        self.entries = scan.entries;
+        self.error = scan.error;
         self.apply_rules();
         self.sort_entries();
         self.apply_filter();
-        match keep {
-            Some(id) if self.is_visible(&id) => self.focus_id(&id),
-            Some(_) => self.clear_selection(),
-            None => {}
+        // What a file operation made or renamed outranks what the read kept: those rows are
+        // what the user just asked for.
+        match self.pending_select.take() {
+            Some((ids, reveal)) => self.select_after_read(ids, reveal),
+            None => match scan.keep {
+                Some(id) if self.is_visible(&id) => self.focus_id(&id),
+                Some(_) => self.clear_selection(),
+                None => {}
+            },
+        }
+        true
+    }
+
+    /// Selects the rows `ids` the folder turned out to have, and leaves the list's scroll to
+    /// the next `poll` when the operation asked for it.
+    fn select_after_read(&mut self, ids: Vec<String>, reveal: bool) {
+        let visible: BTreeSet<String> = self
+            .visible
+            .iter()
+            .map(|&i| self.entries[i].id.clone())
+            .collect();
+        self.selection = ids
+            .into_iter()
+            .filter(|id| visible.contains(id))
+            .collect();
+        let Some(first) = self.selected_ids().first().cloned() else {
+            // The folder no longer holds the row the operation made: leave no cursor behind.
+            self.clear_selection();
+            return;
+        };
+        self.anchor = Some(first.clone());
+        self.focus_id(&first);
+        if reveal {
+            self.pending_reveal = Some(first);
         }
     }
 
-    fn read_dir(&mut self) {
-        let mut entries = Vec::new();
-        let mut error = None;
-        match fs::read_dir(&self.cwd) {
-            Ok(read) => {
-                for item in read.flatten() {
-                    if let Some(entry) = Entry::read(&item) {
-                        entries.push(entry);
-                    }
-                }
-            }
-            Err(err) => {
-                error = Some(format!("Couldn’t open {}: {err}", self.cwd.display()));
-            }
+    /// Waits out a read in flight and applies it, for tests that drive the state without a
+    /// window's frames to land it.
+    #[cfg(test)]
+    pub(crate) fn settle_scan(&mut self) {
+        while self.scan.is_pending() {
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        self.entries = entries;
-        self.error = error;
+        self.land_scan();
+        // No test drives the list's scroll from here.
+        self.pending_reveal = None;
     }
 
     /// Folders first, then the list's sort column and direction.

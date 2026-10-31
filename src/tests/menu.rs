@@ -34,6 +34,8 @@ fn right_clicking_a_row_opens_the_menu_and_rename_opens_a_focused_sheet() {
         mods: Mods::default(),
     });
     rt.frame(0.1);
+    // The renamed row is selected by the folder read that follows the rename.
+    rt.frame(0.1);
 
     assert!(rt.state.sheet.is_none());
     assert!(!dir.path().join("notes.md").exists());

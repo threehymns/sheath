@@ -4,6 +4,7 @@ use super::helpers::*;
 use crate::app::Preview;
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
+use std::fs;
 
 #[test]
 fn folders_sort_first_and_names_sort_naturally() {
@@ -95,6 +96,22 @@ fn refreshing_keeps_a_selection_of_several_rows() {
     rt.invalidate();
     rt.frame(0.1);
     assert_eq!(rt.state.selection_len(), 3, "a refresh keeps the selection");
+}
+
+#[test]
+fn a_reload_reads_the_folder_off_the_main_thread() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    fs::write(dir.path().join("late.txt"), "late").unwrap();
+
+    app.reload();
+    assert!(
+        !names(&app).contains(&"late.txt"),
+        "reload returns before the read does"
+    );
+
+    app.settle_scan();
+    assert!(names(&app).contains(&"late.txt"), "the read lands its rows");
 }
 
 #[test]

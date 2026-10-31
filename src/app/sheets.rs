@@ -149,13 +149,15 @@ impl App {
             .edit
     }
 
-    /// Applies the open sheet. A failure keeps the sheet open with its message.
-    pub fn submit_sheet(&mut self, tx: &mut Tx) {
+    /// Applies the open sheet. A failure keeps the sheet open with its message. The hooks
+    /// that submit it hand over a `Tx`, which the operations no longer need: the row a
+    /// rename or a move leaves is revealed by the folder read that follows it.
+    pub fn submit_sheet(&mut self, _tx: &mut Tx) {
         let Some(sheet) = self.sheet.take() else {
             return;
         };
         let result = match sheet.kind {
-            SheetKind::Rename => self.rename_entry(&sheet, tx),
+            SheetKind::Rename => self.rename_entry(&sheet),
             SheetKind::Move => self.move_entries(&sheet),
             SheetKind::Trash => self.trash_entries(&sheet),
         };
@@ -185,7 +187,7 @@ impl App {
         Ok(items)
     }
 
-    fn rename_entry(&mut self, sheet: &Sheet, tx: &mut Tx) -> Result<(), String> {
+    fn rename_entry(&mut self, sheet: &Sheet) -> Result<(), String> {
         let Some(id) = sheet.targets.first() else {
             return Err("That item is no longer in this folder.".into());
         };
@@ -213,12 +215,9 @@ impl App {
         }
         fs::rename(&old_path, &new_path)
             .map_err(|err| format!("Couldn’t rename “{old_name}”: {err}"))?;
+        // The renamed row is selected and revealed by the read that finds it.
+        self.pending_select = Some((vec![format!("f:{new_name}")], true));
         self.reload();
-        let id = format!("f:{new_name}");
-        if self.is_visible(&id) {
-            self.select_id(&id);
-            tx.scroll_into_view_in("files-table", id);
-        }
         self.error = None;
         Ok(())
     }

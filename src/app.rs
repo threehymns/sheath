@@ -38,7 +38,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use rune::{PointerPress, ScrollPos, TextEdit, Tx, Waker};
+use rune::{Latest, PointerPress, ScrollPos, TextEdit, Tx, Waker};
 use rune_kit::{PaneState, SortDir};
 
 use crate::config::{self, Store};
@@ -49,6 +49,7 @@ use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
 use crate::views::Views;
 
+use browse::Scan;
 use paths::start_location;
 use scroll::Scroll;
 
@@ -145,6 +146,13 @@ pub struct App {
     /// The Size and Date columns' widths, which header dragging changes.
     pub size_width: f32,
     pub date_width: f32,
+    /// The folder read in flight, whose answer the next `poll` applies.
+    scan: Latest<Scan>,
+    /// The rows a file operation made or renamed, to select once the read that follows lands,
+    /// and whether the list should scroll to the first of them.
+    pending_select: Option<(Vec<String>, bool)>,
+    /// The row the next `poll` scrolls into view, once the read holding it has landed.
+    pending_reveal: Option<String>,
 }
 
 impl App {
@@ -153,8 +161,9 @@ impl App {
         let (dir, selected) = start_location();
         let mut app = App::open(dir);
         if let Some(name) = selected {
-            let id = format!("f:{name}");
-            app.select_id(&id);
+            // The folder's rows land off the main thread, so the row named on the command
+            // line is selected by the read that finds it.
+            app.pending_select = Some((vec![format!("f:{name}")], false));
         }
         app
     }
@@ -241,6 +250,9 @@ impl App {
             places_at: BTreeMap::new(),
             size_width: 92.0,
             date_width: 158.0,
+            scan: Latest::default(),
+            pending_select: None,
+            pending_reveal: None,
         }
     }
 
@@ -393,5 +405,7 @@ impl App {
 /// `AppSpec::setup`: hands the config folder's watcher the waker the event loop gave the app,
 /// so a change made in a text editor reaches the open window.
 pub fn setup(s: &mut App, wake: Waker) {
+    // A folder read that lands wakes the window so `poll` applies it.
+    s.scan.set_waker(wake.clone());
     s.store.watch(wake);
 }

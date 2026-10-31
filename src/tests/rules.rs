@@ -494,6 +494,7 @@ fn pinning_an_entry_writes_an_entry_rule_that_applies() {
     app.select_id("f:.secret");
     app.pin_entry(false);
     app.reload();
+    app.settle_scan();
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(text.contains("entry-rule {"), "the rule is unnamed: {text}");

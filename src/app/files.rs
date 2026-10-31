@@ -3,7 +3,6 @@
 
 use crate::app::App;
 use rune::Tx;
-use std::collections::BTreeSet;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -45,8 +44,9 @@ fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 impl App {
-    /// Creates `New Folder`, or the next free numbered name, and selects it.
-    pub fn new_folder(&mut self, tx: &mut Tx) {
+    /// Creates `New Folder`, or the next free numbered name, and selects it once the read
+    /// that follows finds it.
+    pub fn new_folder(&mut self, _tx: &mut Tx) {
         let mut name = "New Folder".to_owned();
         let mut n = 2;
         while self.cwd.join(&name).exists() {
@@ -56,10 +56,9 @@ impl App {
         let path = self.cwd.join(&name);
         match fs::create_dir(&path) {
             Ok(()) => {
+                // The new row exists once the read lands; select and reveal it there.
+                self.pending_select = Some((vec![format!("f:{name}")], true));
                 self.reload();
-                let id = format!("f:{name}");
-                self.select_id(&id);
-                tx.scroll_into_view_in("files-table", id);
                 self.error = None;
             }
             Err(err) => self.error = Some(format!("Couldn’t create “{name}”: {err}")),
@@ -163,25 +162,16 @@ impl App {
         self.finish_paste(made, error);
     }
 
-    /// Reloads after a paste and selects what it made.
+    /// Reloads after a paste and selects what it made, once the read that follows finds it.
     fn finish_paste(&mut self, made: Vec<String>, error: Option<String>) {
-        self.reload();
-        self.error = error.clone();
+        self.error = error;
+        // A paste that made nothing (a refused cut) leaves the selection where it was.
         if !made.is_empty() {
-            let visible: BTreeSet<String> = self
-                .visible
-                .iter()
-                .map(|&i| self.entries[i].id.clone())
-                .collect();
-            self.selection = made
-                .iter()
-                .map(|name| format!("f:{name}"))
-                .filter(|id| visible.contains(id))
-                .collect();
-            if let Some(first) = self.selected_ids().first().cloned() {
-                self.anchor = Some(first.clone());
-                self.focus_id(&first);
-            }
+            self.pending_select = Some((
+                made.iter().map(|name| format!("f:{name}")).collect(),
+                false,
+            ));
         }
+        self.reload();
     }
 }
