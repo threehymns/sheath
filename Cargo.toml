@@ -10,7 +10,15 @@ hot = ["rune/hot"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+image = { version = "0.25", default-features = false, features = [
+    "png",
+    "jpeg",
+    "gif",
+    "webp",
+    "bmp",
+    "tiff",
+    "ico",
+] }
 jpeg-decoder = { version = "0.3", default-features = false }
 kdl = { version = "6.7.1", default-features = false }
 notify = "8"

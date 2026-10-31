@@ -3,9 +3,10 @@
 //! Rune's `ImageCache::file` decodes a raster at full resolution and builds a mip chain from
 //! that, even when the caller asks for a small preview (the size only applies to SVG). A 12 MP
 //! photo therefore costs ~0.4 s: ~120 ms decoding and ~280 ms in the mip chain. Here the decode
-//! itself is limited to the preview size (JPEG by DCT scaling, PNG by shrinking after inflate)
-//! and the result is handed to Rune as RGBA, where its mip chain only covers the small image.
-//! Pictures that already fit in the pane skip all of that and are handed to Rune as they are.
+//! itself is limited to the preview size (JPEG by DCT scaling, PNG and the other rasters by
+//! shrinking after decode) and the result is handed to Rune as RGBA, where its mip chain only
+//! covers the small image. PNGs and JPEGs that already fit in the pane skip all of that and are
+//! handed to Rune as they are; the other rasters are decoded here, since Rune cannot read them.
 //!
 //! Decodes run through `Latest`, like folder scans: a newer selection supersedes a queued one
 //! and a short debounce keeps a held arrow key from decoding every row on the way past. The
@@ -205,11 +206,26 @@ fn decode(key: &Key) -> Decoded {
     };
     match image::guess_format(&bytes) {
         Ok(ImageFormat::Jpeg) => jpeg(&bytes, key),
-        Ok(ImageFormat::Png) => png(&bytes, key),
+        // Rune decodes PNG itself, so a small one is still handed over; the formats below it
+        // cannot read, so those are decoded here whatever their size.
+        Ok(ImageFormat::Png) => raster(&bytes, key, true),
+        Ok(format) if extra_raster(format) => raster(&bytes, key, false),
         // SVG (sniffed by Rune) and anything else Rune's cache either decodes or reports in
         // the inspector as before.
         _ => Decoded::ViaRune(key.path.clone()),
     }
+}
+
+/// The common rasters this app decodes for itself because Rune's cache cannot read them.
+fn extra_raster(format: ImageFormat) -> bool {
+    matches!(
+        format,
+        ImageFormat::Bmp
+            | ImageFormat::Gif
+            | ImageFormat::WebP
+            | ImageFormat::Tiff
+            | ImageFormat::Ico
+    )
 }
 
 /// Decode a JPEG with the smallest DCT scale that still covers the preview, so a large photo
@@ -266,10 +282,12 @@ fn scaled_jpeg(bytes: &[u8], max: u32) -> Result<Option<(u32, u32, Vec<u8>)>, St
     finish(width, height, pixels, orientation, max).map(Some)
 }
 
-/// PNG has no scaled decode: inflate, then shrink before Rune builds its mips. A picture too
-/// small to gain from the resize goes to Rune untouched.
-fn png(bytes: &[u8], key: &Key) -> Decoded {
-    match scaled_png(bytes, key.pixels) {
+/// PNG, and the other rasters, have no scaled decode: inflate, then shrink before Rune builds
+/// its mips. A PNG too small to gain from the resize goes to Rune untouched. An animated GIF or
+/// WebP previews as its first frame, a TIFF as its first page, and an ICO as the size its
+/// encoder picked.
+fn raster(bytes: &[u8], key: &Key, hand_off_small: bool) -> Decoded {
+    match scaled_raster(bytes, key.pixels, hand_off_small) {
         Ok(Some((width, height, pixels))) => Decoded::Rgba {
             width,
             height,
@@ -280,7 +298,11 @@ fn png(bytes: &[u8], key: &Key) -> Decoded {
     }
 }
 
-fn scaled_png(bytes: &[u8], max: u32) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
+fn scaled_raster(
+    bytes: &[u8],
+    max: u32,
+    hand_off_small: bool,
+) -> Result<Option<(u32, u32, Vec<u8>)>, String> {
     let mut reader = ImageReader::new(Cursor::new(bytes))
         .with_guessed_format()
         .map_err(|err| err.to_string())?;
@@ -292,7 +314,7 @@ fn scaled_png(bytes: &[u8], max: u32) -> Result<Option<(u32, u32, Vec<u8>)>, Str
     let mut decoder = reader.into_decoder().map_err(|err| err.to_string())?;
     let (width, height) = decoder.dimensions();
     // Under twice the preview a resize saves little; Rune's own path is at least as fast.
-    if width.max(height) < max.saturating_mul(2) {
+    if hand_off_small && width.max(height) < max.saturating_mul(2) {
         return Ok(None);
     }
     let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);

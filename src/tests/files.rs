@@ -408,6 +408,85 @@ fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     );
 }
 
+#[test]
+fn the_other_common_picture_formats_decode_in_the_preview() {
+    use image::codecs::bmp::BmpEncoder;
+    use image::codecs::gif::GifEncoder;
+    use image::codecs::ico::IcoEncoder;
+    use image::codecs::tiff::TiffEncoder;
+    use image::codecs::webp::WebPEncoder;
+    use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage};
+
+    let dir = fixture();
+    let file = |name: &str| std::fs::File::create(dir.path().join(name)).unwrap();
+    let small = RgbaImage::from_pixel(64, 48, Rgba([200, 60, 30, 255]));
+    let (w, h, raw) = (small.width(), small.height(), small.as_raw());
+    let mut bmp = file("picture.bmp");
+    BmpEncoder::new(&mut bmp)
+        .encode(raw, w, h, ExtendedColorType::Rgba8)
+        .unwrap();
+    GifEncoder::new(file("picture.gif"))
+        .encode(raw, w, h, ExtendedColorType::Rgba8)
+        .unwrap();
+    WebPEncoder::new_lossless(file("picture.webp"))
+        .encode(raw, w, h, ExtendedColorType::Rgba8)
+        .unwrap();
+    TiffEncoder::new(file("picture.tiff"))
+        .write_image(raw, w, h, ExtendedColorType::Rgba8)
+        .unwrap();
+    let mut ico = file("picture.ico");
+    IcoEncoder::new(&mut ico)
+        .write_image(raw, w, h, ExtendedColorType::Rgba8)
+        .unwrap();
+    // A picture far bigger than the pane: the preview must shrink it rather than hand the whole
+    // thing to Rune's mip chain.
+    let large = RgbaImage::from_pixel(2000, 1000, Rgba([30, 160, 200, 255]));
+    let mut large_bmp = file("large.bmp");
+    BmpEncoder::new(&mut large_bmp)
+        .encode(large.as_raw(), 2000, 1000, ExtendedColorType::Rgba8)
+        .unwrap();
+
+    let mut app = app(&dir);
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(|| {})));
+    for name in [
+        "picture.bmp",
+        "picture.gif",
+        "picture.webp",
+        "picture.tiff",
+        "picture.ico",
+    ] {
+        app.select_id(&format!("f:{name}"));
+        assert!(
+            matches!(app.preview, Some(crate::app::Preview::Image)),
+            "{name} previews as a picture"
+        );
+        app.settle_preview();
+        assert!(
+            app.preview_error.is_none(),
+            "{name}: {:?}",
+            app.preview_error
+        );
+        let image = app
+            .preview_image
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name} decoded"));
+        assert_eq!(image.size(), Some([w, h]), "{name} keeps its size");
+    }
+
+    app.select_id("f:large.bmp");
+    app.settle_preview();
+    assert!(app.preview_error.is_none(), "{:?}", app.preview_error);
+    let image = app
+        .preview_image
+        .as_ref()
+        .expect("the large picture decoded");
+    let [width, height] = image.size().expect("the large picture has a size");
+    assert!(
+        width <= 840 && height <= 840,
+        "a big picture is decoded at the preview size, not {width}×{height}"
+    );
+}
+
 #[cfg(unix)]
 #[test]
 fn making_an_alias_points_a_new_name_at_the_row() {

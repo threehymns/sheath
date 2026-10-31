@@ -83,7 +83,18 @@ fn is_image(path: &Path) -> bool {
         .unwrap_or_default();
     matches!(
         extension.as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "svgz" | "avif" | "ico"
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "bmp"
+            | "tif"
+            | "tiff"
+            | "svg"
+            | "svgz"
+            | "avif"
+            | "ico"
     )
 }
 
