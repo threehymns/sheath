@@ -161,6 +161,33 @@ impl App {
         }
     }
 
+    pub fn deselect_all(&mut self) {
+        self.clear_selection();
+    }
+
+    pub fn invert_selection(&mut self) {
+        let visible: Vec<String> = self
+            .visible
+            .iter()
+            .map(|&i| self.entries[i].id.clone())
+            .collect();
+        self.selection = visible
+            .into_iter()
+            .filter(|id| !self.selection.contains(id))
+            .collect();
+        let keep = self
+            .selected
+            .clone()
+            .filter(|id| self.selection.contains(id));
+        match keep.or_else(|| self.selection.iter().next().cloned()) {
+            Some(id) => {
+                self.anchor = Some(id.clone());
+                self.focus_id(&id);
+            }
+            None => self.clear_selection(),
+        }
+    }
+
     pub fn selected_index(&self) -> Option<usize> {
         let id = self.selected.as_deref()?;
         self.visible.iter().position(|&i| self.entries[i].id == id)

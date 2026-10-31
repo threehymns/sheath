@@ -108,6 +108,24 @@ pub static LIST: Icon = Icon {
     body: r#"<path d="M5.5 4h8M5.5 8h8M5.5 12h8" stroke="currentColor" stroke-linecap="round"/><circle cx="2.75" cy="4" r=".75" fill="currentColor"/><circle cx="2.75" cy="8" r=".75" fill="currentColor"/><circle cx="2.75" cy="12" r=".75" fill="currentColor"/>"#,
 };
 
+pub static CHECK_SQUARE: Icon = Icon {
+    name: "sheath-check-square",
+    view: 16.0,
+    body: r#"<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" stroke="currentColor"/><path d="M5.5 8.25 7.25 10l3.25-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub static SQUARE: Icon = Icon {
+    name: "sheath-square",
+    view: 16.0,
+    body: r#"<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" stroke="currentColor"/>"#,
+};
+
+pub static HALF_SQUARE: Icon = Icon {
+    name: "sheath-half-square",
+    view: 16.0,
+    body: r#"<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" stroke="currentColor"/><path d="M8 3h3.25a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8V3Z" fill="currentColor"/>"#,
+};
+
 pub static FOLDER_PLUS: Icon = Icon {
     name: "sheath-folder-plus",
     view: 16.0,

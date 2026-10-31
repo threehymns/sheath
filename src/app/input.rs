@@ -47,6 +47,9 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         Action::Cut,
         Action::Paste,
         Action::Duplicate,
+        Action::SelectAll,
+        Action::DeselectAll,
+        Action::InvertSelection,
     ];
     for action in Action::ALL {
         if typing && guarded.contains(&action) {
@@ -97,10 +100,6 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
 
 pub fn list_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     let mods = event.mods;
-    if event.is_command('a') && !mods.alt {
-        s.select_all();
-        return true;
-    }
     if matches!(event.key, Key::Escape) {
         if s.selection_len() > 1 {
             s.collapse_selection();

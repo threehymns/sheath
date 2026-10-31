@@ -26,6 +26,9 @@ pub enum Action {
     Cut,
     Paste,
     Duplicate,
+    SelectAll,
+    DeselectAll,
+    InvertSelection,
     ViewFolderRules,
     ViewEntryRules,
     SaveLayoutRule,
@@ -35,7 +38,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 25] = [
+    pub const ALL: [Action; 28] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -52,6 +55,9 @@ impl Action {
         Action::Cut,
         Action::Paste,
         Action::Duplicate,
+        Action::SelectAll,
+        Action::DeselectAll,
+        Action::InvertSelection,
         Action::GoToFolder,
         Action::NewFile,
         Action::CopyPath,
@@ -88,6 +94,9 @@ impl Action {
             Action::Cut => "cut",
             Action::Paste => "paste",
             Action::Duplicate => "duplicate",
+            Action::SelectAll => "select-all",
+            Action::DeselectAll => "deselect-all",
+            Action::InvertSelection => "invert-selection",
             Action::ViewFolderRules => "view-folder-rules",
             Action::ViewEntryRules => "view-entry-rules",
             Action::SaveLayoutRule => "save-layout-rule",
@@ -118,6 +127,9 @@ impl Action {
             Action::Cut => "Cut",
             Action::Paste => "Paste",
             Action::Duplicate => "Duplicate",
+            Action::SelectAll => "Select All",
+            Action::DeselectAll => "Deselect All",
+            Action::InvertSelection => "Invert Selection",
             Action::ViewFolderRules => "View Rules for This Folder",
             Action::ViewEntryRules => "View Rules for This Entry",
             Action::SaveLayoutRule => "Save This Layout as a Rule",
@@ -138,7 +150,8 @@ impl Action {
             | Action::SaveLayoutRule
             | Action::ShowEntry
             | Action::HideEntry
-            | Action::PickRule => None,
+            | Action::PickRule
+            | Action::InvertSelection => None,
             _ => Some(self.builtin_chord()),
         }
     }
@@ -166,6 +179,8 @@ impl Action {
                 Action::Cut => "super+x",
                 Action::Paste => "super+v",
                 Action::Duplicate => "super+d",
+                Action::SelectAll => "super+a",
+                Action::DeselectAll => "shift+super+a",
                 _ => "",
             }
         }
@@ -191,6 +206,8 @@ impl Action {
                 Action::Cut => "ctrl+x",
                 Action::Paste => "ctrl+v",
                 Action::Duplicate => "ctrl+d",
+                Action::SelectAll => "ctrl+a",
+                Action::DeselectAll => "shift+ctrl+a",
                 _ => "",
             }
         }

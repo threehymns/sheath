@@ -1,4 +1,5 @@
 use super::helpers::*;
+use crate::keybinds::Action;
 use rune::{Key, KeyEvent, Mods};
 
 #[test]
@@ -18,6 +19,24 @@ fn clicking_selects_a_row_and_double_clicking_enters_the_folder() {
     rt.pointer_up(x, y);
     rt.frame(0.1);
     assert_eq!(rt.state.cwd, dir.path().join("alpha"));
+}
+
+#[test]
+fn invert_selection_swaps_which_rows_are_selected() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:notes.md");
+    let total = app.visible.len();
+
+    app.invert_selection();
+    assert_eq!(app.selection_len(), total - 1);
+    assert!(!app.is_selected("f:notes.md"));
+    assert!(app.is_selected("f:alpha"));
+    assert!(app.selected.is_some(), "the inspector still has a row");
+
+    app.deselect_all();
+    assert_eq!(app.selection_len(), 0);
+    assert!(app.selected.is_none());
 }
 
 #[test]
@@ -175,10 +194,8 @@ fn command_a_selects_every_row() {
     rt.frame(0.0);
 
     click(&mut rt, "f:file2.txt");
-    rt.key(KeyEvent {
-        key: Key::Command('a'),
-        mods: Mods::default(),
-    });
+    let select_all = event_for(&rt.state, Action::SelectAll, Key::Command('a'));
+    rt.key(select_all);
     rt.frame(0.1);
     assert_eq!(rt.state.selection_len(), 4);
     assert_eq!(rt.state.phrase_for_count(), "4 of 4 selected · 31 B");

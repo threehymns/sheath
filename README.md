@@ -49,6 +49,7 @@ unsupported by this backend.
 | Action | Control |
 | --- | --- |
 | Select rows | Click; Shift+click or Shift+arrow for a range; Cmd/Ctrl+click to toggle |
+| Select all, none or the rest | Cmd/Ctrl+A, Shift+Cmd/Ctrl+A, or the command bar |
 | Select with a box | Drag in the empty space below the rows; Shift adds, Cmd/Ctrl toggles |
 | Open a folder or file | Double-click, or Return |
 | Jump to a name | Type its first letters; repeat a letter to cycle matches |
@@ -168,7 +169,8 @@ command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forwa
 `enclosing-folder`, `go-to-folder`,
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
 `copy-path`, `cut`, `paste`,
-`duplicate`, `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
+`duplicate`, `select-all`, `deselect-all`, `invert-selection`, `view-folder-rules`,
+`view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.
 `keybinds.kdl` is watched, so a new chord works without a restart.

@@ -176,6 +176,9 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         Action::Cut => &icons::SCISSORS,
         Action::Paste => &icons::CLIPBOARD,
         Action::Duplicate => &theme::icons::OUTLINE_COPY,
+        Action::SelectAll => &icons::CHECK_SQUARE,
+        Action::DeselectAll => &icons::SQUARE,
+        Action::InvertSelection => &icons::HALF_SQUARE,
         Action::ViewFolderRules
         | Action::ViewEntryRules
         | Action::SaveLayoutRule

@@ -208,7 +208,9 @@ impl App {
             Action::Move | Action::Trash | Action::Copy | Action::Cut | Action::Duplicate => {
                 self.selection_len() > 0
             }
-            Action::Paste => self.clipboard.is_some() && self.selection_len() > 0,
+            Action::Paste => self.clipboard.is_some(),
+            Action::SelectAll => !self.visible.is_empty(),
+            Action::DeselectAll | Action::InvertSelection => self.selection_len() > 0,
             Action::ShowEntry | Action::HideEntry | Action::ViewEntryRules => {
                 self.selected.is_some()
             }
@@ -244,6 +246,9 @@ impl App {
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
+            Action::SelectAll => self.select_all(),
+            Action::DeselectAll => self.deselect_all(),
+            Action::InvertSelection => self.invert_selection(),
             Action::ViewFolderRules => self.show_folder_rules(),
             Action::ViewEntryRules => self.show_entry_rules(),
             Action::SaveLayoutRule => self.save_layout_rule(),
