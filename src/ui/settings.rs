@@ -219,7 +219,10 @@ fn tab_icon(tab: SettingsTab) -> &'static Icon {
 }
 
 fn general_settings(s: &App, k: &Kit) -> El {
-    let hidden = Switch::new(s.show_hidden)
+    // These switches edit the fallbacks, so they read the settings the file holds, not what the
+    // open folder resolved to: a rule or a remembered visit may decide this folder, and the
+    // fallback those leave alone must still be visible and settable here.
+    let hidden = Switch::new(s.config.show_hidden)
         .label("Show hidden files")
         .hide_label()
         .on_toggle(|s: &mut App| s.toggle_hidden_setting())
@@ -231,7 +234,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_inspector())
         .build(k)
         .key("setting-inspector");
-    let grid = Switch::new(s.is_grid())
+    let grid = Switch::new(s.config.grid)
         .label("Grid layout")
         .hide_label()
         .on_toggle(|s: &mut App| s.toggle_grid_setting())
