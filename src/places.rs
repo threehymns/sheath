@@ -236,6 +236,31 @@ impl Places {
         false
     }
 
+    /// Moves the place naming `old` to `new`, after the folder or file itself was renamed. A
+    /// place the user added takes the new path into its id; a built-in keeps its id and stores
+    /// the path as an override. A name that was the folder's own follows the new one; a name
+    /// the user chose stays. True when a place moved.
+    pub fn move_path(&mut self, old: &Path, new: &Path) -> bool {
+        let derived = label_for(old);
+        let mut moved = false;
+        for section in Section::ALL {
+            for place in section.list_mut(self) {
+                if place.path != old {
+                    continue;
+                }
+                moved = true;
+                if place.name == derived {
+                    place.name = label_for(new);
+                }
+                place.path = new.to_path_buf();
+                if let Some((kind @ ("folder" | "file"), _)) = place.id.split_once(':') {
+                    place.id = format!("{kind}:{}", new.display());
+                }
+            }
+        }
+        moved
+    }
+
     /// Inserts `paths` at `index` among the section's rows on screen, the way a drop between
     /// two places does. Nothing moves on disk; a path that is already shown in either section
     /// is left alone, and one that was removed comes back as the same row. True when something

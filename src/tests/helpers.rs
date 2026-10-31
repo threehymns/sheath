@@ -230,3 +230,20 @@ pub(super) fn drag_row(rt: &mut Runtime<App>, from: &str, to: &str) {
     rt.pointer_up(x1, y1);
     rt.frame(0.1);
 }
+
+/// A places file naming two folders under `dir`, in that order, plus whatever else the caller
+/// wants at the top. The paths are quoted the way KDL writes strings.
+pub(super) fn write_places(path: &std::path::Path, rows: &[(String, String)], extra: &str) {
+    let mut text = String::from(extra);
+    text.push_str("favourites {\n");
+    for (id, folder) in rows {
+        text.push_str(&format!(
+            "    place {} name={} path={}\n",
+            crate::rules::quote(id),
+            crate::rules::quote(folder.rsplit('/').next().unwrap_or(folder)),
+            crate::rules::quote(folder),
+        ));
+    }
+    text.push_str("}\n");
+    fs::write(path, text).unwrap();
+}

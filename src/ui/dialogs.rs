@@ -23,6 +23,17 @@ pub(super) fn sheet_layer(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>)
             "Name",
             "Press Return to rename. Escape cancels.",
         ),
+        SheetKind::RenamePlace => prompt_sheet(
+            sheet,
+            k,
+            layers,
+            "rename-place",
+            "Rename",
+            "Choose a new name for this folder or file itself.",
+            "Rename",
+            "Name",
+            "Renames it on disk; the sidebar follows. Press Return to rename. Escape cancels.",
+        ),
         SheetKind::Move => prompt_sheet(
             sheet,
             k,
@@ -166,8 +177,8 @@ fn trash_sheet(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>) {
         .build(k, layers);
 }
 
-/// The sidebar place menu a right-click opens: open the place, show it in its folder, or take
-/// it out of the sidebar.
+/// The sidebar place menu a right-click opens: open the place, show it in its folder, edit the
+/// name the sidebar shows, rename the item on disk, or take it out of the sidebar.
 pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(menu) = &s.place_menu else {
         return;
@@ -201,6 +212,13 @@ pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
             MenuItem::new("Edit Name…")
                 .icon(&theme::icons::EDIT)
                 .on_select(|s: &mut App| s.begin_menu_place_rename()),
+        )
+        .item(
+            // The folder or file itself: this one moves the place to the new path.
+            MenuItem::new("Rename on Disk…")
+                .icon(&glyphs::FOLDER)
+                .disabled(place.path.file_name().is_none())
+                .on_select(|s: &mut App| s.begin_menu_place_rename_on_disk()),
         )
         .item(
             MenuItem::new("Remove from Sidebar")

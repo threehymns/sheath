@@ -9,6 +9,7 @@ mod helpers;
 mod marquee;
 mod menu;
 mod notice;
+mod place_menu;
 mod ruled_settings;
 mod rules;
 mod rules_actions;

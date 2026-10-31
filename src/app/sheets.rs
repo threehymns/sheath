@@ -12,6 +12,8 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SheetKind {
     Rename,
+    /// A sidebar place's folder or file, renamed on disk rather than in the sidebar.
+    RenamePlace,
     Move,
     Trash,
 }
@@ -36,7 +38,7 @@ impl Sheet {
     }
 }
 
-fn validate_name(name: &str) -> Result<(), String> {
+pub(super) fn validate_name(name: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err("Enter a name.".into());
     }
@@ -158,6 +160,7 @@ impl App {
         };
         let result = match sheet.kind {
             SheetKind::Rename => self.rename_entry(&sheet),
+            SheetKind::RenamePlace => self.rename_place_on_disk(&sheet),
             SheetKind::Move => self.move_entries(&sheet),
             SheetKind::Trash => self.trash_entries(&sheet),
         };
