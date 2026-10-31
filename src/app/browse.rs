@@ -15,6 +15,9 @@ use super::*;
 impl App {
     /// Shows `path` without touching history.
     pub(super) fn enter(&mut self, path: PathBuf) {
+        // The watcher follows the window to the new folder, so what it reports is always the
+        // folder on screen.
+        self.watch.retarget(&path);
         self.cwd = path;
         self.visit = Default::default();
         self.scroll.stop();

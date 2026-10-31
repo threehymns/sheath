@@ -21,6 +21,7 @@ mod scroll;
 mod scrolling;
 mod selection;
 mod sheets;
+mod watch;
 
 pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, Marquee, list_drag};
@@ -55,6 +56,7 @@ use paths::start_location;
 pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
 use scroll::Scroll;
+use watch::Watch;
 
 /// A row's height in the file list, in points. The pointer maths and the view share it.
 pub const ROW_HEIGHT: f32 = 30.0;
@@ -154,6 +156,8 @@ pub struct App {
     pub date_width: f32,
     /// The folder read in flight, whose answer the next `poll` applies.
     scan: Latest<Scan>,
+    /// The open folder's watcher, which reloads the rows when something else changes it.
+    watch: Watch,
     /// The rows a file operation made or renamed, to select once the read that follows lands,
     /// and whether the list should scroll to the first of them.
     pending_select: Option<(Vec<String>, bool)>,
@@ -258,6 +262,7 @@ impl App {
             size_width: 92.0,
             date_width: 158.0,
             scan: Latest::default(),
+            watch: Watch::default(),
             pending_select: None,
             pending_reveal: None,
         }
@@ -407,6 +412,11 @@ impl App {
             .store
             .edit(config::CONFIG, |doc| self.config.write(doc, changed));
     }
+
+    /// Starts watching the open folder, so something else changing it reloads the rows.
+    pub fn watch(&mut self, wake: Waker) {
+        self.watch.start(&self.cwd, wake);
+    }
 }
 
 /// `AppSpec::setup`: hands the config folder's watcher the waker the event loop gave the app,
@@ -414,5 +424,7 @@ impl App {
 pub fn setup(s: &mut App, wake: Waker) {
     // A folder read that lands wakes the window so `poll` applies it.
     s.scan.set_waker(wake.clone());
-    s.store.watch(wake);
+    s.store.watch(wake.clone());
+    // A change to the open folder from outside reloads it, without the window being touched.
+    s.watch(wake);
 }

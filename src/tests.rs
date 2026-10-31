@@ -21,3 +21,4 @@ mod selection;
 mod settings;
 mod sheets;
 mod shortcuts;
+mod watch;

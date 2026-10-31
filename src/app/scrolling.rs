@@ -80,6 +80,12 @@ impl App {
             self.apply_config();
             redraw = true;
         }
+        // Something outside the app changed the open folder: read it again, keeping the
+        // selected rows that are still there.
+        if self.watch.poll() {
+            self.reload();
+            redraw = true;
+        }
         // A toast is up: keep frames coming, so it leaves on time rather than at the next event.
         if !self.notices.is_empty() {
             self.notices.retain(|notice| !notice.expired());
