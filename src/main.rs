@@ -9,6 +9,7 @@ mod notice;
 mod places;
 mod recorder;
 mod rules;
+mod session;
 mod settings;
 mod ui;
 mod views;

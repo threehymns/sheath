@@ -296,3 +296,21 @@ fn sorting_by_kind_groups_the_same_kinds_together() {
         "and the rest read backwards"
     );
 }
+
+#[test]
+fn opening_a_folder_remembers_it_for_the_next_launch() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("session.kdl");
+    let mut app = app(&dir);
+    app.session = crate::session::Session::at(file.clone());
+
+    app.navigate(dir.path().join("alpha"));
+
+    let remembered = crate::session::Session::at(file);
+    assert_eq!(
+        remembered.folder(),
+        Some(dir.path().join("alpha").as_path()),
+        "the folder on screen is the one the next launch opens"
+    );
+}

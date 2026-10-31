@@ -12,6 +12,7 @@ use super::*;
 impl App {
     pub(super) fn enter(&mut self, path: PathBuf) {
         self.watch.retarget(&path);
+        self.session.remember(&path);
         self.cwd = path;
         self.visit = Default::default();
         self.stop_scrolling();

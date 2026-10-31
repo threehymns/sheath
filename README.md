@@ -11,7 +11,7 @@ Requires a recent stable Rust toolchain (edition 2024, built with 1.98) and a GP
 (Metal, Vulkan or DX12).
 
 ```sh
-cargo run                 # start in your home folder
+cargo run                 # start where you left off, or in your home folder the first time
 cargo run -- ~/Downloads  # start somewhere else
 cargo run -- README.md    # start beside a file, with it selected
 ```
@@ -191,6 +191,10 @@ config folder:
 
 `views.kdl` is machine-owned and safe to delete: it forgets the remembered folders and nothing
 else, and a damaged file is ignored.
+
+Beside it, `session.kdl` holds the folder the window was last in, so a launch that names no path
+reopens there; a folder or file on the command line still wins. It is machine-owned and safe to
+delete too.
 
 The sidebar's places are kept in `places.kdl` beside it. The file is written when a place is
 dragged, and its order is the order the sidebar shows:

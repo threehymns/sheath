@@ -34,7 +34,7 @@ pub use scrolling::{FILES, poll};
 pub use sheets::{Sheet, SheetKind};
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rune::{Latest, PointerPress, TextEdit, Tx, Waker};
@@ -47,10 +47,11 @@ use crate::notice::Notice;
 use crate::places::{Places, Section};
 use crate::recorder::Recorder;
 use crate::rules::{Resolved, Rules, SortKey};
+use crate::session::Session;
 use crate::settings::Settings;
 use crate::views::Views;
 
-use paths::start_location;
+use paths::{default_location, start_location};
 #[cfg(test)]
 pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
@@ -114,6 +115,7 @@ pub struct App {
     pub place_dragged: bool,
     pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
+    pub session: Session,
     pub recorders: BTreeMap<Action, Recorder>,
     pub store: Store,
     pub rows_view: [f32; 4],
@@ -132,19 +134,35 @@ pub struct App {
 
 impl App {
     pub fn new() -> App {
-        let (dir, selected) = start_location();
-        let mut app = App::open(dir);
-        if let Some(name) = selected {
+        let session = Session::load();
+        let location = start_location();
+        let mut app = match &location {
+            Some((dir, _)) => App::open_in(dir.clone(), session),
+            None => {
+                // Without a folder on the command line, the window reopens where it was left.
+                let remembered = session
+                    .folder()
+                    .filter(|path| path.is_dir())
+                    .map(Path::to_path_buf);
+                App::open_in(remembered.unwrap_or_else(default_location), session)
+            }
+        };
+        if let Some((_, Some(name))) = location {
             app.pending_select = Some((vec![format!("f:{name}")], false));
         }
         app
     }
 
     pub fn open(path: PathBuf) -> App {
+        App::open_in(path, Session::load())
+    }
+
+    fn open_in(path: PathBuf, session: Session) -> App {
         let store = Store::open();
         let config = Settings::from_doc(store.doc(config::CONFIG));
         let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
         let mut app = App::blank(config, store, keybinds);
+        app.session = session;
         app.views = Views::load();
         app.places = Places::load();
         app.reload_rules();
@@ -221,6 +239,7 @@ impl App {
             place_dragged: false,
             notices: Vec::new(),
             keybinds,
+            session: Session::default(),
             recorders,
             store,
             rows_view: [0.0; 4],

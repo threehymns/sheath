@@ -1,28 +1,31 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub(super) fn start_location() -> (PathBuf, Option<String>) {
-    if let Some(arg) = rune::extra_args().iter().find(|a| !a.starts_with('-')) {
-        let path = absolute(PathBuf::from(arg));
-        if path.is_file() {
-            let parent = path
-                .parent()
-                .map(Path::to_path_buf)
-                .unwrap_or_else(root_dir);
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            return (parent, Some(name));
-        }
-        if path.is_dir() {
-            return (path, None);
-        }
+// The folder and file named on the command line, or nothing when it names no place to open.
+pub(super) fn start_location() -> Option<(PathBuf, Option<String>)> {
+    let arg = rune::extra_args()
+        .into_iter()
+        .find(|a| !a.starts_with('-'))?;
+    let path = absolute(PathBuf::from(arg));
+    if path.is_file() {
+        let parent = path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(root_dir);
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        return Some((parent, Some(name)));
     }
-    (
-        home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| root_dir())),
-        None,
-    )
+    if path.is_dir() {
+        return Some((path, None));
+    }
+    None
+}
+
+pub(super) fn default_location() -> PathBuf {
+    home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| root_dir()))
 }
 
 fn absolute(path: PathBuf) -> PathBuf {
