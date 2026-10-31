@@ -316,19 +316,31 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
             ));
         }
         Some(Preview::Image) => {
-            let picture = s.preview_image.as_ref().map(|image| {
-                let ratio = image
-                    .size()
-                    .map(|[width, height]| width as f32 / height.max(1) as f32)
-                    .unwrap_or(1.0);
-                el().key("preview-image")
-                    .w_full()
-                    .max_h(200.0)
-                    .aspect_fit(ratio)
-                    .radius(k.radius.md)
-                    .pixels_fit(image.pixels(), SurfaceFit::Fill)
+            let picture = s.preview_image.as_ref().and_then(|image| {
+                let [width, height] = image.size()?;
+                let ratio = width as f32 / height.max(1) as f32;
+                Some(
+                    el().key("preview-image")
+                        .aspect_fit(ratio)
+                        .radius(k.radius.md)
+                        .pixels_fit(image.pixels(), SurfaceFit::Fill),
+                )
             });
-            panel = panel.child(picture.unwrap_or_else(|| note(k, "Decoding the picture…")));
+            if let Some(picture) = picture {
+                panel = panel.child(
+                    col()
+                        .key("preview-stage")
+                        .w_full()
+                        .grow(1.0)
+                        .min_h(0.0)
+                        .center()
+                        .child(picture),
+                );
+            } else if let Some(err) = s.preview_image.as_ref().and_then(|i| i.error()) {
+                panel = panel.child(note(k, format!("Could not decode picture: {err}")));
+            } else {
+                panel = panel.child(note(k, "Decoding the picture…"));
+            }
         }
         Some(Preview::Folder(count)) => {
             let label = if *count == 1 {

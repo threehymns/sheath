@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 // Room the inspector gives a picture before it is scaled down to fit.
-const PREVIEW_IMAGE_SIZE: f32 = 220.0;
+const PREVIEW_IMAGE_SIZE: f32 = 420.0;
 
 use super::entry::read_preview;
 use super::paths::open_external;

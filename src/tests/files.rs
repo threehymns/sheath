@@ -308,6 +308,74 @@ fn a_picture_previews_as_a_picture_and_not_as_its_bytes() {
     );
 }
 
+#[test]
+fn a_picture_previews_responsively_in_the_inspector() {
+    let dir = fixture();
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><rect width="200" height="100"/></svg>"#;
+    fs::write(dir.path().join("drawing.svg"), svg).unwrap();
+    let mut app = app(&dir);
+    let (wake_tx, _) = std::sync::mpsc::channel();
+    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
+        let _ = wake_tx.send(());
+    })));
+    app.select_id("f:drawing.svg");
+    app.preview_image.as_ref().unwrap().wait().unwrap();
+
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+    assert!(rt.find("preview-stage").is_some(), "preview stage exists");
+    let image_el = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("preview-image"))
+        .expect("preview image exists");
+    assert!(image_el.rect[2] > 0.0 && image_el.rect[3] > 0.0);
+    // Aspect ratio of 200/100 = 2.0
+    let ratio = image_el.rect[2] / image_el.rect[3];
+    assert!((ratio - 2.0).abs() < 0.05, "aspect ratio is kept: {ratio}");
+
+    let initial_w = image_el.rect[2];
+
+    // Widen inspector pane:
+    rt.state.inspector.set_width(400.0);
+    rt.frame(1.0);
+    let widened_el = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.key.as_deref() == Some("preview-image"))
+        .unwrap();
+    assert!(
+        widened_el.rect[2] > initial_w,
+        "image expands with wider inspector: {} -> {}",
+        initial_w,
+        widened_el.rect[2]
+    );
+}
+
+#[test]
+fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
+    let dir = fixture();
+    fs::write(dir.path().join("broken.png"), [0x89, b'P', b'N', b'G', 0x00, 0x00]).unwrap();
+    let mut app = app(&dir);
+    let (wake_tx, _) = std::sync::mpsc::channel();
+    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
+        let _ = wake_tx.send(());
+    })));
+    app.select_id("f:broken.png");
+
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    // After worker processes the broken image, an error message is shown:
+    let _ = rt.state.preview_image.as_ref().unwrap().wait();
+    rt.frame(1.0);
+    let error_text = rt
+        .elements()
+        .into_iter()
+        .find(|e| e.text.as_deref().is_some_and(|t| t.contains("Could not decode picture")));
+    assert!(error_text.is_some(), "error note is shown for invalid picture");
+}
+
 #[cfg(unix)]
 #[test]
 fn making_an_alias_points_a_new_name_at_the_row() {
