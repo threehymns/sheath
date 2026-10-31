@@ -1,4 +1,4 @@
-use crate::app::{App, PlaceAt};
+use crate::app::App;
 use crate::places::{Place, Section};
 use rune::{El, Tx};
 use rune_kit::shell::Reorder;
@@ -27,8 +27,11 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
     }
     rows.build(k)
         .key(format!("places-{}", section.key()))
-        .on_layout(move |s: &mut App, rect| {
-            s.sections_at.insert(section, rect);
+        .on_layout_tx(move |s: &mut App, rect, tx: &mut Tx| {
+            // The drop indicator reads this, so only a report that changed nothing skips the view.
+            if s.sections_at.insert(section, rect) == Some(rect) {
+                tx.live_only();
+            }
         })
 }
 
@@ -82,16 +85,11 @@ fn place_row(
         .on_secondary_press(move |s: &mut App, press, _: &mut Tx| {
             s.open_place_menu(menu_id.clone(), press);
         })
-        .on_layout(move |s: &mut App, rect| {
-            s.places_at.insert(
-                id.clone(),
-                PlaceAt {
-                    rect,
-                    path: target.clone(),
-                    section,
-                    index,
-                },
-            );
+        .on_layout_tx(move |s: &mut App, rect, tx: &mut Tx| {
+            // The drop indicator reads this; a report that moved the row commits.
+            if !s.set_place_at(id.clone(), rect, target.clone(), section, index) {
+                tx.live_only();
+            }
         })
 }
 

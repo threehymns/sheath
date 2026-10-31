@@ -99,6 +99,28 @@ impl App {
         self.places_at.iter().find(|(_, at)| inside(at.rect, x, y))
     }
 
+    /// Records where a sidebar row was laid out, and says whether what the drop indicator reads
+    /// moved: false lets the layout report skip the view.
+    pub fn set_place_at(
+        &mut self,
+        id: String,
+        rect: [f32; 4],
+        path: PathBuf,
+        section: Section,
+        index: usize,
+    ) -> bool {
+        let at = PlaceAt {
+            rect,
+            path,
+            section,
+            index,
+        };
+        match self.places_at.insert(id, at) {
+            Some(old) => old.rect != rect || old.index != index || old.section != section,
+            None => true,
+        }
+    }
+
     fn place_rows(&self, section: Section) -> Vec<&PlaceAt> {
         let mut rows: Vec<&PlaceAt> = self
             .places_at

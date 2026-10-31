@@ -312,8 +312,10 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .shrink()
         .min_w(0.0)
         .truncate()
-        .on_layout(move |s: &mut App, rect| {
+        .on_layout_tx(move |s: &mut App, rect, tx: &mut Tx| {
             s.name_at.insert(id.clone(), rect[0] + rect[2]);
+            // The press and rename maths read this, not the view.
+            tx.live_only();
         });
     let mut content = row()
         .gap(8.0)

@@ -91,11 +91,15 @@ impl App {
         self.scrolls.mark_shown(key);
     }
 
-    pub fn area_view(&mut self, key: &'static str, rect: [f32; 4]) {
+    /// Records a viewport's rect from its layout, and says whether anything the view reads
+    /// moved: only the list's own rect sizes the marquee and the grid's columns.
+    pub fn area_view(&mut self, key: &'static str, rect: [f32; 4]) -> bool {
+        let sized = key == FILES && self.rows_view != rect;
         if key == FILES {
             self.rows_view = rect;
         }
         self.scrolls.set_region(key, rect);
+        sized
     }
 
     // The offset cell a viewport writes its position into; the view keeps it across frames.

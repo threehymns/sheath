@@ -13,6 +13,11 @@ pub(super) fn scrolled(s: &App, key: &'static str, view: El, content: El) -> El 
         })
         .on_wheel(move |s: &mut App, wheel, tx: &mut Tx| s.area_wheel(key, wheel, tx))
         .on_scroll_offset(move |at| told.set(at))
-        .on_layout(move |s: &mut App, rect| s.area_view(key, rect))
+        .on_layout_tx(move |s: &mut App, rect, tx: &mut Tx| {
+            // A new size changes what the view builds; a repeat of the same rect can skip it.
+            if !s.area_view(key, rect) {
+                tx.live_only();
+            }
+        })
         .child(content.offset(0.0, s.overshoot(key)))
 }
