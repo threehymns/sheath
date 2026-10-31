@@ -50,10 +50,10 @@ use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
 use crate::views::Views;
 
+use paths::start_location;
 #[cfg(test)]
 pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
-use paths::start_location;
 use scroll::Scroll;
 
 /// A row's height in the file list, in points. The pointer maths and the view share it.

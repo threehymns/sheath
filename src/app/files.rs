@@ -167,10 +167,8 @@ impl App {
         self.error = error;
         // A paste that made nothing (a refused cut) leaves the selection where it was.
         if !made.is_empty() {
-            self.pending_select = Some((
-                made.iter().map(|name| format!("f:{name}")).collect(),
-                false,
-            ));
+            self.pending_select =
+                Some((made.iter().map(|name| format!("f:{name}")).collect(), false));
         }
         self.reload();
     }

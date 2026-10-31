@@ -8,7 +8,7 @@ use rune_kit::SortDir;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::scan::{sort_rows, Scan, SYNC_SCAN_LIMIT};
+use super::scan::{SYNC_SCAN_LIMIT, Scan, sort_rows};
 
 use super::*;
 
@@ -95,7 +95,8 @@ impl App {
         let sort = self.sort.clone();
         // A folder small enough to read within this frame gets its rows here, so the next
         // frame draws the new listing rather than an empty one.
-        if let Some(scan) = Scan::try_read(path.clone(), keep.clone(), sort.clone(), SYNC_SCAN_LIMIT)
+        if let Some(scan) =
+            Scan::try_read(path.clone(), keep.clone(), sort.clone(), SYNC_SCAN_LIMIT)
         {
             // Whatever read was still in flight belongs to a folder already left.
             self.scan.cancel();
@@ -159,10 +160,7 @@ impl App {
             .iter()
             .map(|&i| self.entries[i].id.clone())
             .collect();
-        self.selection = ids
-            .into_iter()
-            .filter(|id| visible.contains(id))
-            .collect();
+        self.selection = ids.into_iter().filter(|id| visible.contains(id)).collect();
         let Some(first) = self.selected_ids().first().cloned() else {
             // The folder no longer holds the row the operation made: leave no cursor behind.
             self.clear_selection();
