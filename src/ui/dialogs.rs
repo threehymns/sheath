@@ -437,6 +437,15 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                     s.duplicate_selection();
                 }),
         )
+        .item(
+            MenuItem::new("Copy Name")
+                .icon(&icons::CLIPBOARD)
+                .disabled(count == 0)
+                .on_select_tx(|s: &mut App, tx: &mut rune::Tx| {
+                    s.close_menu();
+                    s.copy_names(tx);
+                }),
+        )
         .separator()
         .item(
             MenuItem::new("Save This Layout as a Rule")

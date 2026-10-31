@@ -55,6 +55,19 @@ impl App {
         }
     }
 
+    pub fn copy_names(&mut self, tx: &mut Tx) {
+        let names: Vec<String> = self
+            .selected_ids()
+            .iter()
+            .filter_map(|id| self.entry_name(id).map(str::to_owned))
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        tx.copy(names.join("\n"));
+        self.error = None;
+    }
+
     pub fn copy_paths(&mut self, tx: &mut Tx) {
         let paths: Vec<String> = self
             .selected_ids()

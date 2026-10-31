@@ -64,6 +64,7 @@ unsupported by this backend.
 | New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Copy path | Shift+Cmd/Ctrl+C |
+| Copy name | The row menu, or the command bar: `Copy Name` |
 | Command bar | Cmd/Ctrl+P |
 | Open a terminal here | The command bar: `Open Terminal Here` |
 | Reveal in the system file manager | The row menu, or the command bar: `Reveal in File Manager` |
@@ -181,7 +182,7 @@ name, written the way Rune's shortcuts read them, so the file can be edited by h
 command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forward`,
 `enclosing-folder`, `go-to-folder`,
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
-`copy-path`, `cut`, `paste`, `delete`,
+`copy-path`, `copy-name`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
 `search-subfolders`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,

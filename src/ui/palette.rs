@@ -173,7 +173,7 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         Action::Trash => &theme::icons::TRASH,
         Action::Delete => &theme::icons::WARNING,
         Action::Copy => &theme::icons::COPY,
-        Action::CopyPath => &icons::CLIPBOARD,
+        Action::CopyPath | Action::CopyName => &icons::CLIPBOARD,
         Action::Cut => &icons::SCISSORS,
         Action::Paste => &icons::CLIPBOARD,
         Action::Duplicate => &theme::icons::OUTLINE_COPY,

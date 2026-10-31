@@ -204,7 +204,7 @@ impl App {
             Action::Forward => self.can_forward(),
             Action::EnclosingFolder => self.can_up(),
             Action::Rename => self.selection_len() > 0,
-            Action::CopyPath => self.selection_len() > 0,
+            Action::CopyPath | Action::CopyName => self.selection_len() > 0,
             Action::Move
             | Action::Trash
             | Action::Delete
@@ -249,6 +249,7 @@ impl App {
             Action::Delete => self.begin_delete(),
             Action::Copy => self.copy_selection(false),
             Action::CopyPath => self.copy_paths(tx),
+            Action::CopyName => self.copy_names(tx),
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
