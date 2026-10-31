@@ -64,7 +64,7 @@ fn dropping_a_row_on_a_file_or_empty_space_moves_nothing() {
 }
 
 #[test]
-fn a_drag_from_a_rows_columns_sweeps_a_box_instead_of_moving_it() {
+fn a_drag_from_an_unselected_rows_columns_sweeps_a_box() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
@@ -90,7 +90,9 @@ fn a_drag_from_a_rows_columns_sweeps_a_box_instead_of_moving_it() {
             "a click in the {column} column selects the row"
         );
 
-        // A drag from there sweeps a box instead of picking the row up.
+        // A drag from an unselected row's columns sweeps a box instead of picking it up.
+        rt.state.select_id("f:notes.md");
+        rt.frame(0.05);
         rt.pointer_down(at, y);
         rt.frame(0.05);
         rt.pointer_move(at, y + crate::app::ROW_HEIGHT);
@@ -115,6 +117,59 @@ fn a_drag_from_a_rows_columns_sweeps_a_box_instead_of_moving_it() {
             dir.path().join("file2.txt").exists(),
             "the file stayed where it was"
         );
+    }
+}
+
+#[test]
+fn a_drag_on_a_selected_row_picks_it_up_from_anywhere() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.frame(0.1);
+
+    let (row, _) = rt.presented("f:file2.txt").expect("the row is on screen");
+    let y = row[1] + row[3] * 0.5;
+    let view = rt.state.rows_view;
+    let size_x = view[0] + view[2] - rt.state.date_width - rt.state.size_width / 2.0;
+    let (name, _) = rt.presented("name-f:file2.txt").expect("the name is drawn");
+    let blank = name[0] + name[2] + 20.0;
+    let cell_right = view[0] + view[2] - rt.state.size_width - rt.state.date_width;
+    assert!(
+        blank < cell_right,
+        "the press lands past the name, inside the name column: {blank} against {cell_right}"
+    );
+
+    // Wherever on a selected row the press lands, a drag carries it: the selection is what
+    // the gesture means, not the row's blank space.
+    for at in [blank, size_x] {
+        rt.state.select_id("f:file2.txt");
+        rt.frame(0.1);
+        rt.pointer_down(at, y);
+        rt.frame(0.05);
+        rt.pointer_move(at + 40.0, y + 12.0);
+        rt.frame(0.05);
+        assert!(
+            rt.state
+                .file_drag
+                .as_ref()
+                .is_some_and(|drag| drag.dragging),
+            "a selected row is picked up from {at}"
+        );
+        assert!(
+            rt.state.marquee.is_none(),
+            "no box starts on a selected row"
+        );
+        assert!(
+            rt.find("drag-badge").is_some(),
+            "the drag says what it carries"
+        );
+
+        // Back at the press, the gesture is the click it began as and nothing moves.
+        rt.pointer_move(at, y);
+        rt.frame(0.05);
+        rt.pointer_up(at, y);
+        rt.frame(0.1);
+        assert!(dir.path().join("file2.txt").is_file(), "nothing moved");
     }
 }
 

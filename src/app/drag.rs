@@ -115,10 +115,10 @@ impl App {
 
     /// A press in the list: a press on a row selects it (or keeps a selection it belongs to, so
     /// the selection can be dragged) and a press on the empty space starts a selection box. With
-    /// Option (Alt) held the box starts anywhere, over the rows themselves. In the list only a
-    /// row's icon and name pick the row up; a drag from the space past the name, or from the
-    /// size or date columns, sweeps a box, so reading a row never moves the file. Points are
-    /// the window's.
+    /// Option (Alt) held the box starts anywhere, over the rows themselves. An unselected row is
+    /// picked up only by its icon and name, so a drag from the space past the name, or from the
+    /// size or date columns, sweeps a box and reading a row never moves the file. A row that is
+    /// already selected is picked up wherever the press lands on it. Points are the window's.
     pub fn begin_press(&mut self, at: (f32, f32), mods: Mods, tx: &mut Tx) {
         // A box over the rows is the one thing they can't get otherwise: the list only has empty
         // space to start one in when it doesn't scroll, so Option is how a long list gets swept.
@@ -148,7 +148,13 @@ impl App {
             }
             return;
         };
-        if !self.is_grid() && !self.on_name_cell(index, at) {
+        // A row that is already selected is picked up wherever the press lands on it: a drag
+        // there means the selection, not a box. An unselected row is grabbed only by its icon
+        // and name, so the wide space beside a short name still sweeps.
+        let selected = self
+            .row_id(index)
+            .is_some_and(|id| self.selection.contains(&id));
+        if !self.is_grid() && !selected && !self.on_name_cell(index, at) {
             // The press still reads as a click on the row; the drag that follows sweeps a
             // box from the selection the press found.
             let base = self.selection.clone();
