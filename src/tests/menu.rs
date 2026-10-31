@@ -1,5 +1,3 @@
-//! The row menu a right-click opens.
-
 use super::helpers::*;
 use crate::app::SheetKind;
 use rune::{Key, KeyEvent, Mods};
@@ -34,7 +32,6 @@ fn right_clicking_a_row_opens_the_menu_and_rename_opens_a_focused_sheet() {
         mods: Mods::default(),
     });
     rt.frame(0.1);
-    // The renamed row is selected by the folder read that follows the rename.
     rt.frame(0.1);
 
     assert!(rt.state.sheet.is_none());
@@ -64,7 +61,6 @@ fn the_row_menu_offers_move_and_trash_for_the_clicked_row() {
 #[test]
 fn right_clicking_any_column_opens_the_menu_for_that_row() {
     let dir = fixture();
-    // Where the size and date columns sit, from their headers.
     let (size, date) = {
         let mut rt = runtime(app(&dir));
         rt.frame(0.0);
@@ -73,7 +69,6 @@ fn right_clicking_any_column_opens_the_menu_for_that_row() {
             rt.find("modified").expect("the date header is on screen").0,
         )
     };
-    // The name, the padding either side of the column rules, the size and the date.
     for x in [300.0, size - 46.5, size, date - 79.5, date] {
         let mut rt = runtime(app(&dir));
         rt.frame(0.0);
@@ -154,7 +149,6 @@ fn the_row_menu_keeps_a_selection_it_lands_in() {
         3,
         "a right-click inside the selection acts on all of it"
     );
-    // A labelled item says how many rows it covers.
     assert_eq!(rt.state.selection_len(), 3);
 
     rt.state.close_menu();

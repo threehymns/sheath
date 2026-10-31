@@ -1,6 +1,5 @@
-//! What each folder was left showing. Machine-owned state, kept in the state directory rather
-//! than the config folder, capped so it cannot grow without bound, and ignored when it cannot be
-//! read: a folder always opens.
+//! What each folder was left showing. Machine-owned state in the state directory, capped at
+//! `LIMIT` folders and ignored when it cannot be read.
 
 use crate::app::Layout;
 use crate::config;
@@ -9,17 +8,13 @@ use kdl::{KdlDocument, KdlEntry, KdlNode};
 use rune_kit::SortDir;
 use std::path::{Path, PathBuf};
 
-/// The file under the state directory.
 const FILE: &str = "views.kdl";
 
-/// How many folders are remembered. Past this, the oldest visit is forgotten.
 const LIMIT: usize = 200;
 
-/// The folders remembered, least recently updated first: updating a folder moves it to the end.
 pub struct Views {
     path: Option<PathBuf>,
     entries: Vec<(PathBuf, Resolved)>,
-    /// Why the file could not be read or written. Damaged state is reported, never fatal.
     pub error: Option<String>,
 }
 
@@ -34,7 +29,6 @@ impl Default for Views {
 }
 
 impl Views {
-    /// The state saved for this user, or nothing when there is none to read.
     pub fn load() -> Views {
         let Some(dir) = config::state_dir() else {
             return Views::default();
@@ -42,7 +36,6 @@ impl Views {
         Views::at(dir.join(FILE))
     }
 
-    /// The state in `path`, for a state folder chosen by the caller.
     pub fn at(path: PathBuf) -> Views {
         let mut views = Views {
             path: Some(path.clone()),
@@ -63,7 +56,6 @@ impl Views {
         views
     }
 
-    /// The presentation this folder was left in.
     pub fn get(&self, path: &Path) -> Resolved {
         self.entries
             .iter()
@@ -72,10 +64,7 @@ impl Views {
             .unwrap_or_default()
     }
 
-    /// Records what a folder was left showing and writes the file.
     pub fn set(&mut self, path: &Path, state: Resolved) {
-        // A folder that is updated moves to the end, so the cap forgets the least recently
-        // visited one rather than whichever folder happened to be seen first.
         self.entries.retain(|(remembered, _)| remembered != path);
         self.entries.push((path.to_path_buf(), state));
         if self.entries.len() > LIMIT {
@@ -95,7 +84,6 @@ impl Views {
     }
 }
 
-/// The file: a `folder` node per remembered path, holding only what was not at its default.
 fn render(entries: &[(PathBuf, Resolved)]) -> String {
     let mut doc = KdlDocument::new();
     for (path, state) in entries {

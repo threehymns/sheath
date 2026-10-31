@@ -1,5 +1,3 @@
-//! The rename, move and trash sheets and the operations they apply.
-
 use super::helpers::*;
 use crate::app::SheetKind;
 use crate::keybinds::Action;
@@ -165,7 +163,6 @@ fn the_trash_sheet_covers_the_whole_selection() {
     assert_eq!(sheet.name, "3 items");
     assert_eq!(sheet.targets.len(), 3);
     assert!(rt.find("trash-dialog").is_some());
-    // Nothing is deleted until the button is pressed.
     for name in ["file2.txt", "file10.txt", "notes.md"] {
         assert!(dir.path().join(name).exists());
     }

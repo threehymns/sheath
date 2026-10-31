@@ -1,12 +1,9 @@
-//! Human-facing descriptions of filesystem data: sizes, dates, kinds and permissions.
-
 use std::fs::Metadata;
 use std::path::Path;
 use std::time::SystemTime;
 
 use chrono::{DateTime, Datelike, Local};
 
-/// A byte count with one decimal place, switching units as it grows.
 pub fn size(bytes: u64) -> String {
     const KB: f64 = 1024.0;
     let n = bytes as f64;
@@ -26,7 +23,6 @@ pub fn size(bytes: u64) -> String {
     format!("{text} {unit}")
 }
 
-/// A short date for the file table: today and yesterday by name, other years omitted.
 pub fn table_time(time: Option<SystemTime>) -> String {
     let Some(time) = time else {
         return "—".into();
@@ -48,7 +44,6 @@ pub fn table_time(time: Option<SystemTime>) -> String {
     }
 }
 
-/// A full date and time for the inspector.
 pub fn full_time(time: Option<SystemTime>) -> String {
     let Some(time) = time else {
         return "—".into();
@@ -63,7 +58,6 @@ pub fn full_time(time: Option<SystemTime>) -> String {
     )
 }
 
-/// The file's kind: a folder, an alias, or a friendlier name for a known extension.
 pub fn kind(name: &str, is_dir: bool, is_symlink: bool) -> String {
     if is_dir {
         return if is_symlink {
@@ -112,7 +106,6 @@ pub fn kind(name: &str, is_dir: bool, is_symlink: bool) -> String {
     known.into()
 }
 
-/// A Unix mode such as `drwxr-xr-x`, or a plain description elsewhere.
 pub fn permissions(meta: &Metadata) -> String {
     #[cfg(unix)]
     {

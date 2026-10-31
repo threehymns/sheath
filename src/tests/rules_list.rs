@@ -1,6 +1,3 @@
-//! The Rules tab's list: a click opens a rule, delete asks first, Escape leaves the form, and
-//! the tab says how its rules combine.
-
 use super::helpers::*;
 use rune::{Key, KeyEvent, Mods};
 use std::fs;
@@ -53,7 +50,6 @@ fn deleting_a_rule_asks_first() {
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
 
-    // The row's delete is drawn while the pointer is over the row.
     let (x, y) = rt.find("rule-first-0").expect("the row is on screen");
     rt.pointer_move(x, y);
     rt.frame(0.1);

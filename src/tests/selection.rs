@@ -1,5 +1,3 @@
-//! Which rows the keyboard cursor and the mouse pick, and the modifiers that extend it.
-
 use super::helpers::*;
 use rune::{Key, KeyEvent, Mods};
 
@@ -28,9 +26,6 @@ fn nothing_in_the_file_area_takes_focus_but_its_viewport() {
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
 
-    // The keys reach the rows through the scrolling viewport, and it draws no ring: the
-    // selected row is the one cue. Nothing else in either layout may become a focus target,
-    // which would paint a ring of its own.
     for layout in ["list", "grid"] {
         if layout == "grid" {
             click(&mut rt, "toggle-layout");
@@ -148,7 +143,6 @@ fn ctrl_shift_clicking_keeps_the_selection_and_adds_a_range() {
 
     click(&mut rt, "f:file2.txt");
     click_with(&mut rt, "f:file10.txt", shift());
-    // The anchor is file2, so the range runs file2..file10.
     assert_eq!(rt.state.selected_ids(), ["f:file2.txt", "f:file10.txt"]);
 
     click_with(&mut rt, "f:notes.md", control_shift());

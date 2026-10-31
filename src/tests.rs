@@ -1,5 +1,3 @@
-//! The browser's tests, grouped by the behaviour they cover.
-
 mod browse;
 mod commands;
 mod drag;

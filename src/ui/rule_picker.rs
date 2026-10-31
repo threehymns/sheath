@@ -1,5 +1,3 @@
-//! The picker that lists every rule by its matcher and jumps to its definition.
-
 use crate::app::App;
 use rune::{Cursor, El, ScrollSpec, col, el, row, text};
 use rune_kit::{Kit, scrim};

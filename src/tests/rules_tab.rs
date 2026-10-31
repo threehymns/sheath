@@ -1,6 +1,3 @@
-//! The Rules tab: its section per kind, the two Add Rule gestures, the picker that jumps to a
-//! rule, and the messages it shows when a file or a command leaves it with nothing to show.
-
 use super::helpers::*;
 use std::fs;
 

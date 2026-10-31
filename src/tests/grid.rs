@@ -1,5 +1,3 @@
-//! The grid layout: switching to it, clicking and walking its tiles, and remembering the choice.
-
 use super::helpers::*;
 use crate::app::{App, GRID_TOP_MARGIN, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 use rune::{Key, KeyEvent, Mods};
@@ -11,7 +9,6 @@ fn a_layout_that_came_with_the_folder_lands_without_a_fade() {
     let dir = fixture();
     let alpha = dir.path().join("alpha");
     let mut app = app(&dir);
-    // The folder was left in the grid, so opening it brings the grid with it.
     app.views.set(
         &alpha,
         crate::rules::Resolved {
@@ -24,7 +21,6 @@ fn a_layout_that_came_with_the_folder_lands_without_a_fade() {
     assert_eq!(app.layout, Layout::Grid);
     assert!(app.layout_cut, "the folder's own layout lands at once");
 
-    // Asking for the other layout is the user's change, and keeps its fade.
     app.toggle_layout();
     assert_eq!(app.layout, Layout::List);
     assert!(!app.layout_cut);
@@ -85,7 +81,6 @@ fn arrow_keys_walk_the_grid_by_tile_and_by_row() {
         rt.frame(1.0 / 60.0);
     };
 
-    // Clicking a tile hands the keyboard to the list, as it does in the table.
     click(&mut rt, "f:file00.txt");
     key(&mut rt, Key::Home, Mods::default());
     assert_eq!(rt.state.selected.as_deref(), Some("f:file00.txt"));
@@ -103,7 +98,6 @@ fn arrow_keys_walk_the_grid_by_tile_and_by_row() {
         "Down moves a grid row, not a list row"
     );
 
-    // Shift+Up takes the tile above and keeps the two as one column of the grid.
     key(&mut rt, Key::Up, shift());
     assert_eq!(rt.state.selection_len(), 2, "the column between the two");
     let ids = rt.state.selected_ids();
@@ -157,7 +151,6 @@ fn a_click_in_the_gaps_between_tiles_clears_the_selection() {
     }
 
     let (x, y) = rt.find("f:file00.txt").expect("the first tile");
-    // The gap after the tile in its grid row, and the one below it before the next row.
     for (gx, gy) in [
         (x + TILE_WIDTH / 2.0 + TILE_GAP / 2.0, y),
         (x, y + TILE_HEIGHT / 2.0 + TILE_GAP / 2.0),
@@ -192,7 +185,6 @@ fn the_gaps_between_tiles_start_a_box_rather_than_a_drag() {
     rt.frame(0.1);
 
     let (x, y) = rt.find("f:file00.txt").expect("the first tile");
-    // The gap after the tile in its grid row, and the one below it before the next row.
     for (gx, gy) in [
         (x + TILE_WIDTH / 2.0 + TILE_GAP / 2.0, y),
         (x, y + TILE_HEIGHT / 2.0 + TILE_GAP / 2.0),
@@ -227,7 +219,6 @@ fn a_box_sweeps_only_the_tiles_it_covers() {
 
     let (x, y) = rt.find("f:file00.txt").expect("the first tile");
     let edge = x + TILE_WIDTH / 2.0;
-    // A box that stays in the gap after the first tile covers neither tile.
     rt.pointer_down(edge + 2.0, y);
     rt.frame(0.05);
     rt.pointer_move(edge + 5.0, y + 6.0);
@@ -240,7 +231,6 @@ fn a_box_sweeps_only_the_tiles_it_covers() {
     rt.pointer_up(edge + 5.0, y + 6.0);
     rt.frame(0.1);
 
-    // One that reaches into the next tile takes it, and not the tile before the gap.
     rt.pointer_down(edge + 2.0, y);
     rt.frame(0.05);
     rt.pointer_move(edge + TILE_GAP + 6.0, y + 6.0);
@@ -333,7 +323,6 @@ fn the_sort_chevron_turns_over_when_the_direction_reverses() {
         turn(&rt)
     );
 
-    // Press and release without the helper's settle, to catch the arrow partway round.
     let (x, y) = rt.find("grid-sort-size").expect("the sort control");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
@@ -360,8 +349,6 @@ fn the_band_under_the_sort_bar_is_empty_space_and_the_card_starts_at_its_edge() 
     click(&mut rt, "toggle-layout");
     rt.frame(0.1);
 
-    // The margin under the bar is inside the viewport: a press there is empty space, not the
-    // tile row the raw point would round to.
     let (toolbar, _) = rt.presented("grid-toolbar").expect("the sort toolbar");
     let band = toolbar[1] + toolbar[3] + GRID_TOP_MARGIN * 0.5;
     let x = rt.state.rows_view[0] + 40.0;
@@ -380,7 +367,6 @@ fn the_band_under_the_sort_bar_is_empty_space_and_the_card_starts_at_its_edge() 
     rt.pointer_up(x + 40.0, band);
     rt.frame(0.1);
 
-    // The card is the tile's handle right to its edge, padding and all.
     let (tile, _) = rt.presented("f:alpha").expect("the first tile");
     let (tx, ty, _, th) = (tile[0], tile[1], tile[2], tile[3]);
     rt.pointer_down(tx + 2.0, ty + th * 0.5);

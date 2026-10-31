@@ -18,7 +18,6 @@ pub(super) fn fixture() -> TempDir {
     dir
 }
 
-/// A folder with `count` files, so its list is taller than the window and scrolls.
 pub(super) fn long_folder(count: usize) -> TempDir {
     let dir = tempfile::tempdir().unwrap();
     for i in 0..count {
@@ -36,8 +35,6 @@ pub(super) fn populate(dir: &TempDir) {
 }
 
 pub(super) fn app(dir: &TempDir) -> App {
-    // The test-only opener takes the defaults instead of whatever the machine running the tests
-    // has saved, and reads no remembered folder state.
     let mut app = App::open_with(dir.path().to_path_buf(), Settings::defaults());
     app.store = crate::config::Store::none();
     app.keybinds = Keybinds::defaults();
@@ -46,15 +43,11 @@ pub(super) fn app(dir: &TempDir) -> App {
     app.views = crate::views::Views::default();
     app.rules = crate::rules::Rules::default();
     app.rule_error = None;
-    // The store and the remembered state are the test's now, so the folder is resolved again.
     app.reload();
-    // A big folder is read off the main thread, so wait it out: a test starts with its rows.
     app.settle_scan();
     app
 }
 
-/// An app whose keybinds, settings, rules, and remembered state live in `dir`, so a test never
-/// touches the real config folder.
 pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     let path = dir.path().join("keybinds.kdl");
     let mut app = app(dir);
@@ -62,7 +55,6 @@ pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     app.keybinds = Keybinds::from_doc(app.store.doc(crate::config::KEYBINDS));
     app.recorders = Keybinds::recorders();
     app.config = Settings::from_doc(app.store.doc(crate::config::CONFIG));
-    // The config just replaced the defaults the pane was opened with, so it has its say too.
     app.inspector.set_open(app.config.inspector);
     app.views = crate::views::Views::at(dir.path().join("views.kdl"));
     app.reload_rules();
@@ -71,13 +63,11 @@ pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     (app, path)
 }
 
-/// The settings a fresh read of `dir` finds, as the next launch would.
 pub(super) fn saved_settings(dir: &TempDir) -> Settings {
     let store = crate::config::Store::at(dir.path().to_path_buf());
     Settings::from_doc(store.doc(crate::config::CONFIG))
 }
 
-/// The keybinds a fresh read of `dir` finds, as the next launch would.
 pub(super) fn saved_keybinds(dir: &TempDir) -> Keybinds {
     let store = crate::config::Store::at(dir.path().to_path_buf());
     Keybinds::from_doc(store.doc(crate::config::KEYBINDS))
@@ -98,7 +88,6 @@ pub(super) fn runtime(app: App) -> Runtime<App> {
     rt
 }
 
-/// Opens the first rule's editor in the Rules tab: the row a fixture writes is named "here".
 pub(super) fn open_rule_editor(rt: &mut Runtime<App>) {
     rt.frame(0.0);
     click(rt, "open-settings");
@@ -120,7 +109,6 @@ pub(super) fn click(rt: &mut Runtime<App>, key: &str) {
     rt.frame(0.1);
 }
 
-/// Presses and releases `key`, the way a keyboard sends it.
 pub(super) fn press(rt: &mut Runtime<App>, key: PhysicalKeyCode) {
     for pressed in [true, false] {
         rt.physical_input(PhysicalInput::Key {
@@ -133,7 +121,6 @@ pub(super) fn press(rt: &mut Runtime<App>, key: PhysicalKeyCode) {
     }
 }
 
-/// The event a binding's chord arrives as, with the key the shortcut names.
 pub(super) fn event_for(app: &App, action: Action, key: Key) -> KeyEvent {
     let chord = app.keybinds.chord(action).expect("the action is bound");
     KeyEvent {
@@ -142,12 +129,10 @@ pub(super) fn event_for(app: &App, action: Action, key: Key) -> KeyEvent {
     }
 }
 
-/// Where the list is scrolled to, as the viewport last said.
 pub(super) fn scroll_offset(rt: &Runtime<App>) -> f32 {
     rt.state.scroll_told.get().offset[1]
 }
 
-/// A fast trackpad: four precise deltas of 9 points between frames, partway down the list.
 pub(super) fn trackpad_burst(rt: &mut Runtime<App>, frames: usize) -> Vec<f32> {
     let (x, y) = rt.find("files-table").expect("the list is on screen");
     let mut at = vec![scroll_offset(rt)];
@@ -174,7 +159,6 @@ pub(super) fn command_bar_event(app: &App, shifted: bool) -> KeyEvent {
     }
 }
 
-/// Clicks `key` while `mods` are held, as a Shift- or Cmd-click.
 pub(super) fn click_with(rt: &mut Runtime<App>, key: &str, mods: Mods) {
     rt.physical_input(PhysicalInput::Modifiers(mods));
     click(rt, key);
@@ -204,7 +188,6 @@ pub(super) fn control_shift() -> Mods {
     }
 }
 
-/// Drags a box from the list's empty space up to a row, holding `mods`.
 pub(super) fn drag_box(rt: &mut Runtime<App>, to: &str, mods: Mods) {
     let (x, y) = rt.find("files-table").expect("the list is on screen");
     let (_, y1) = rt.find(to).expect("the row is on screen");
@@ -219,15 +202,11 @@ pub(super) fn drag_box(rt: &mut Runtime<App>, to: &str, mods: Mods) {
     rt.frame(0.1);
 }
 
-/// A point on a row's icon, the part of a row a drag picks up: a few points inside the cell,
-/// so a test never depends on how wide that row's name happens to be.
 pub(super) fn name_point(rt: &Runtime<App>, key: &str) -> (f32, f32) {
     let [x, y, _, h] = rt.presented(key).expect("the row is on screen").0;
     (x + 12.0, y + h * 0.5)
 }
 
-/// Drags one row's press onto another row with the pointer, as a file drag does. The press
-/// lands on the row's icon and name, the only part of it that picks the row up.
 pub(super) fn drag_row(rt: &mut Runtime<App>, from: &str, to: &str) {
     let (x0, y0) = name_point(rt, from);
     let (x1, y1) = rt.find(to).expect("the second row is on screen");
@@ -239,8 +218,6 @@ pub(super) fn drag_row(rt: &mut Runtime<App>, from: &str, to: &str) {
     rt.frame(0.1);
 }
 
-/// A places file naming two folders under `dir`, in that order, plus whatever else the caller
-/// wants at the top. The paths are quoted the way KDL writes strings.
 pub(super) fn write_places(path: &std::path::Path, rows: &[(String, String)], extra: &str) {
     let mut text = String::from(extra);
     text.push_str("favourites {\n");

@@ -1,17 +1,11 @@
-//! What a row is and what the inspector can say about it: an entry's metadata, read
-//! from disk, and the preview of its contents.
-
 use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-/// How much of a text file the inspector reads.
 const PREVIEW_LIMIT: u64 = 24 * 1024;
 
 pub struct Entry {
-    /// Stable row key. Names are unique within a folder, and a colon keeps the key out of the
-    /// `/`-separated key paths Rune uses elsewhere.
     pub id: String,
     pub name: String,
     pub path: PathBuf,
@@ -28,7 +22,8 @@ impl Entry {
     pub(super) fn read(dir_entry: &fs::DirEntry) -> Option<Entry> {
         let path = dir_entry.path();
         let name = dir_entry.file_name().to_string_lossy().into_owned();
-        // `DirEntry::metadata` doesn't follow links; the target's metadata does.
+        // `DirEntry::metadata` reports the link itself, so a symlink's size and kind come from
+        // its target.
         let link_meta = dir_entry.metadata().ok()?;
         let is_symlink = link_meta.file_type().is_symlink();
         let target_meta = if is_symlink {
@@ -39,6 +34,7 @@ impl Entry {
         let meta = target_meta.as_ref().unwrap_or(&link_meta);
         let is_dir = meta.is_dir();
         Some(Entry {
+            // A colon keeps the id clear of the `/`-separated key paths Rune uses.
             id: format!("f:{name}"),
             name,
             path,
@@ -61,7 +57,6 @@ impl Entry {
     }
 }
 
-/// What the inspector shows under the metadata.
 pub enum Preview {
     Text(String),
     Folder(usize),

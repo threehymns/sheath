@@ -1,5 +1,3 @@
-//! A config file the app cannot read: what the toast says about it, and what its Copy hands over.
-
 use super::helpers::*;
 use crate::config;
 use std::fs;

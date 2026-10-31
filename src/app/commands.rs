@@ -1,12 +1,8 @@
-//! The commands the app can run, whether a shortcut, the command bar, or a menu asks for them,
-//! and the keybinding recorder the settings panel edits.
-
 use crate::app::App;
 use crate::keybinds::Action;
 use crate::recorder::{Outcome, Recorder};
 use rune::{PhysicalInput, Shortcut, ShortcutError, TextEdit, Tx};
 
-/// The categories the settings panel's sidebar lists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
     General,
@@ -21,7 +17,6 @@ impl SettingsTab {
         SettingsTab::Keybinds,
     ];
 
-    /// The stable name the element keys use.
     pub fn id(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
@@ -30,7 +25,6 @@ impl SettingsTab {
         }
     }
 
-    /// What the sidebar calls it.
     pub fn label(self) -> &'static str {
         match self {
             SettingsTab::General => "General",
@@ -46,7 +40,6 @@ pub struct Palette {
 }
 
 impl App {
-    /// Shows the command bar, empty, with its field ready for typing.
     pub fn open_palette(&mut self) {
         let mut query = TextEdit::new("");
         query.focused = true;
@@ -57,12 +50,10 @@ impl App {
         self.palette = None;
     }
 
-    /// Puts the keyboard in the search field, leaving what is already typed there to edit.
     pub fn focus_search(&mut self) {
         self.search.focused = true;
     }
 
-    /// The bar's text field (`TextInput::on_edit`).
     pub fn palette_edit(&mut self) -> &mut TextEdit {
         &mut self
             .palette
@@ -71,8 +62,6 @@ impl App {
             .query
     }
 
-    /// The commands the bar lists: every registry action but its own opener, filtered by the
-    /// query against the label or the id.
     pub fn palette_actions(&self) -> Vec<Action> {
         let query = self
             .palette
@@ -90,8 +79,6 @@ impl App {
             .collect()
     }
 
-    /// The filter changed: the first row is selected again, and the list goes back to the top
-    /// so the row that is now highlighted is the one in view.
     pub fn palette_requery(&mut self, tx: &mut Tx) {
         if let Some(palette) = &mut self.palette {
             palette.selected = 0;
@@ -99,8 +86,6 @@ impl App {
         tx.scroll_to_y("command-scroll", 0.0);
     }
 
-    /// Moves the highlight and scrolls the list so the row it lands on comes into view clear of
-    /// the edges. The viewport's `scroll_margin` keeps a few rows around it.
     pub fn palette_move(&mut self, delta: isize, tx: &mut Tx) {
         let actions = self.palette_actions();
         if actions.is_empty() {
@@ -116,7 +101,6 @@ impl App {
         tx.scroll_into_view(format!("command-{}", action.id()));
     }
 
-    /// Runs the selected command and closes the bar.
     pub fn run_palette_command(&mut self, tx: &mut Tx) {
         let actions = self.palette_actions();
         let selected = self.palette.as_ref().map(|p| p.selected).unwrap_or(0);
@@ -127,7 +111,6 @@ impl App {
         }
     }
 
-    /// Runs a command picked with the pointer, and closes the bar.
     pub fn choose_command(&mut self, action: Action, tx: &mut Tx) {
         self.close_palette();
         self.run_action(action, tx);
@@ -149,8 +132,6 @@ impl App {
         self.settings = Some(tab);
     }
 
-    /// Escape out of the settings panel. The Rules tab's open form takes it first, so the form
-    /// closes and the panel behind it stays open. The work in it is not lost with the panel.
     pub fn dismiss_settings(&mut self) {
         if self.settings == Some(SettingsTab::Rules) && self.rule_edit.is_some() {
             self.discard_rule_edit();
@@ -163,21 +144,17 @@ impl App {
         self.settings = None;
         self.rule_edit = None;
         self.rule_delete_ask = None;
-        // A drag left half-done would keep its rows shifted the next time the tab opens.
         self.rule_drag = Default::default();
         self.rule_query = None;
         self.rule_reveal = None;
     }
 
-    /// Opens `config.kdl` in the system's editor, from the Rules tab's error banner.
     pub fn open_config_in_editor(&mut self) {
         if let Some(path) = self.store.path(crate::config::CONFIG) {
             let _ = super::paths::open_external(&path);
         }
     }
 
-    /// A recorder proposed `shortcut` for `action`. Refuse a chord another action uses and save
-    /// the change; the recorder's field shows any error.
     pub fn set_binding(
         &mut self,
         action: Action,
@@ -190,9 +167,6 @@ impl App {
         Ok(())
     }
 
-    /// One physical input for the settings recorder listening on `action`: Escape cancels,
-    /// Backspace clears, and any other chord is proposed to the keybinds, which may refuse it
-    /// as a conflict. Returns whether the recorder took it.
     pub fn record_key(&mut self, action: Action, event: &PhysicalInput) -> bool {
         let Some(recorder) = self.recorders.get_mut(&action) else {
             return false;
@@ -216,8 +190,6 @@ impl App {
         }
     }
 
-    /// Takes one shortcut out of `keybinds.kdl`, so its built-in chord applies again, and puts
-    /// the field back to rest.
     pub fn reset_binding(&mut self, action: Action) {
         self.keybinds.reset(action);
         let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
@@ -226,14 +198,11 @@ impl App {
         self.recorders.insert(action, Recorder::default());
     }
 
-    /// Whether `action` has something to do right now: Back needs history, and the file
-    /// operations need a selection. The command bar dims the rest.
     pub fn action_enabled(&self, action: Action) -> bool {
         match action {
             Action::Back => self.can_back(),
             Action::Forward => self.can_forward(),
             Action::EnclosingFolder => self.can_up(),
-            // Only one file can be renamed at a time; the rest take the selection.
             Action::Rename => self.selection_len() == 1,
             Action::Move | Action::Trash | Action::Copy | Action::Cut | Action::Duplicate => {
                 self.selection_len() > 0
@@ -246,7 +215,6 @@ impl App {
         }
     }
 
-    /// Runs `action` when it applies, whatever asked: a shortcut, the command bar or a menu.
     pub fn run_action(&mut self, action: Action, tx: &mut Tx) {
         if !self.action_enabled(action) {
             return;

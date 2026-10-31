@@ -1,6 +1,3 @@
-//! Sheath: a small file manager built entirely with Rune's view, layout, input, animation and
-//! rendering layers.
-
 mod app;
 mod config;
 mod corner;

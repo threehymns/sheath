@@ -1,5 +1,3 @@
-//! The sidebar's places: dragging them into a new order, and the state file that remembers it.
-
 use super::helpers::*;
 use crate::places::{Places, Section};
 use std::fs;
@@ -36,7 +34,6 @@ fn dragging_a_place_down_moves_it_and_writes_the_file() {
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, below);
-    // The rows step aside on a spring, so let the gap finish opening.
     for _ in 0..10 {
         rt.frame(0.05);
     }
@@ -102,7 +99,6 @@ fn a_place_that_is_not_on_screen_keeps_its_slot_and_unknown_nodes_survive() {
             (missing_id.clone(), missing.display().to_string()),
             (second_id.clone(), second.display().to_string()),
         ],
-        // A node a later release writes, such as its drive detection: this release keeps it.
         "drives {\n    detect-external-drives #true\n}\n",
     );
 
@@ -162,7 +158,6 @@ fn dropping_a_folder_on_a_section_adds_it_as_a_place() {
     let (section, _) = rt
         .presented("places-favourites")
         .expect("the favourites section is drawn");
-    // The heading band above the rows: a drop there adds, where a drop on a row moves.
     let (x1, y1) = (section[0] + 40.0, section[1] + 12.0);
     rt.pointer_down(x0, y0);
     rt.frame(0.05);
@@ -227,7 +222,6 @@ fn dropping_between_places_inserts_there_with_a_preview() {
     let (second_row, _) = rt
         .presented(&format!("place-{second_id}"))
         .expect("the second place is on screen");
-    // The two point gap between the rows, where an item dropped lands in the order.
     let (x, y) = (alpha_row[0] + 40.0, alpha_row[1] + alpha_row[3] + 1.0);
 
     let (x0, y0) = name_point(&rt, "f:inbox");
@@ -316,7 +310,6 @@ fn a_file_place_opens_its_folder_with_the_file_selected() {
     rt.frame(0.1);
     assert!(notes.is_file(), "the file did not move");
 
-    // Pick another row, so the file being selected afterwards says the place did it.
     click(&mut rt, "f:file2.txt");
     let key = format!("place-file:{}", notes.display());
     let (x, y) = rt.find(&key).expect("the file is a place now");

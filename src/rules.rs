@@ -1,7 +1,3 @@
-//! Folder and entry rules: the nodes in `config.kdl` and the presentation a folder resolves to.
-//! Everything here is pure: it takes a parsed document and a path, and returns what the browser
-//! should show.
-
 use crate::app::Layout;
 use kdl::{KdlDocument, KdlNode};
 use rune_kit::SortDir;
@@ -11,22 +7,18 @@ mod pattern;
 
 pub use pattern::{glob, path_match, quote};
 
-/// Which listing a rule governs: a folder's own presentation, or one entry's presence in the
-/// folder that lists it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Folder,
     Entry,
 }
 
-/// What an entry is, for `kind="folder"` and `kind="file"`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EntryKind {
     File,
     Folder,
 }
 
-/// The orderings a folder rule can name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SortKey {
     Name,
@@ -43,8 +35,6 @@ impl SortKey {
         }
     }
 
-    /// The key a column's string id names; the browser keeps the id, and this is the one place
-    /// that turns it back.
     pub fn from_column(value: &str) -> Option<SortKey> {
         match value {
             "name" => Some(SortKey::Name),
@@ -55,8 +45,6 @@ impl SortKey {
     }
 }
 
-/// One `match` or `exclude` directive: every field it names must hold for the entry or folder
-/// to count as matched.
 #[derive(Clone, Debug, Default)]
 pub struct Matcher {
     pub path: Option<String>,
@@ -67,7 +55,6 @@ pub struct Matcher {
     pub max_items: Option<usize>,
 }
 
-/// One entry as a matcher sees it.
 pub struct EntryRef<'a> {
     pub path: &'a str,
     pub name: &'a str,
@@ -109,7 +96,6 @@ impl Matcher {
                 .is_none_or(|kind| (kind == EntryKind::Folder) == entry.is_dir)
     }
 
-    /// The directive as the Rules tab prints it.
     pub fn summary(&self) -> String {
         let mut parts = Vec::new();
         if let Some(path) = &self.path {
@@ -140,7 +126,6 @@ impl Matcher {
     }
 }
 
-/// A rule property: absent, set to a value, or set to `inherit` to undo an earlier rule's value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Prop<T> {
     Unset,
@@ -154,7 +139,6 @@ impl<T> Default for Prop<T> {
     }
 }
 
-/// What a rule sets. A folder rule reads the first four; an entry rule reads `hidden`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Props {
     pub layout: Prop<Layout>,
@@ -164,7 +148,6 @@ pub struct Props {
     pub hidden: Prop<bool>,
 }
 
-/// One `folder-rule` or `entry-rule`, in file order.
 #[derive(Clone, Debug)]
 pub struct Rule {
     pub name: Option<String>,
@@ -193,7 +176,6 @@ impl Rule {
         matched && !self.excludes.iter().any(|m| m.matches_entry(entry))
     }
 
-    /// The rule as the Rules tab names it: the name it was given, or its first matcher.
     pub fn summary(&self) -> String {
         if let Some(name) = &self.name {
             return name.clone();
@@ -210,7 +192,6 @@ impl Rule {
         }
     }
 
-    /// The kind as the tab labels it.
     pub fn kind_label(&self) -> &'static str {
         match self.kind {
             Kind::Folder => "Folder",
@@ -218,7 +199,6 @@ impl Rule {
         }
     }
 
-    /// The rule's matchers and properties, as the tab and the picker print them.
     pub fn details(&self) -> String {
         let mut parts = Vec::new();
         for matcher in &self.matches {
@@ -264,8 +244,7 @@ impl Rule {
         }
     }
 
-    /// The rule as the `folder-rule` or `entry-rule` node it lives as, in the shape the parser
-    /// reads back. The editor writes this over the old node, so nothing else in the file moves.
+    // The node as the parser reads it back. The editor writes this over the rule's old node.
     pub fn to_kdl(&self) -> String {
         let head = match self.kind {
             Kind::Folder => "folder-rule",
@@ -317,7 +296,6 @@ impl Rule {
     }
 }
 
-/// One `match` or `exclude` line, with only the keys the directive names.
 fn directive(name: &str, matcher: &Matcher) -> String {
     let mut parts = vec![name.to_owned()];
     if let Some(path) = &matcher.path {
@@ -347,14 +325,11 @@ fn directive(name: &str, matcher: &Matcher) -> String {
     format!("    {}\n", parts.join(" "))
 }
 
-/// Every rule, in the order the file holds them.
 #[derive(Clone, Debug, Default)]
 pub struct Rules {
     pub rules: Vec<Rule>,
 }
 
-/// The presentation a folder resolves to. `None` means no rule spoke, so the remembered or
-/// global value applies.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Resolved {
     pub layout: Option<Layout>,
@@ -364,7 +339,6 @@ pub struct Resolved {
 }
 
 impl Resolved {
-    /// Fills what this resolution leaves unset from `fallback`.
     pub fn or(self, fallback: Resolved) -> Resolved {
         Resolved {
             layout: self.layout.or(fallback.layout),
@@ -384,9 +358,6 @@ fn merge<T: Copy>(slot: &mut Option<T>, prop: Prop<T>) {
 }
 
 impl Rules {
-    /// Reads every `folder-rule` and `entry-rule` in the document, in file order. A property or
-    /// matcher the schema does not know is an error: the caller keeps its last good rules and
-    /// says why.
     pub fn parse(doc: &KdlDocument) -> Result<Rules, String> {
         let mut rules = Vec::new();
         for node in doc.nodes() {
@@ -415,8 +386,6 @@ impl Rules {
         resolved
     }
 
-    /// The first rule matching a folder, in file order, for the command that opens the tab on
-    /// the rule controlling what is on screen.
     pub fn first_folder(&self, path: &Path, count: usize) -> Option<usize> {
         let path = path.to_string_lossy();
         self.rules
@@ -424,15 +393,12 @@ impl Rules {
             .position(|rule| rule.applies_to_folder(&path, count))
     }
 
-    /// The first rule matching an entry, in file order.
     pub fn first_entry(&self, entry: &EntryRef<'_>) -> Option<usize> {
         self.rules
             .iter()
             .position(|rule| rule.applies_to_entry(entry))
     }
 
-    /// Whether a rule hides or reveals `entry`, after the folder's own hidden policy applies.
-    /// `None` leaves the folder's decision alone.
     pub fn hidden(&self, entry: &EntryRef<'_>) -> Option<bool> {
         let mut hidden = None;
         for rule in &self.rules {

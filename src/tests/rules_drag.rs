@@ -1,5 +1,3 @@
-//! Dragging a rule to a new place in the list: the lift, the gap, the drop, and a cancel.
-
 use super::helpers::*;
 use crate::rules::Kind;
 use std::fs;
@@ -29,7 +27,6 @@ fn dragging_a_rule_rewrites_the_file_order() {
     rt.pointer_down(x, y);
     rt.frame(0.02);
     rt.pointer_move(x, y + 60.0);
-    // The rows step aside on a spring, so let the gap finish opening before reading it.
     for _ in 0..10 {
         rt.frame(0.05);
     }
@@ -164,7 +161,6 @@ fn a_drag_does_not_start_while_the_editor_holds_changes() {
     rt.state.apply_rule_fields();
     rt.frame(0.05);
 
-    // The open form takes its row's place, so the drag starts on the rule below it.
     let (x, y) = rt
         .find("rule-second-0")
         .expect("the second rule is on screen");
@@ -215,7 +211,6 @@ fn a_drag_closes_a_clean_editor_before_reordering() {
     click(&mut rt, "rule-first-0");
     assert!(rt.state.rule_edit.is_some(), "the form is open");
 
-    // The open form takes its row's place, so the drag starts on the rule below it.
     let (x, y) = rt
         .find("rule-second-0")
         .expect("the second rule is on screen");
@@ -257,10 +252,7 @@ fn a_dragged_rule_is_drawn_whole_above_the_card_it_came_from() {
         .expect("the first rule is on screen");
     rt.pointer_down(x, y);
     rt.frame(0.02);
-    // High enough to clear the card's top edge, and still inside the panel's viewport, which
-    // clips everything in it.
     rt.pointer_move(x, y - 32.0);
-    // The row in hand follows the pointer on a spring, so let it finish rising.
     for _ in 0..10 {
         rt.frame(0.05);
     }
@@ -275,8 +267,6 @@ fn a_dragged_rule_is_drawn_whole_above_the_card_it_came_from() {
         lifted[1] < card[1],
         "the row in hand rides above the card: {lifted:?} from {card:?}"
     );
-    // The card clips its rows while a form springs open in it; a row in hand must not be cut
-    // by the card it is leaving.
     let shown = rt
         .elements()
         .into_iter()

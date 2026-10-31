@@ -1,8 +1,3 @@
-//! The rule form: the editor the Rules tab opens under a row. It lays out the draft's name,
-//! kind, matches, excludes and properties, each under its own heading; every control edits the
-//! draft, and Save writes it. Save and Discard Changes are up only while the draft differs from
-//! the file, so a form opened on a rule has nothing to press.
-
 mod fields;
 
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
@@ -18,47 +13,29 @@ use rune_theme_opencode as theme;
 
 use super::settings::{SETTINGS_CARD_WIDTH, SETTINGS_ROW_INSET};
 
-/// The width of a property's field, and of the two menus that are not properties.
 const PROP_WIDTH: f32 = 150.0;
 const KIND_WIDTH: f32 = 110.0;
 
-/// The form's actions: each button's width, the space between them, the small control's 20-point
-/// height, and the card kept around them. The bite is cut to whichever are up, so it never leaves
-/// more card around them than the gap.
 const CANCEL_WIDTH: f32 = 66.0;
 const SAVE_WIDTH: f32 = 52.0;
 const ACTIONS_HEIGHT: f32 = 20.0;
 const ACTIONS_SPACING: f32 = 6.0;
 const ACTIONS_GAP: f32 = 8.0;
 
-/// The sliver of card kept around the form, whose corners the form's are set concentric with.
 const WELL_MARGIN: f32 = 4.0;
 
-/// The height of the line under the form's head that a refused Save explains itself on. The
-/// line is always in the layout at this height, empty or not, so a message arriving or leaving
-/// cannot move the sections under it; it is one line tall, so a longer sentence cannot either.
 const PROBLEM_HEIGHT: f32 = 16.0;
 
-/// The form's width: the card's, less the sliver on either side.
 const WELL_WIDTH: f32 = SETTINGS_CARD_WIDTH - 2.0 * WELL_MARGIN;
 
-/// What an entry matcher's `kind` accepts, as its field lists them.
 const KINDS: &[&str] = &["any", "file", "folder"];
 
-/// The open rule's form: its name, a line per match and exclude, and a line per property the
-/// rule sets. A property's field lists every value the file accepts, `inherit` included, and the
-/// button beside it takes the property back out; Add Property offers the properties the rule does
-/// not set yet. It edits a draft; Save writes it and Discard Changes drops it. The rule's kind is
-/// fixed: it is the section the form hangs in, so the form cannot move a rule to the other one.
 pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     let head = row()
         .w_full()
         .gap(8.0)
         .center_y()
         .child(rule_name_field(k, &edit.fields));
-    // The form is cut into the card rather than laid on top of it: a sliver of card around it,
-    // corners concentric with the card's, a fill a clear step darker, and an inset shade along
-    // the top edge.
     let mut form = col()
         .key(format!("rule-editor-{}", edit.index))
         .w(WELL_WIDTH)
@@ -141,11 +118,6 @@ pub(super) fn rule_editor(k: &Kit, edit: &RuleEdit) -> El {
     form
 }
 
-/// The form's actions in a bite out of its top-right corner, on the card rather than in the
-/// form. The cut is painted first, so the buttons look set into the card, as a dialog's Done
-/// sits outside its panel. The bite is the buttons plus a gap all round, and the corners stay
-/// concentric: the buttons' radius is the form's less the gap, and the bite's inner corner is a
-/// gap wider. Cancel is always up; Save arrives once there is something to write.
 fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
     let mut buttons = row()
         .key("rule-editor-actions")
@@ -162,7 +134,6 @@ fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
                 .w(CANCEL_WIDTH),
         );
     let mut width = CANCEL_WIDTH;
-    // A rule the file does not hold yet has something to write from the moment its form opens.
     if edit.new || edit.shown_dirty {
         buttons = buttons.child(
             Button::new("Save")
@@ -197,14 +168,10 @@ fn actions(k: &Kit, edit: &RuleEdit) -> Vec<El> {
     ]
 }
 
-/// The form's corner radius: the card's less the sliver kept around it, so the two curves are
-/// concentric.
 fn well_radius(k: &Kit) -> f32 {
     (k.radius.lg - WELL_MARGIN).max(0.0)
 }
 
-/// One `match` or `exclude` directive: a field per key the rule's kind accepts, and a button
-/// that drops it.
 fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index: usize) -> El {
     let list = if exclude { "x" } else { "m" };
     let prefix = format!("{list}{index}");
@@ -275,14 +242,10 @@ fn matcher_row(k: &Kit, edit: &RuleEdit, matcher: &Matcher, exclude: bool, index
             .on_press(move |s: &mut App| s.remove_matcher(exclude, index))
             .build(k)
             .key(format!("remove-{prefix}"))
-            // The line is the group: the button is found once the pointer rests on it.
             .group_opacity(0.0, 1.0),
     )
 }
 
-/// The form's line for what Save refused, in the form's own words. It is drawn whether or not
-/// there is anything to say, because an empty one shows nothing, so pressing Save and typing the
-/// refusal away again leaves every row under it where it was.
 fn problem_line(k: &Kit, problem: Option<&str>) -> El {
     let mut line = row()
         .key("rule-editor-problem")
@@ -302,19 +265,14 @@ fn problem_line(k: &Kit, problem: Option<&str>) -> El {
     line
 }
 
-/// What an open form is filled with: black laid straight over the card, so the form is a clear
-/// step darker than the rows above it in either appearance. A solved token would depend on what
-/// the kit blends over, which is not the card the form actually sits on.
 fn well(k: &Kit) -> Color {
     k.c.black.alpha(if k.dark { 0.45 } else { 0.05 })
 }
 
-/// A section's line for when it holds nothing, in the same faded type as the rest.
 fn empty_line(k: &Kit, message: &str) -> El {
     text(message).font(k.ty.small).color(k.c.text_faint).wrap()
 }
 
-/// The kind a field lists, as the file's `kind` words it.
 fn kind_label(kind: Option<EntryKind>) -> &'static str {
     match kind {
         None => "any",
@@ -323,10 +281,6 @@ fn kind_label(kind: Option<EntryKind>) -> &'static str {
     }
 }
 
-/// The properties the rule sets, one line apiece, under their own heading. The field beside each
-/// name lists every value the file accepts, and the button at the line's end, shown while the
-/// pointer is over the line, takes the property back out so the rules above decide it. Add
-/// Property offers the properties the rule does not set yet.
 fn properties(k: &Kit, edit: &RuleEdit) -> El {
     let unset: Vec<&str> = RuleProp::all(edit.draft.kind)
         .iter()
@@ -346,7 +300,6 @@ fn properties(k: &Kit, edit: &RuleEdit) -> El {
                     .grow(1.0),
             )
             .child(
-                // The menu hangs off this key, so the button is the list's trigger.
                 Button::new("Add Property")
                     .variant(ButtonVariant::Outline)
                     .control_size(ControlSize::Small)
@@ -370,8 +323,6 @@ fn properties(k: &Kit, edit: &RuleEdit) -> El {
     section
 }
 
-/// One property the rule sets: its name, the field that lists its values, and the button that
-/// takes it out of the rule.
 fn property_line(k: &Kit, edit: &RuleEdit, prop: RuleProp) -> El {
     let name = prop.name();
     row()
@@ -401,14 +352,10 @@ fn property_line(k: &Kit, edit: &RuleEdit, prop: RuleProp) -> El {
                 .on_press(move |s: &mut App| s.clear_rule_prop(prop))
                 .build(k)
                 .key(format!("clear-prop-{name}"))
-                // The line is the group: the button is there to be found once the pointer
-                // rests on it, and out of the way the rest of the time.
                 .group_opacity(0.0, 1.0),
         )
 }
 
-/// The form's open menu, mounted after the settings panel so it paints above the panel it
-/// hangs from. The form's fields are the triggers; the list anchors to whichever one asked.
 pub(super) fn rule_editor_layers(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(edit) = &s.rule_edit else {
         return;

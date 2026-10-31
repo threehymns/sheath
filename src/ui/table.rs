@@ -1,5 +1,3 @@
-//! The file table: its header, the columns, and the virtualised rows the app draws itself.
-
 use crate::app::{App, ROW_HEIGHT};
 use crate::format;
 use crate::icons;
@@ -10,11 +8,8 @@ use rune::{
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
-/// The column header's height, which the grid's sort toolbar shares so the two layouts start
-/// their items at the same place.
 pub(super) const HEADER_HEIGHT: f32 = 32.0;
 
-/// The table's measurements, shared with anything else that draws its parts.
 pub(super) fn browser_style(k: &Kit) -> TableStyle {
     TableStyle {
         row_height: ROW_HEIGHT,
@@ -23,9 +18,8 @@ pub(super) fn browser_style(k: &Kit) -> TableStyle {
     }
 }
 
-/// How a layout's parts enter. A layout that came with the folder cuts in: Rune fades every
-/// element on mount, so the root's `Transition::none()` alone still let the header, the
-/// viewport and the rows fade in behind it. A layout the user asked for keeps that fade.
+// Rune fades every element on mount, so each part cuts in; the root's own Transition::none is
+// not enough.
 pub(super) fn mount(cut: bool) -> Transition {
     if cut {
         Transition::none()
@@ -36,11 +30,7 @@ pub(super) fn mount(cut: bool) -> Transition {
 
 pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
     let style = browser_style(k);
-    // The viewport's own offset, told in the frame that scrolls it, so the wheel and its coast
-    // start where the rows really are rather than where their rects last reported.
     let told = s.scroll_told.clone();
-    // The presses, the keys and the drags live on the scrolling viewport, so a press on the
-    // empty space below the rows starts a selection box too.
     let viewport = col()
         .key("files-table")
         .role("grid")
@@ -52,8 +42,6 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
             stick_bottom: false,
         })
         .focusable(true)
-        // Focus shows in the selected row, as it does in a Finder list: a ring around the
-        // viewport would be clipped by it and read as a border under the header.
         .no_focus_ring()
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
         .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
@@ -62,7 +50,6 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .on_layout(|s: &mut App, rect| s.rows_view = rect)
         .on_scroll_offset(move |at| told.set(at))
         .transition(mount(cut))
-        // The bounce moves the rows without moving the viewport, so its edges stay put.
         .child(
             file_rows(s, k, style)
                 .transition(mount(cut))
@@ -73,15 +60,11 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .w_full()
         .h_full()
         .min_h(0.0)
-        // The table itself lands at once, so a folder that changes between empty and
-        // listed does not cross-fade its whole list.
         .transition(Transition::none())
         .child(file_header(s, k, &style).transition(mount(cut)))
         .child(viewport)
 }
 
-/// The column titles: a click sorts by that column, another click reverses it, and the edge of
-/// a fixed column drags it wider.
 fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
     let (column, direction) = s.sort_column();
     row()
@@ -158,13 +141,10 @@ fn header_cell(
             .w(width)
             .child(column_resize(id, title, width, style.rule))
             .key(id),
-        // The name column takes what the fixed ones leave.
         None => cell.grow(1.0).shrink().min_w(200.0).key(id),
     }
 }
 
-/// A column's title and, when it is the sorted column, the arrow that points the way it sorts.
-/// The header and the grid's sort toolbar both draw their controls from this.
 pub(super) fn sort_label(
     k: &Kit,
     style: &TableStyle,
@@ -186,8 +166,6 @@ pub(super) fn sort_label(
         .min_w(0.0);
     let mut inner = row().gap(2.0).center_y().min_w(0.0).shrink().child(label);
     if let Some(direction) = sorted {
-        // One chevron, turned over for the ascending sort, so reversing a column springs the
-        // arrow round rather than swapping one glyph for another.
         let turn = if direction == SortDir::Ascending {
             std::f32::consts::PI
         } else {
@@ -203,8 +181,6 @@ pub(super) fn sort_label(
     inner
 }
 
-/// The drag target on a header cell's trailing edge: dragging it resizes the column, a double
-/// click puts it back.
 fn column_resize(id: &'static str, title: &'static str, width: f32, rule: rune::Color) -> El {
     row()
         .key("resize")
@@ -227,16 +203,10 @@ fn column_resize(id: &'static str, title: &'static str, width: f32, rule: rune::
         .child(el().key("line").w(1.0).h_full().fill(rule))
 }
 
-/// The rows themselves: app-drawn so the app owns the selection, the clicks and the box a drag
-/// draws over them.
 fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
     col()
         .key("file-rows")
         .w_full()
-        // Rows land where they belong: no enter or exit fade, no hover or selection
-        // crossfade, and no glide when a sort, a filter or a refresh moves them. The list's
-        // own motion is the viewport's scroll spring and the app's overshoot, outside this
-        // subtree.
         .motion(Spring::NONE)
         .instant_changes()
         .hover_motion_within(Spring::NONE, Spring::NONE)
@@ -264,15 +234,11 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .h(ROW_HEIGHT)
         .center_y()
         .transition(Transition::none())
-        // The row's own hover overlay lands with the pointer, rather than fading: the
-        // nearest pair wins over anything the shell set above the list.
         .hover_motion(Spring::NONE, Spring::NONE);
     if s.is_cut(&entry.path) {
-        // Cut rows wait, dimmed, for a paste.
         line = line.opacity(0.45);
     }
     line = if s.drop_row() == Some(i) {
-        // The folder a dragged selection would land in.
         line.fill(k.alpha(k.c.text_accent, 0.3))
             .outline(1.0, -1.0, k.c.border_focus)
     } else if s.is_selected(&entry.id) {
@@ -305,9 +271,6 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
     } else {
         k.c.icon_muted
     };
-    // The name sizes itself to the text it shows and reports where it ended: the handle a
-    // row is picked up by is its icon and name, not the whole, much wider, name column. The
-    // cell still spans the column, so a long name truncates at its edge.
     let path = entry.path.display().to_string();
     let name = text(entry.name.clone())
         .key(format!("name-{}", entry.id))
@@ -403,8 +366,6 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
         .h_full()
         .center()
         .gap(6.0)
-        // A folder that turns out empty shows its message at once, rather than fading in
-        // over the list on the way to it.
         .transition(Transition::none())
         .child(icon(glyph, 40.0).color(k.c.icon_faint))
         .child(text(title).font(k.ty.ui_medium).color(k.c.text_muted))

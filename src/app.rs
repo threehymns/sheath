@@ -1,11 +1,3 @@
-//! The browser's state: the folder on screen, its entries, navigation history, the search
-//! filter, and the selected entry's preview.
-//!
-//! Each job has its own module: `browse` reads and orders the folder, `grid` lays out the
-//! tiles, `selection` picks rows, `drag` runs the pointer gestures, `drop` decides where they
-//! land, `files` and `sheets` change files, `commands` runs what a shortcut or menu asks for,
-//! `scrolling` coasts the list, and `input` takes the window's keys.
-
 mod browse;
 mod commands;
 mod drag;
@@ -67,42 +59,25 @@ use scan::Scan;
 use scroll::Scroll;
 use watch::Watch;
 
-/// A row's height in the file list, in points. The pointer maths and the view share it.
 pub const ROW_HEIGHT: f32 = 30.0;
 
-/// The space between two sidebar rows, from `SidebarSection`'s own gap.
 pub const PLACE_ROW_GAP: f32 = 2.0;
 
-/// A sidebar row's height, from the kit. The insertion preview moves the rows under it by this
-/// plus the gap.
 pub const PLACE_ROW_HEIGHT: f32 = rune_kit::shell::ROW_HEIGHT;
 
 pub struct App {
     pub cwd: PathBuf,
     pub entries: Vec<Entry>,
-    /// Indices into `entries` that pass the hidden-file and search filters, in table order.
     pub visible: Vec<usize>,
-    /// The selected rows' ids. The list shows them in table order whatever order they were
-    /// picked in.
     pub selection: BTreeSet<String>,
-    /// The keyboard cursor and the row the inspector shows.
     pub selected: Option<String>,
-    /// The row a Shift-click, a Shift-arrow or a box a Shift-drag draws starts from.
     pub anchor: Option<String>,
-    /// The column the list sorts by, and which way.
     pub sort: (String, SortDir),
-    /// Whether the folder is a table of rows or a grid of tiles.
     pub layout: Layout,
-    /// Whether that layout arrived with the folder rather than from the user's toggle. A
-    /// layout a folder brought lands at once; one the user asked for keeps its fade.
     pub layout_cut: bool,
-    /// The drag box, while the pointer is down in the list's empty space.
     pub marquee: Option<Marquee>,
-    /// The rows being dragged toward a folder, while the pointer is down on a row.
     pub file_drag: Option<FileDrag>,
-    /// The rows copied or cut, waiting to be pasted.
     pub clipboard: Option<Clipboard>,
-    /// What has been typed since the last pause, for jumping to a row by name.
     pub typeahead: String,
     typeahead_at: Option<Instant>,
     pub preview: Option<Preview>,
@@ -114,101 +89,55 @@ pub struct App {
     pub at: usize,
     pub error: Option<String>,
     pub sheet: Option<Sheet>,
-    /// Where the row menu opened, from the right-click that opened it.
     pub menu: Option<PointerPress>,
-    /// The sidebar place menu, while it's up, and the press that opened it.
     pub place_menu: Option<PlaceMenu>,
-    /// The place whose display name is being edited in its sidebar row, while the field is up.
     pub place_rename: Option<PlaceRename>,
     pub settings: Option<SettingsTab>,
     pub palette: Option<Palette>,
-    /// The global settings from `config.kdl`: hidden files, the inspector, and the scrolling.
     pub config: Settings,
-    /// The parsed rules from `config.kdl`, in file order.
     pub rules: Rules,
-    /// Why the rules could not be read, for the Rules tab.
     pub rule_error: Option<String>,
-    /// The rule drag in the tab's list: the row in hand, the place it would land in, and how
-    /// far the rows have moved aside for it.
     pub rule_drag: RuleDrag,
     pub rule_picker: Option<usize>,
-    /// The key of the rule the tab should scroll to once its row is laid out, and the frames
-    /// left to wait.
     pub rule_reveal: Option<(String, u8)>,
-    /// What a command asked about that no rule matches, so the tab can say so.
     pub rule_query: Option<String>,
     pub rule_edit: Option<RuleEdit>,
-    /// The rule whose delete is waiting on a second press, while the row asks.
     pub rule_delete_ask: Option<usize>,
-    /// Whether the rule press in flight became a drag, so its release does not open the form.
     pub rule_dragged: bool,
-    /// A presentation the user chose for this visit, over what the rules say. Cleared on every
-    /// navigation, so a rule wins again the next time the folder opens.
     pub visit: Resolved,
-    /// What each folder was left showing, in the state directory.
     pub views: Views,
-    /// The sidebar's places, in the order the user left them, from the state directory.
     pub places: Places,
-    /// The two place lists' drags: each numbers its own rows, so each keeps its own.
     pub favourites_drag: Reorder,
     pub locations_drag: Reorder,
-    /// A drop that moved a place, so the press that ends the gesture does not open a folder.
-    /// The drop's callback runs before that press.
     pub place_dragged: bool,
-    /// What the corner is saying about a config file the app cannot read.
     pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
-    /// One recorder per action, holding what its field is listening for and any refusal.
     pub recorders: BTreeMap<Action, Recorder>,
-    /// The config folder's documents and the watcher that keeps them current.
     pub store: Store,
-    /// Where the list's viewport is scrolled to and how far it can go, told by its
-    /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts here rather than
-    /// from the rows' rects, which are reported a frame late and only once they have moved far
-    /// enough, so a fast scroll would jump back by what the last frame moved.
     pub scroll_told: Rc<Cell<ScrollPos>>,
-    /// The list viewport's rect in window points, from the last layout.
     pub rows_view: [f32; 4],
-    /// The wheel's inertia, the overscroll past the ends, and the drag that pushes the list.
     scroll: Scroll,
-    /// The sidebar places' rects in window points and their folders, from the last layout,
-    /// keyed by place id, for a dragged row to be dropped on one or between two.
     pub places_at: BTreeMap<String, PlaceAt>,
-    /// Each sidebar section's rect in window points, from the last layout. A row dropped on its
-    /// heading or in the space between its rows is added to it as a place.
     pub sections_at: BTreeMap<Section, [f32; 4]>,
-    /// Where each row's name ended, in window points, keyed by path, from the last layout.
-    /// Only layout knows how wide the text is, so the press that picks a row up reads its
-    /// handle from here.
     pub name_at: BTreeMap<String, f32>,
-    /// The Size and Date columns' widths, which header dragging changes.
     pub size_width: f32,
     pub date_width: f32,
-    /// The folder read in flight, whose answer the next `poll` applies.
     scan: Latest<Scan>,
-    /// The open folder's watcher, which reloads the rows when something else changes it.
     watch: Watch,
-    /// The rows a file operation made or renamed, to select once the read that follows lands,
-    /// and whether the list should scroll to the first of them.
     pending_select: Option<(Vec<String>, bool)>,
-    /// The row the next `poll` scrolls into view, once the read holding it has landed.
     pending_reveal: Option<String>,
 }
 
 impl App {
-    /// Starts at a folder given on the command line, or at home, with the saved settings.
     pub fn new() -> App {
         let (dir, selected) = start_location();
         let mut app = App::open(dir);
         if let Some(name) = selected {
-            // The folder's rows land off the main thread, so the row named on the command
-            // line is selected by the read that finds it.
             app.pending_select = Some((vec![format!("f:{name}")], false));
         }
         app
     }
 
-    /// Opens `path` with the saved settings, rules, and remembered state.
     pub fn open(path: PathBuf) -> App {
         let store = Store::open();
         let config = Settings::from_doc(store.doc(config::CONFIG));
@@ -223,8 +152,6 @@ impl App {
         app
     }
 
-    /// Opens `path` with `config`, for a launch that already knows its settings, and for tests
-    /// that keep the real config folder untouched.
     #[cfg(test)]
     pub fn open_with(path: PathBuf, config: Settings) -> App {
         let mut app = App::blank(config, Store::none(), Keybinds::defaults());
@@ -307,8 +234,6 @@ impl App {
         }
     }
 
-    /// Reads the rules out of the config document, keeping the last good ones when the file no
-    /// longer parses, then says in the corner what could not be read.
     pub fn reload_rules(&mut self) {
         if let Some(error) = self.store.error(config::CONFIG) {
             self.rule_error = Some(error.to_owned());
@@ -327,9 +252,6 @@ impl App {
         self.raise_config_notices();
     }
 
-    /// Says, in the corner, which config file the app cannot read and where it stopped. A file
-    /// already up is refreshed rather than stacked, and one that parses again takes its toast
-    /// away.
     pub fn raise_config_notices(&mut self) {
         let mut found = Vec::new();
         for name in [config::CONFIG, config::KEYBINDS] {
@@ -366,8 +288,6 @@ impl App {
         }
     }
 
-    /// Puts a notice's report on the clipboard whole, so it can be pasted where the problem will
-    /// be fixed, and leaves the toast saying so.
     pub fn copy_notice(&mut self, index: usize, tx: &mut Tx) {
         let Some(notice) = self.notices.get_mut(index) else {
             return;
@@ -377,18 +297,13 @@ impl App {
         notice.shown = Instant::now();
     }
 
-    /// Takes one toast away, for its close button.
     pub fn dismiss_notice(&mut self, index: usize) {
         if index < self.notices.len() {
             self.notices.remove(index);
         }
     }
 
-    /// Applies a change made to the config folder from outside: the settings, the keybinds, the
-    /// rules, and whatever the open folder now resolves to.
     pub fn apply_config(&mut self) {
-        // The form names its rule by position in the file. A file that changed on disk may
-        // hold a different rule there, so the draft would land on the wrong node.
         if self.rule_edit.is_some() {
             self.rule_edit = None;
             self.rule_query = Some(
@@ -397,7 +312,6 @@ impl App {
                     .to_owned(),
             );
         }
-        // The question names a rule by the same position, so it is stale for the same reason.
         self.rule_delete_ask = None;
         self.config = Settings::from_doc(self.store.doc(config::CONFIG));
         self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
@@ -407,13 +321,10 @@ impl App {
         self.reload();
     }
 
-    /// The presentation the folder resolves to, before this visit's override.
     pub fn rule_presentation(&self) -> Resolved {
         self.rules.resolve(&self.cwd, self.entries.len())
     }
 
-    /// Applies the visit's override, then the rules, then what the folder was left showing,
-    /// and last the global defaults.
     fn apply_rules(&mut self) {
         let rule = self.rule_presentation();
         let remembered = self.views.get(&self.cwd);
@@ -431,7 +342,6 @@ impl App {
         self.show_hidden = resolved.show_hidden.unwrap_or(self.config.show_hidden);
     }
 
-    /// Records what this folder is showing, which is what it opens with next time.
     fn remember_presentation(&mut self) {
         let sort = SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name);
         self.views.set(
@@ -445,25 +355,19 @@ impl App {
         );
     }
 
-    /// Saves one setting, leaving every other node in the file as it was.
     fn save_setting(&mut self, changed: crate::settings::Setting) {
         let _ = self
             .store
             .edit(config::CONFIG, |doc| self.config.write(doc, changed));
     }
 
-    /// Starts watching the open folder, so something else changing it reloads the rows.
     pub fn watch(&mut self, wake: Waker) {
         self.watch.start(&self.cwd, wake);
     }
 }
 
-/// `AppSpec::setup` hands the config folder's watcher the waker the event loop gave the app, so
-/// a change made in a text editor reaches the open window.
 pub fn setup(s: &mut App, wake: Waker) {
-    // A folder read that lands wakes the window so `poll` applies it.
     s.scan.set_waker(wake.clone());
     s.store.watch(wake.clone());
-    // A change to the open folder from outside reloads it, without the window being touched.
     s.watch(wake);
 }

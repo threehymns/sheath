@@ -1,5 +1,3 @@
-//! The selection box a drag draws.
-
 use super::helpers::*;
 use rune::{Mods, PhysicalInput};
 
@@ -93,7 +91,6 @@ fn a_box_held_at_the_edge_stays_on_the_rows_it_started_on() {
     let (x, from) = (x + 40.0, top + 120.0);
     let to = top + height - 4.0;
     let at_press = scroll_offset(&rt);
-    // Option starts a box on the rows, where a plain press would drag a row instead.
     rt.physical_input(PhysicalInput::Modifiers(Mods {
         alt: true,
         ..Mods::default()
@@ -103,8 +100,6 @@ fn a_box_held_at_the_edge_stays_on_the_rows_it_started_on() {
     rt.pointer_move(x, to);
     rt.frame(0.05);
 
-    // Held against the edge, the rows scroll under the pointer. The corner is a point on the
-    // row it started on, so it moves up with them rather than staying on the screen.
     let before = scroll_offset(&rt);
     for _ in 0..2 {
         rt.frame(1.0 / 60.0);
@@ -149,7 +144,6 @@ fn a_box_that_scrolls_a_screen_keeps_the_rows_that_left_it() {
     rt.pointer_move(x, to);
     rt.frame(0.05);
 
-    // Held at the edge long enough to scroll the rows up by more than a screen.
     for _ in 0..40 {
         rt.frame(1.0 / 60.0);
     }

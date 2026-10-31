@@ -1,5 +1,3 @@
-//! The path bar above the table: breadcrumbs back up the tree, the row count, and Refresh.
-
 use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;

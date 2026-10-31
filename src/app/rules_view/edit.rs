@@ -1,7 +1,3 @@
-//! The rule form's actions: opening a rule as a draft, reading its fields back, saving or
-//! discarding it, and the menus and properties that edit it. The draft itself lives in `draft`;
-//! nothing here writes the file until Save is pressed.
-
 use crate::app::App;
 use crate::config;
 use crate::rules::{EntryKind, Kind, Matcher, Prop, Props, Rule, SortKey};
@@ -14,27 +10,19 @@ use super::prop::{RuleMenu, RuleProp};
 use super::rule_positions;
 
 impl App {
-    /// Opens the editor on `index`, in place of whatever form was open.
     pub fn open_rule_edit(&mut self, index: usize) {
         if let Some(rule) = self.rules.rules.get(index) {
             self.rule_edit = Some(RuleEdit::opened(index, rule));
         }
     }
 
-    /// Opens the editor on a rule the file does not hold yet: Save appends it, so Add Rule is
-    /// the same gesture whether or not there is a rule to start from.
     pub fn open_new_rule(&mut self, kind: Kind) {
         let index = self.rules.rules.len();
         let rule = self.new_rule(kind);
         self.rule_edit = Some(RuleEdit::added(index, rule));
-        // The form stands after its section's rows, below where the panel may be scrolled: the
-        // tab scrolls to it as it does to a rule it has just written.
         self.rule_reveal = Some((format!("rule-editor-{index}"), 1));
     }
 
-    /// What a new rule starts from: a folder rule keeps the folder on screen and the layout it
-    /// is showing, and an entry rule the entry the browser has selected, so the form opens on
-    /// something worth saving rather than on a rule that matches nothing in particular.
     fn new_rule(&self, kind: Kind) -> Rule {
         let mut rule = Rule {
             name: None,
@@ -72,7 +60,6 @@ impl App {
         rule
     }
 
-    /// Opens the editor on `index`, or closes it when it is already open on that rule.
     pub fn toggle_rule_edit(&mut self, index: usize) {
         if self
             .rule_edit
@@ -89,9 +76,6 @@ impl App {
         self.rule_edit = None;
     }
 
-    /// Writes the form's draft over the rule and closes the form. A draft the file cannot hold
-    /// is refused, and the form says why. A write that did not reach the file keeps the form
-    /// and its draft open, leaving `store.write_error` to say why.
     pub fn save_rule_edit(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -104,11 +88,8 @@ impl App {
             return;
         }
         self.rule_edit = None;
-        // The row is left unfocused: the focused fill answers a command that singles a rule
-        // out, and saving one the user was already looking at is not that.
     }
 
-    /// Closes the form, dropping whatever it holds.
     pub fn discard_rule_edit(&mut self) {
         if let Some(edit) = self.rule_edit.as_mut() {
             edit.discard();
@@ -116,7 +97,6 @@ impl App {
         self.rule_edit = None;
     }
 
-    /// The editor's text fields, for `TextInput::on_edit`.
     pub fn rule_fields_mut(&mut self) -> &mut BTreeMap<String, TextEdit> {
         &mut self
             .rule_edit
@@ -125,8 +105,6 @@ impl App {
             .fields
     }
 
-    /// Reads every text field back into the draft and clears the last refusal. Nothing is
-    /// written here, and Save judges whether the draft can be saved.
     pub fn apply_rule_fields(&mut self) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -165,14 +143,10 @@ impl App {
                 }
             }
         }
-        // Reading the fields is the user still working, so a refusal that no longer describes
-        // the form goes away here rather than at the next Save: nothing is judged until the
-        // form is handed in, so the sections never shift under a pointer that is typing.
         edit.error = None;
         edit.shown_dirty = edit.dirty();
     }
 
-    /// Appends an empty `match` or `exclude` directive, which the fields then fill in.
     pub fn add_matcher(&mut self, exclude: bool) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -203,7 +177,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Opens `menu`, or closes it when it is the one already open.
     pub fn toggle_rule_menu(&mut self, menu: RuleMenu) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -225,7 +198,6 @@ impl App {
         }
     }
 
-    /// Adds a property the rule does not set yet, with the value it starts at.
     pub fn add_rule_prop(&mut self, name: &str) {
         let Some(prop) = RuleProp::from_name(name) else {
             return;
@@ -238,7 +210,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Sets one property from the value its field offered.
     pub fn set_rule_prop(&mut self, prop: RuleProp, value: &str) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -248,7 +219,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Takes one property out of the draft, so the rule leaves it to the rules above it.
     pub fn clear_rule_prop(&mut self, prop: RuleProp) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -265,7 +235,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Sets a matcher's `kind` from the value its field offered: `any`, `file` or `folder`.
     pub fn set_matcher_kind(&mut self, exclude: bool, index: usize, value: &str) {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
@@ -287,10 +256,6 @@ impl App {
         self.apply_rule_fields();
     }
 
-    /// Writes the draft over the rule's node, keeping that node's leading comment and the rest
-    /// of the file as it was, then resolves the folder again. A rule the file did not hold yet
-    /// is appended, so it lands after every rule and wins where the others disagree. Says
-    /// whether the write reached the file.
     fn write_rule_edit(&mut self) -> bool {
         let Some(edit) = &self.rule_edit else {
             return false;
@@ -301,8 +266,6 @@ impl App {
             return self.append_rule(kind, &text);
         }
         let index = edit.index;
-        // A write the store could not make is `store.write_error`'s to report; `rule_error` stays
-        // for a file that does not parse, which is what makes the list read only.
         let written = self.store.edit(config::CONFIG, |doc| {
             let Some(&at) = rule_positions(doc).get(index) else {
                 return;

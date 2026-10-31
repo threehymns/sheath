@@ -1,7 +1,3 @@
-//! The folder read: the rows of a folder and what went wrong opening it. A folder small
-//! enough is read in the frame that opens it; a bigger one on Rune's worker pool, where the
-//! frame that asked for it never waits on it.
-
 use crate::app::Entry;
 use rune_kit::SortDir;
 use std::fs;
@@ -9,21 +5,14 @@ use std::path::PathBuf;
 
 use super::entry::compare_time;
 
-/// `Latest` runs it on Rune's worker pool and drops the answer of a read a later one
-/// superseded, so navigating away mid-read never lands the folder left behind.
 pub(super) struct Scan {
     pub(super) path: PathBuf,
     pub(super) entries: Vec<Entry>,
     pub(super) error: Option<String>,
-    /// The row the read was asked to keep selected, if the folder still has it.
     pub(super) keep: Option<String>,
-    /// The sort the read applied, so a landing sorts again only when the list's sort moved
-    /// while the read ran.
     pub(super) sort: (String, SortDir),
 }
 
-/// Orders a folder's rows: folders first, then the list's sort column and direction. The read
-/// runs it, so the frame that opens a folder only filters the rows.
 pub(super) fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir) {
     entries.sort_by(|a, b| {
         b.is_dir.cmp(&a.is_dir).then_with(|| {
@@ -37,10 +26,7 @@ pub(super) fn sort_rows(entries: &mut [Entry], column: &str, direction: SortDir)
     });
 }
 
-/// Folders up to this many entries are read in the handler that opens them, so the frame
-/// after a switch already draws the new rows. At about 8 µs an entry for the read and the
-/// sort, that keeps the work inside a 60 Hz frame; a bigger folder is read on the worker,
-/// where the frame that opens it would otherwise have waited longer than it has.
+// A folder bigger than this is read on the worker pool, not in the frame that opens it.
 pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
 
 impl Scan {
@@ -69,11 +55,6 @@ impl Scan {
         }
     }
 
-    /// Reads the folder here, unless it holds more than `limit` entries: `None` means it is
-    /// big enough that the read belongs on the worker. Only the directory is listed before
-    /// the limit is checked, so a huge folder costs a few hundred entries' names and no
-    /// metadata before it goes off the main thread. A folder that cannot be opened goes to
-    /// the worker too, for the message a failed read gives.
     pub(super) fn try_read(
         path: PathBuf,
         keep: Option<String>,

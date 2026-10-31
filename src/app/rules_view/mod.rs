@@ -1,8 +1,3 @@
-//! The Rules tab's work: the form that holds a rule as a draft until it is saved, and the
-//! one-shot actions that write a rule at once. Every change goes through the config store, so the
-//! rest of the file keeps its comments and layout. `edit` owns the form and `rules` the layout
-//! saves, pinning, deleting, reordering and the picker.
-
 mod draft;
 mod edit;
 mod prop;
@@ -15,49 +10,31 @@ use kdl::KdlDocument;
 pub use draft::RuleEdit;
 pub use prop::{RuleMenu, RuleProp};
 
-/// The height of one rule's row. The drag handler turns a pointer's travel into rows with it.
 pub const RULE_ROW_HEIGHT: f32 = 48.0;
 
-/// Points the pointer travels from a press before it means a drag rather than a click.
 const DRAG_SLOP: f32 = 4.0;
 
-/// A rule list's drag to a new place: the row in hand, where it would land, and how far it sits
-/// from its place. The row in hand lifts and follows the pointer, and the rows it passes step
-/// aside, so the gap it would drop into is the order it would land in.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct RuleDrag {
-    /// The row in hand, once the pointer has travelled far enough to mean a move: the kind of
-    /// section it belongs to and its place in that section. The two sections number their rows
-    /// separately, so the kind is what tells their first rows apart.
     from: Option<(Kind, usize)>,
-    /// Where that row would land if it were dropped now.
     to: usize,
-    /// How far the pointer has travelled since the press.
     dy: f32,
-    /// A row's height plus the hairline under it: what one step of the list moves.
     pitch: f32,
 }
 
 impl RuleDrag {
-    /// Whether a pointer that has travelled `dy` from a press is dragging rather than clicking.
     pub fn travelled(dy: f32) -> bool {
         dy.abs() >= DRAG_SLOP
     }
 
-    /// The row being dragged, once the gesture has outgrown a click: its section's kind and its
-    /// place in that section.
     pub fn dragging(&self) -> Option<(Kind, usize)> {
         self.from
     }
 
-    /// Whether dropping now would change the order: the row is in hand and the pointer is over
-    /// another place.
     pub fn moves(&self) -> bool {
         self.from.is_some_and(|(_, from)| from != self.to)
     }
 
-    /// The pointer moved `dy` since the press on row `index` of section `kind`, which is `h`
-    /// tall; `gap` is the hairline between two rows, which one step carries the rows across too.
     pub fn follow(&mut self, kind: Kind, index: usize, count: usize, dy: f32, h: f32, gap: f32) {
         if self.from.is_none() {
             if !Self::travelled(dy) {
@@ -71,17 +48,12 @@ impl RuleDrag {
         self.to = to.clamp(0.0, count.saturating_sub(1) as f32) as usize;
     }
 
-    /// The gesture ended: `(from, to)` for a drop that reorders, `None` for a cancel, a drop in
-    /// place, or a press that never moved.
     pub fn end(&mut self, cancelled: bool) -> Option<(usize, usize)> {
         let (_, from) = self.from.take()?;
         self.dy = 0.0;
         (!cancelled && from != self.to).then_some((from, self.to))
     }
 
-    /// How far row `index` of section `kind` sits from its place: the row in hand follows the
-    /// pointer exactly, and the rows between its place and its target step toward the gap it
-    /// left. A row of the other section never moves for this gesture.
     pub fn shift(&self, kind: Kind, index: usize) -> f32 {
         let Some((from_kind, from)) = self.from else {
             return 0.0;
@@ -102,7 +74,6 @@ impl RuleDrag {
 }
 
 impl App {
-    /// Re-reads the rules and the folder after the document changed.
     pub(super) fn after_rule_change(&mut self) {
         self.reload_rules();
         self.visit = Default::default();
@@ -110,9 +81,6 @@ impl App {
     }
 }
 
-/// The key the Rules tab draws the rule at `index` with. It follows the rule, not its place,
-/// so a reorder moves the rows Rune is already drawing instead of swapping the text between
-/// them; the count separates two rules that share a summary.
 pub fn rule_key(rules: &[Rule], index: usize) -> Option<String> {
     let rule = rules.get(index)?;
     let summary = rule.summary();
@@ -123,7 +91,6 @@ pub fn rule_key(rules: &[Rule], index: usize) -> Option<String> {
     Some(format!("rule-{summary}-{occurrence}"))
 }
 
-/// The document positions of the rule nodes, in file order.
 pub(super) fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
     doc.nodes()
         .iter()
@@ -133,9 +100,6 @@ pub(super) fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
         .collect()
 }
 
-/// Where a rule of `kind` goes in the document: after the last rule of its kind, so the file
-/// keeps one block per kind. With none of that kind it goes after the last rule of any kind,
-/// and with no rules at all it goes at the end of the document.
 pub(super) fn rule_insertion(doc: &KdlDocument, kind: Kind) -> usize {
     let head = match kind {
         Kind::Folder => "folder-rule",

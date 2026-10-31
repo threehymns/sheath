@@ -1,6 +1,3 @@
-//! The rename, move and trash sheets: what they ask, and the file operations they apply
-//! once confirmed.
-
 use crate::app::App;
 use rune::{TextEdit, Tx};
 use std::fs;
@@ -8,24 +5,17 @@ use std::path::{Path, PathBuf};
 
 use super::*;
 
-/// The modal an action opens.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SheetKind {
     Rename,
-    /// A sidebar place's folder or file, renamed on disk rather than in the sidebar.
     RenamePlace,
     Move,
     Trash,
 }
 
-/// A rename, move or trash confirmation. `edit` is the field for rename and move, and is empty
-/// and unfocused for the trash confirmation.
 pub struct Sheet {
     pub kind: SheetKind,
-    /// The rows the sheet applies to: one for rename, the whole selection for move and trash.
-    /// These stay valid while the sheet is open.
     pub targets: Vec<String>,
-    /// What the sheet calls them: one name, or a count.
     pub name: String,
     pub edit: TextEdit,
     pub error: Option<String>,
@@ -74,7 +64,6 @@ fn destination_path(raw: &str, cwd: &Path) -> Result<PathBuf, String> {
 }
 
 impl App {
-    /// Opens the rename sheet with the current name selected. Renaming needs exactly one row.
     pub fn begin_rename(&mut self) {
         let ids = self.selected_ids();
         let [id] = ids.as_slice() else {
@@ -95,7 +84,6 @@ impl App {
         });
     }
 
-    /// Opens the move sheet for the whole selection, starting at the current folder.
     pub fn begin_move(&mut self) {
         let targets = self.selected_ids();
         let Some(name) = self.sheet_name(&targets) else {
@@ -113,7 +101,6 @@ impl App {
         });
     }
 
-    /// Asks for confirmation before putting the selection in the system Trash.
     pub fn begin_trash(&mut self) {
         let targets = self.selected_ids();
         let Some(name) = self.sheet_name(&targets) else {
@@ -128,7 +115,6 @@ impl App {
         });
     }
 
-    /// What a sheet calls its rows: one name, or a count.
     fn sheet_name(&self, targets: &[String]) -> Option<String> {
         match targets {
             [] => None,
@@ -141,7 +127,6 @@ impl App {
         self.sheet = None;
     }
 
-    /// Binds the sheet's text field (`TextInput::on_edit`).
     pub fn sheet_edit(&mut self) -> &mut TextEdit {
         &mut self
             .sheet
@@ -150,8 +135,6 @@ impl App {
             .edit
     }
 
-    /// Applies the open sheet. A failure keeps it open with its message. The `Tx` is unused
-    /// because the folder read after a rename or move reveals the row.
     pub fn submit_sheet(&mut self, _tx: &mut Tx) {
         let Some(sheet) = self.sheet.take() else {
             return;
@@ -171,7 +154,6 @@ impl App {
         }
     }
 
-    /// The sheet's rows that are still in this folder, as (path, name, is folder).
     fn sheet_entries(&self, sheet: &Sheet) -> Result<Vec<(PathBuf, String, bool)>, String> {
         let items: Vec<_> = sheet
             .targets
@@ -216,7 +198,6 @@ impl App {
         }
         fs::rename(&old_path, &new_path)
             .map_err(|err| format!("Couldn’t rename “{old_name}”: {err}"))?;
-        // The renamed row is selected and revealed by the read that finds it.
         self.pending_select = Some((vec![format!("f:{new_name}")], true));
         self.reload();
         self.error = None;
@@ -235,8 +216,6 @@ impl App {
         self.move_targets(&targets, &destination)
     }
 
-    /// Moves the rows `targets` into `destination`, for the move sheet and for a drop. Every
-    /// row is checked before any moves, so a refusal leaves the whole selection where it is.
     pub(super) fn move_targets(
         &mut self,
         targets: &[String],

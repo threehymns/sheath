@@ -1,5 +1,3 @@
-//! Listing, sorting, filtering and navigating the folder on screen.
-
 use super::helpers::*;
 use crate::app::{Preview, SYNC_SCAN_LIMIT};
 use rune::{Key, KeyEvent, Mods};
@@ -59,7 +57,6 @@ fn the_search_field_shows_clear_only_with_text() {
     rt.invalidate();
     rt.frame(0.1);
 
-    // The tray the field gave up may still be fading out.
     let typed: Vec<_> = rt.elements().into_iter().filter(|e| !e.exiting).collect();
     assert!(
         !typed
@@ -137,7 +134,6 @@ fn refreshing_keeps_a_selection_of_several_rows() {
 
 #[test]
 fn a_reload_reads_a_big_folder_off_the_main_thread() {
-    // Past the fast path's limit, so the read has to leave the main thread.
     let dir = long_folder(SYNC_SCAN_LIMIT + 1);
     let mut app = app(&dir);
     fs::write(dir.path().join("late.txt"), "late").unwrap();
@@ -162,8 +158,6 @@ fn a_small_folder_switch_has_its_rows_at_once() {
     fs::write(sub.join("one.txt"), "1").unwrap();
 
     app.navigate(sub);
-    // Read in the handler: the very next frame already draws the new folder's rows, so
-    // there is no frame showing the list empty.
     assert!(!app.is_scanning());
     assert_eq!(names(&app), ["one.txt"]);
     assert_eq!(app.phrase_for_count(), "1 item");
@@ -171,13 +165,9 @@ fn a_small_folder_switch_has_its_rows_at_once() {
 
 #[test]
 fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
-    // Past the fast path, so the read really is in flight while the header is clicked.
     let dir = long_folder(SYNC_SCAN_LIMIT + 1);
     let mut app = app(&dir);
-    // The read is asked for with the folder's default name/ascending sort...
     app.reload();
-    // ...and the header is clicked while it runs, as a user would: the rows must arrive in
-    // the sort that is showing, not the one the read applied.
     app.sort_by("name");
     app.settle_scan();
     let names = names(&app);
@@ -257,7 +247,6 @@ fn typing_a_name_jumps_to_the_row() {
     rt.frame(0.1);
     assert_eq!(rt.state.selected.as_deref(), Some("f:notes.md"));
 
-    // Typing another letter narrows the same search: "no" still lands on notes.md.
     rt.key(KeyEvent {
         key: Key::Text("o".into()),
         mods: Mods::default(),
@@ -265,7 +254,6 @@ fn typing_a_name_jumps_to_the_row() {
     rt.frame(0.1);
     assert_eq!(rt.state.selected.as_deref(), Some("f:notes.md"));
 
-    // A fresh search starts over, and repeating the letter cycles through its matches.
     rt.state.clear_typeahead();
     for expected in ["f:file2.txt", "f:file10.txt"] {
         rt.key(KeyEvent {

@@ -1,6 +1,3 @@
-//! The sidebar: the places the app can jump to, dragged into the order the user wants, and
-//! the drop targets a dragged row can land on.
-
 use crate::app::{App, PlaceAt};
 use crate::places::{Place, Section};
 use rune::{El, Tx};
@@ -16,8 +13,6 @@ pub(super) fn sidebar(s: &App, k: &'static Kit) -> El {
         .build(k)
 }
 
-/// One section: its heading and rows, numbered among themselves so a place is dragged within
-/// its own section, and its rect, which a row dropped there is added to.
 fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
     let shown: Vec<&Place> = s
         .places
@@ -26,8 +21,6 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
         .filter(|place| place.is_available())
         .collect();
     let count = shown.len();
-    // A file drag between the rows is marked by a line drawn over them: the rows keep their
-    // places, so aiming at an insertion shifts nothing.
     let mut rows = SidebarSection::new(section.title());
     for (index, place) in shown.into_iter().enumerate() {
         rows = rows.row(place_row(s, k, section, index, count, place));
@@ -39,9 +32,6 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
         })
 }
 
-/// One place in the sidebar: the folder it opens, the order it sits in, and the rect a dragged
-/// row can be dropped on. A press that moves reorders the place; a press that doesn't opens
-/// the folder.
 fn place_row(
     s: &App,
     k: &'static Kit,
@@ -70,8 +60,6 @@ fn place_row(
         .icon(place.icon)
         .selected(s.cwd == opens || highlight);
     row = match s.place_rename.as_ref().filter(|rename| rename.id == id) {
-        // The display name is edited in the row itself: the field takes the row's presses, and
-        // the kit ends the edit on Return or Escape.
         Some(rename) => row.renaming(
             &rename.edit,
             crate::app::place_rename_edit,
@@ -80,8 +68,6 @@ fn place_row(
         ),
         None => row
             .on_select(move |s: &mut App, _| {
-                // The release that ends a reorder arrives as a press too, and it must not open
-                // the folder the row was dragged over.
                 if !s.take_place_drag() {
                     s.open_place(path.clone());
                 }

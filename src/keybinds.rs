@@ -1,6 +1,3 @@
-//! The app's keyboard shortcuts: the chord that runs each command, and matching a key event to
-//! it. They live in `keybinds.kdl`, so editing a shortcut never rewrites the settings.
-
 use std::collections::BTreeMap;
 
 use kdl::KdlDocument;
@@ -8,7 +5,6 @@ use kdl::KdlDocument;
 use crate::recorder::Recorder;
 use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
 
-/// A command a shortcut can run.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action {
     CommandBar,
@@ -36,7 +32,6 @@ pub enum Action {
 }
 
 impl Action {
-    /// Every action, in the order the settings dialog lists them.
     pub const ALL: [Action; 22] = [
         Action::CommandBar,
         Action::FocusSearch,
@@ -62,13 +57,10 @@ impl Action {
         Action::PickRule,
     ];
 
-    /// Whether Shift is ignored when matching this action, as editor command bars treat
-    /// Ctrl+P and Ctrl+Shift+P alike.
     pub fn ignores_shift(self) -> bool {
         self == Action::CommandBar
     }
 
-    /// The stable name the file and the element keys use.
     pub fn id(self) -> &'static str {
         match self {
             Action::CommandBar => "command-bar",
@@ -96,7 +88,6 @@ impl Action {
         }
     }
 
-    /// What the settings dialog calls it.
     pub fn label(self) -> &'static str {
         match self {
             Action::CommandBar => "Command Bar",
@@ -128,7 +119,6 @@ impl Action {
         Action::ALL.iter().copied().find(|action| action.id() == id)
     }
 
-    /// The chord a fresh install has, or none for a command that has no key of its own.
     fn default_chord(self) -> Option<&'static str> {
         match self {
             Action::ViewFolderRules
@@ -141,8 +131,6 @@ impl Action {
         }
     }
 
-    /// The chord a fresh install has, as the file stores it. The command bar answers to Ctrl+P
-    /// on every platform, shifted or not: [`Action::ignores_shift`].
     fn builtin_chord(self) -> &'static str {
         #[cfg(target_os = "macos")]
         {
@@ -196,16 +184,12 @@ pub struct Keybinds {
 }
 
 impl Keybinds {
-    /// The built-in bindings, as if no file existed. They have nowhere to save, so changing
-    /// them needs [`Keybinds::at`] or [`Keybinds::load`].
     pub fn defaults() -> Keybinds {
         Keybinds {
             chords: default_chords(),
         }
     }
 
-    /// The bindings the document names, over the built-in ones. Unknown actions and unreadable
-    /// chords are skipped, so an edited file degrades instead of breaking the app.
     pub fn from_doc(doc: Option<&KdlDocument>) -> Keybinds {
         let mut binds = Keybinds::defaults();
         let Some(doc) = doc else {
@@ -224,8 +208,6 @@ impl Keybinds {
         binds
     }
 
-    /// Writes this action's line: its chord, or no line at all when the built-in chord applies
-    /// again. Every other node keeps its bytes, its comments, and its place.
     pub fn write(&self, doc: &mut KdlDocument, action: Action) {
         let current = self.chords.get(&action);
         if current == default_shortcut(action).as_ref() {
@@ -243,8 +225,6 @@ impl Keybinds {
         self.chords.get(&action)
     }
 
-    /// One fresh recorder per action, nothing listened for yet: what the settings dialog edits.
-    /// The bound chords stay in [`Keybinds`], where the recorder's field reads them.
     pub fn recorders() -> BTreeMap<Action, Recorder> {
         Action::ALL
             .into_iter()
@@ -252,38 +232,28 @@ impl Keybinds {
             .collect()
     }
 
-    /// The chord as the kit wants it for a button's hint (`"super+r"`), or empty when unbound.
     pub fn accelerator(&self, action: Action) -> String {
         self.chord(action)
             .map(ToString::to_string)
             .unwrap_or_default()
     }
 
-    /// The chord's keycaps (`["⌘", "R"]`, `["Ctrl", "R"]`) for drawing as a [`Keybind`], or
-    /// empty when unbound.
-    ///
-    /// [`Keybind`]: rune_kit::Keybind
     pub fn keycaps(&self, action: Action) -> Vec<String> {
         self.chord(action)
             .map(Shortcut::menu_keycaps)
             .unwrap_or_default()
     }
 
-    /// The chord as a menu shows it (`"⌘R"`, `"Ctrl+R"`), or empty when unbound.
     pub fn menu_label(&self, action: Action) -> String {
         let separator = if cfg!(target_os = "macos") { "" } else { "+" };
         self.keycaps(action).join(separator)
     }
 
-    /// Whether `event` is the chord bound to `action`, or, for an action that ignores Shift,
-    /// the same chord with Shift held.
     pub fn matches(&self, action: Action, event: &KeyEvent) -> bool {
         self.chord(action)
             .is_some_and(|chord| matches(chord, event, action.ignores_shift()))
     }
 
-    /// Binds `action` to `shortcut`, or clears it, and saves. A chord another action already
-    /// uses is refused with [`ShortcutError::Conflict`]; the recorder shows that on the field.
     pub fn set(
         &mut self,
         action: Action,
@@ -308,14 +278,10 @@ impl Keybinds {
         Ok(())
     }
 
-    /// Whether the file names `action`, so its shortcut is one the user set rather than the
-    /// built-in one. Only those have a Reset: resetting takes the line out of the file, and a
-    /// file that doesn't name an action already gets its default.
     pub fn is_custom(&self, action: Action) -> bool {
         self.chords.get(&action) != default_shortcut(action).as_ref()
     }
 
-    /// Takes `action` out of the file, so the built-in chord applies again, and saves.
     pub fn reset(&mut self, action: Action) {
         match default_shortcut(action) {
             Some(chord) => self.chords.insert(action, chord),
@@ -334,12 +300,10 @@ fn default_chords() -> BTreeMap<Action, Shortcut> {
     chords
 }
 
-/// The chord a fresh install has for `action`.
 fn default_shortcut(action: Action) -> Option<Shortcut> {
     let text = action.default_chord()?;
     match text.parse::<Shortcut>() {
         Ok(chord) => Some(chord),
-        // A typo in a default is a programming error, but shipping a dead app is worse.
         Err(_) => {
             debug_assert!(
                 false,
@@ -351,7 +315,6 @@ fn default_shortcut(action: Action) -> Option<Shortcut> {
     }
 }
 
-/// The actions the document names, with `None` for a cleared chord.
 fn parse(doc: &KdlDocument) -> Vec<(Action, Option<Shortcut>)> {
     let mut out = Vec::new();
     for node in doc.nodes() {
@@ -381,13 +344,9 @@ fn parse(doc: &KdlDocument) -> Vec<(Action, Option<Shortcut>)> {
     out
 }
 
-/// Whether `event` is `chord`. Rune matches window accelerators by the key's position, so the
-/// logical key an event carries is mapped back to the physical one the chord stores.
 fn matches(chord: &Shortcut, event: &KeyEvent, ignore_shift: bool) -> bool {
     let want = chord.modifiers();
     let held = event.mods;
-    // On macOS the Command key reports both `cmd` and `logo`, and a chord's Super bit is the
-    // same key; elsewhere Super is a separate key that must agree.
     let logo = cfg!(target_os = "macos") || want.logo == held.logo;
     if (want.shift != held.shift && !ignore_shift)
         || want.alt != held.alt
@@ -400,6 +359,8 @@ fn matches(chord: &Shortcut, event: &KeyEvent, ignore_shift: bool) -> bool {
     physical(&event.key) == Some(chord.physical_key())
 }
 
+// Rune matches accelerators by physical position, so the logical key an event carries is mapped
+// back to it.
 fn physical(key: &Key) -> Option<PhysicalKeyCode> {
     use PhysicalKeyCode as Code;
     Some(match key {

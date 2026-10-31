@@ -1,21 +1,12 @@
-//! A settings page's cards: a titled group of rows on the page, the raised card they sit in, and
-//! the rows themselves, each with its control at the row's end.
-
 use rune::{El, Icon, col, el, icon, row, text};
 use rune_kit::Kit;
 
 use super::{SETTINGS_ROW_HEIGHT, SETTINGS_ROW_INSET};
 
-/// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
-/// and the card hangs [`SETTINGS_ROW_INSET`] past it, so the rows' text lines up with it.
 pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
     settings_section_action(k, key, title, None, rows, true)
 }
 
-/// The same card, with a control at the end of its label line. The Rules tab's sections each
-/// carry their own button. `clip` cuts the rows to the box the card presents, so a form can
-/// spring open inside it; a rule drag turns the clip off so the lifted row is not cut. The clip
-/// goes on the rows' box rather than the card, whose edge is the ring of its raised shadow.
 pub(crate) fn settings_section_action(
     k: &Kit,
     key: &str,
@@ -45,9 +36,6 @@ pub(crate) fn settings_section_action(
             .child(body),
         &k.elevation.raised,
     );
-    // The inset sits on the label and the action, not on the row: margins on a full-width row
-    // widen it past the page's edge, leaving the action flush. Each label carries its section's
-    // key, so no two sections share one.
     let mut label = row().w_full().min_h(20.0).gap(8.0).center_y().child(
         text(title)
             .key(format!("{key}-label"))
@@ -63,7 +51,6 @@ pub(crate) fn settings_section_action(
     col().key(key).w_full().gap(8.0).child(label).child(card)
 }
 
-/// A hairline between two rows, inset from the card's edges.
 fn settings_rule(k: &Kit) -> El {
     row()
         .w_full()
@@ -71,7 +58,6 @@ fn settings_rule(k: &Kit) -> El {
         .child(el().h(1.0).grow(1.0).fill(k.c.border_muted))
 }
 
-/// One setting: an icon, the label and its explanation, and the control at the row's end.
 pub(super) fn settings_row(
     k: &Kit,
     glyph: &'static Icon,

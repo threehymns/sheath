@@ -1,6 +1,3 @@
-//! Settings that a folder rule outranks: the General switches edit the fallbacks, and the
-//! open folder keeps what its rule or its remembered state says.
-
 use super::helpers::*;
 use crate::app::App;
 use std::fs;
@@ -76,8 +73,6 @@ fn the_hidden_switch_leaves_a_ruled_folder_alone() {
     );
 }
 
-/// A rule's layout and hidden policy belong to the folder it matches, so turning another setting
-/// over there must not carry them into the folders the rule leaves alone.
 #[test]
 fn a_ruled_folders_layout_does_not_become_the_global_default() {
     let dir = fixture();
@@ -102,8 +97,6 @@ fn a_ruled_folders_layout_does_not_become_the_global_default() {
     );
 }
 
-/// The General page edits the fallbacks, not what the open folder resolved to. A rule that
-/// decides this folder must leave its switches showing, and setting, the global values.
 #[test]
 fn a_ruled_folder_still_leaves_the_general_settings_editable() {
     let dir = fixture();
@@ -125,7 +118,6 @@ fn a_ruled_folder_still_leaves_the_general_settings_editable() {
     );
     click(&mut rt, "open-settings");
 
-    // The switches sit off, as the global settings do, whatever the rule resolved to.
     for key in ["setting-grid", "setting-hidden"] {
         let thumb = thumb_off(&rt, key);
         assert!(
@@ -159,7 +151,6 @@ fn a_ruled_folder_still_leaves_the_general_settings_editable() {
     );
 }
 
-/// Whether a switch's thumb rests at the off end of its track: the left half.
 fn thumb_off(rt: &rune::Runtime<App>, key: &str) -> bool {
     let elements = rt.elements();
     let track = elements

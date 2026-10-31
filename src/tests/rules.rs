@@ -1,6 +1,3 @@
-//! Rules: the matchers, the order they apply in, the layout they resolve to, and the saves that
-//! keep the file they live in intact.
-
 use super::helpers::*;
 use crate::app::Layout;
 use crate::config::{self, Store};
@@ -31,7 +28,6 @@ fn a_rule_covers_the_folder_and_everything_under_it() {
 
 #[test]
 fn a_double_star_crosses_no_segments_at_all() {
-    // gitignore's rule: `a/**/b` matches `a/b`, so a tree pattern covers its first level too.
     let rules =
         rules("folder-rule \"target\" {\n    match path=\"/work/**/target\"\n    layout grid\n}\n");
     for path in ["/work/target", "/work/a/target", "/work/a/b/target"] {
@@ -50,7 +46,6 @@ fn a_double_star_crosses_no_segments_at_all() {
 
 #[test]
 fn asterisks_that_are_not_a_whole_component_stay_in_one_segment() {
-    // gitignore reads any run of asterisks that is not a whole `**` as a plain `*`.
     assert!(crate::rules::path_match("/w/x**y", "/w/xay"));
     assert!(
         !crate::rules::path_match("/w/x**y", "/w/x/ay"),
@@ -372,8 +367,6 @@ fn a_file_that_breaks_after_it_loaded_is_never_written_back() {
     );
 }
 
-/// The atomic save writes `.config.kdl.tmp` first, so a folder in its place makes the write
-/// fail without touching the file the store holds.
 #[test]
 fn a_failed_write_is_the_stores_error_not_a_rule_error() {
     let dir = fixture();
@@ -468,8 +461,6 @@ fn saving_the_layout_as_a_rule_writes_one_that_applies() {
     assert!(app.is_grid());
 }
 
-/// A file whose last node does not end in a newline: the rule still starts on its own line,
-/// so the file the next launch reads parses.
 #[test]
 fn a_rule_after_a_final_node_without_a_newline_keeps_the_file_parsing() {
     let dir = fixture();

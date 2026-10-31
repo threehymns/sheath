@@ -1,6 +1,3 @@
-//! Which rows are selected, which one the keyboard cursor is on, and the clicks and
-//! arrow keys that move both.
-
 use crate::app::App;
 use rune::{Mods, PointerPress, Tx};
 use std::collections::BTreeSet;
@@ -13,7 +10,6 @@ use super::paths::open_external;
 use super::*;
 
 impl App {
-    /// Selects a row on its own, as a plain click does, and loads its preview.
     pub fn select_id(&mut self, id: &str) {
         self.selection.clear();
         self.selection.insert(id.to_owned());
@@ -21,7 +17,6 @@ impl App {
         self.focus_id(id);
     }
 
-    /// Drops every selected row.
     pub fn clear_selection(&mut self) {
         self.selection.clear();
         self.anchor = None;
@@ -29,7 +24,6 @@ impl App {
         self.preview = None;
     }
 
-    /// Moves the cursor to `id` and loads its preview, leaving the selection alone.
     pub(super) fn focus_id(&mut self, id: &str) {
         self.selected = Some(id.to_owned());
         let found = self
@@ -59,7 +53,6 @@ impl App {
         self.selection.contains(id)
     }
 
-    /// The rows the selection holds, in table order.
     pub fn selected_ids(&self) -> Vec<String> {
         self.visible
             .iter()
@@ -72,7 +65,6 @@ impl App {
         self.selected_ids().len()
     }
 
-    /// How many of the selected rows are folders.
     pub fn selection_folders(&self) -> usize {
         self.selected_ids()
             .iter()
@@ -81,8 +73,6 @@ impl App {
             .count()
     }
 
-    /// The bytes the selected files take up; folders count as nothing, as their size column
-    /// does.
     pub fn selection_size(&self) -> u64 {
         self.selected_ids()
             .iter()
@@ -92,7 +82,6 @@ impl App {
             .sum()
     }
 
-    /// Drops a selection of several rows down to the cursor's row, as Escape does.
     pub fn collapse_selection(&mut self) {
         let Some(id) = self.selected.clone() else {
             return;
@@ -104,14 +93,11 @@ impl App {
         self.anchor = Some(id);
     }
 
-    /// Forgets what was typed for jumping to a name, as changing folder does.
     pub fn clear_typeahead(&mut self) {
         self.typeahead.clear();
         self.typeahead_at = None;
     }
 
-    /// Jumps to the row that starts with what has been typed, and cycles a repeated letter
-    /// through the names that share it.
     pub fn typeahead_select(&mut self, typed: &str, tx: &mut Tx) -> bool {
         let now = Instant::now();
         let fresh = self
@@ -123,7 +109,6 @@ impl App {
         self.typeahead_at = Some(now);
         self.typeahead.push_str(&typed.to_lowercase());
         let buffer = self.typeahead.clone();
-        // "aaa" is the third name starting with "a"; "no" narrows from the start.
         let repeated = buffer
             .chars()
             .next()
@@ -159,7 +144,6 @@ impl App {
         true
     }
 
-    /// Selects every row the filter leaves on screen.
     pub fn select_all(&mut self) {
         self.selection = self
             .visible
@@ -182,19 +166,15 @@ impl App {
         self.visible.iter().position(|&i| self.entries[i].id == id)
     }
 
-    /// The id of visible row `index`, if the filter leaves one there.
     pub(super) fn row_id(&self, index: usize) -> Option<String> {
         self.visible.get(index).map(|&i| self.entries[i].id.clone())
     }
 
-    /// The visible index a Shift range starts from, when the anchor is still on screen.
     pub(super) fn anchor_index(&self) -> Option<usize> {
         let id = self.anchor.as_deref()?;
         self.visible.iter().position(|&i| self.entries[i].id == id)
     }
 
-    /// The rows from the anchor to row `index`, or that row alone when there's no anchor. In
-    /// the grid the range is the rectangle of tiles between the two.
     fn range_to(&self, index: usize) -> BTreeSet<String> {
         if self.is_grid() {
             let mut range = BTreeSet::new();
@@ -208,9 +188,6 @@ impl App {
             .collect()
     }
 
-    /// A click on row `index` with `mods`, the way a file manager reads them: Shift extends
-    /// from the anchor, Cmd/Ctrl toggles the row, and Cmd/Ctrl+Shift keeps what is selected and
-    /// adds the range.
     pub fn click_row(&mut self, index: usize, mods: Mods, tx: &mut Tx) {
         let Some(id) = self.row_id(index) else {
             if !mods.shift && !(mods.cmd || mods.ctrl) {
@@ -237,8 +214,6 @@ impl App {
             self.anchor = Some(id.clone());
         }
         self.focus_id(&id);
-        // A Cmd/Ctrl-click can take the clicked row out of the selection, so the cursor moves
-        // to whichever selected row is nearest.
         if !self.selection.contains(&id)
             && let Some(next) = self.nearest_selected(index)
         {
@@ -249,7 +224,6 @@ impl App {
         }
     }
 
-    /// The selected row closest to row `index` in the list.
     fn nearest_selected(&self, index: usize) -> Option<String> {
         self.visible
             .iter()
@@ -259,8 +233,6 @@ impl App {
             .map(|(_, i)| self.entries[*i].id.clone())
     }
 
-    /// Moves the cursor by `delta` rows. Shift grows the range from the anchor, and Cmd/Ctrl
-    /// with Shift adds it to what is selected.
     pub fn move_selection(&mut self, delta: isize, mods: Mods, tx: &mut Tx) {
         if self.visible.is_empty() {
             return;
@@ -281,7 +253,6 @@ impl App {
         self.select_visible(if last { self.visible.len() - 1 } else { 0 }, mods, tx);
     }
 
-    /// Selects the row at `index` in the filtered list, revealing it in the viewport.
     fn select_visible(&mut self, index: usize, mods: Mods, tx: &mut Tx) {
         let Some(id) = self.row_id(index) else {
             return;
@@ -311,7 +282,6 @@ impl App {
         self.open_id(&id);
     }
 
-    /// Double-click or Return on a row: enter folders, hand files to the system.
     pub fn open_id(&mut self, id: &str) {
         let Some(entry) = self.entries.iter().find(|e| e.id == id) else {
             return;
@@ -324,9 +294,6 @@ impl App {
         }
     }
 
-    /// Right-clicking row `index`: open the row menu at the press. A row already inside a
-    /// selection of several keeps that selection, so the menu acts on all of it; any other row
-    /// is selected on its own first.
     pub fn open_row_menu(&mut self, index: usize, at: PointerPress) {
         let Some(id) = self.row_id(index) else {
             self.menu = None;
@@ -341,8 +308,6 @@ impl App {
         self.menu = Some(at);
     }
 
-    /// A right-click anywhere in the list, in window points: the row or tile under it gets the
-    /// menu.
     pub fn row_menu_at(&mut self, at: PointerPress) {
         let view = self.rows_view;
         let inside = view[0] <= at.x && at.x <= view[0] + view[2];

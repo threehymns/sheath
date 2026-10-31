@@ -1,6 +1,3 @@
-//! The folder on screen: reading it, sorting it, filtering it, and the history that
-//! navigation walks.
-
 use crate::app::App;
 use crate::rules::SortKey;
 use crate::settings::Setting;
@@ -13,10 +10,7 @@ use super::scan::{SYNC_SCAN_LIMIT, Scan, sort_rows};
 use super::*;
 
 impl App {
-    /// Shows `path` without touching history.
     pub(super) fn enter(&mut self, path: PathBuf) {
-        // The watcher follows the window to the new folder, so what it reports is always the
-        // folder on screen.
         self.watch.retarget(&path);
         self.cwd = path;
         self.visit = Default::default();
@@ -28,14 +22,9 @@ impl App {
         self.clear_typeahead();
         self.search.clear();
         self.clear_selection();
-        // The last folder's rows go now rather than showing under the new path; the new
-        // folder's land with the read. What the path alone decides is resolved here; the
-        // rules that need the folder's count settle with the read.
         self.entries.clear();
         self.visible.clear();
         self.pending_select = None;
-        // Whatever layout the new folder resolves to is not the user's choice: it lands with
-        // the folder, without the fade the layout toggle keeps.
         self.layout_cut = true;
         self.apply_rules();
         self.reload();
@@ -89,20 +78,13 @@ impl App {
         self.cwd.parent().is_some()
     }
 
-    /// Asks for a fresh read of the folder, keeping the selected rows when they still exist.
-    /// Rows keep their ids through a re-read, so a selection of several survives a refresh
-    /// until something moves them. A folder too big to read in this frame is read off the main
-    /// thread: `poll` applies its answer, so the frame that asked for it never stalls.
     pub fn reload(&mut self) {
         let path = self.cwd.clone();
         let keep = self.selected.clone();
         let sort = self.sort.clone();
-        // A folder small enough to read within this frame gets its rows here, so the next
-        // frame draws the new listing rather than an empty one.
         if let Some(scan) =
             Scan::try_read(path.clone(), keep.clone(), sort.clone(), SYNC_SCAN_LIMIT)
         {
-            // Whatever read was still in flight belongs to a folder already left.
             self.scan.cancel();
             self.apply_scan(scan);
             return;
@@ -111,15 +93,10 @@ impl App {
             .request(path, move |path| Scan::read(path, keep, sort));
     }
 
-    /// Whether a folder read is still in flight, so there are no rows to show yet. The list
-    /// says nothing about the folder until this is false, because the folder is being read
-    /// rather than empty.
     pub fn is_scanning(&self) -> bool {
         self.scan.is_pending()
     }
 
-    /// Applies the folder read that landed, if one did: its rows, its error, the presentation
-    /// the rules and the folder's count decide, and the selection the read asked to keep.
     pub(super) fn land_scan(&mut self) -> bool {
         let Some(scan) = self.scan.take() else {
             return false;
@@ -127,25 +104,17 @@ impl App {
         self.apply_scan(scan)
     }
 
-    /// Puts a read's rows on screen: its error, the presentation the rules and the folder's
-    /// count decide, the selection it asked to keep, and what a file operation made.
     fn apply_scan(&mut self, scan: Scan) -> bool {
-        // `Latest` already drops a superseded answer; the path keeps a read of some other
-        // folder off this one all the same.
         if scan.path != self.cwd {
             return false;
         }
         self.entries = scan.entries;
         self.error = scan.error;
         self.apply_rules();
-        // The read sorted with the list's sort when it was asked for it; a rule or a header
-        // click that moved the sort since then orders the rows here.
         if scan.sort != self.sort {
             self.sort_entries();
         }
         self.apply_filter();
-        // What a file operation made or renamed outranks what the read kept: those rows are
-        // what the user just asked for.
         match self.pending_select.take() {
             Some((ids, reveal)) => self.select_after_read(ids, reveal),
             None => match scan.keep {
@@ -157,8 +126,6 @@ impl App {
         true
     }
 
-    /// Selects the rows `ids` the folder turned out to have, and leaves the list's scroll to
-    /// the next `poll` when the operation asked for it.
     fn select_after_read(&mut self, ids: Vec<String>, reveal: bool) {
         let visible: BTreeSet<String> = self
             .visible
@@ -167,7 +134,6 @@ impl App {
             .collect();
         self.selection = ids.into_iter().filter(|id| visible.contains(id)).collect();
         let Some(first) = self.selected_ids().first().cloned() else {
-            // The folder no longer holds the row the operation made: leave no cursor behind.
             self.clear_selection();
             return;
         };
@@ -178,27 +144,21 @@ impl App {
         }
     }
 
-    /// Waits out a read in flight and applies it, for tests that drive the state without a
-    /// window's frames to land it.
     #[cfg(test)]
     pub(crate) fn settle_scan(&mut self) {
         while self.scan.is_pending() {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
         self.land_scan();
-        // No test drives the list's scroll from here.
         self.pending_reveal = None;
     }
 
-    /// Folders first, then the list's sort column and direction.
+    // The read sorted as asked; a sort change since then reorders the rows here.
     pub fn sort_entries(&mut self) {
         let (column, direction) = self.sort.clone();
         sort_rows(&mut self.entries, &column, direction);
     }
 
-    /// Whether the rules or the folder's own policy hide `entry`: an entry rule's `hidden`
-    /// first, then the dot-name, which only counts while hidden files are off. The row menu
-    /// reads the same answer the filter does.
     pub fn entry_hidden(&self, entry: &Entry) -> bool {
         let path = entry.path.to_string_lossy();
         let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
@@ -209,9 +169,7 @@ impl App {
         rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
     }
 
-    /// Rebuilds the rows that pass the hidden-file and search filters.
     pub fn apply_filter(&mut self) {
-        // Different rows: what the old ones were coasting toward no longer means anything.
         self.scroll.stop();
         let query = self.search.text.trim().to_lowercase();
         let hidden: Vec<bool> = self
@@ -225,8 +183,6 @@ impl App {
                 !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
             })
             .collect();
-        // The hidden and filtered rows drop out of the selection with the row itself. The set
-        // borrows the rows' ids, so pruning a selection allocates nothing per row.
         let visible: HashSet<&str> = self
             .visible
             .iter()
@@ -258,8 +214,6 @@ impl App {
     pub fn toggle_hidden(&mut self) {
         let on = !self.show_hidden;
         self.show_hidden = on;
-        // A rule that speaks for this folder holds it for the visit; otherwise the switch is
-        // the global setting it has always been.
         if self.rule_presentation().show_hidden.is_some() {
             self.visit.show_hidden = Some(on);
         } else {
@@ -269,31 +223,21 @@ impl App {
         self.apply_filter();
     }
 
-    /// The settings panel's Show hidden files switch: turns the global setting over, then
-    /// resolves the open folder again, so a rule or a remembered visit keeps its say.
     pub fn toggle_hidden_setting(&mut self) {
-        // The switch turns the setting over, not what the folder resolved to: a rule or a
-        // remembered visit may be what is on screen, and that is not what gets saved.
         self.config.show_hidden = !self.config.show_hidden;
         self.remember(Setting::ShowHidden, self.config.show_hidden);
         self.apply_rules();
         self.apply_filter();
     }
 
-    /// Switches between the table of rows and the grid of tiles, and remembers the choice.
     pub fn toggle_layout(&mut self) {
         self.layout = if self.is_grid() {
             Layout::List
         } else {
             Layout::Grid
         };
-        // The user asked for this one: it keeps its fade.
         self.layout_cut = false;
-        // The two layouts measure their content differently, so what the old one was coasting
-        // toward means nothing in the new one.
         self.scroll.stop();
-        // A rule for this folder keeps its say after the visit: the change shows now, and the
-        // rule wins again the next time the folder opens.
         if self.rule_presentation().layout.is_some() {
             self.visit.layout = Some(self.layout);
         } else {
@@ -301,30 +245,22 @@ impl App {
         }
     }
 
-    /// The settings panel's Grid layout switch. It turns the global setting over and resolves
-    /// the open folder again, so a rule or what the folder was left showing keeps its say.
     pub fn toggle_grid_setting(&mut self) {
         let before = self.layout;
-        // The switch is the user's, so a layout it changes fades in as the toggle's does.
         self.layout_cut = false;
-        // The switch turns the setting over, not what the folder resolved to: a rule or a
-        // remembered visit may be what is on screen, and that is not what gets saved.
         self.config.grid = !self.config.grid;
         self.remember(Setting::GridLayout, self.config.grid);
-        // A rule or a remembered visit still outranks the global default.
         self.apply_rules();
         if self.layout != before {
             self.scroll.stop();
         }
     }
 
-    /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
         self.remember(Setting::Inspector, self.inspector.is_open());
     }
 
-    /// Keeps the list coasting after the wheel, or stops it doing so, and remembers the choice.
     pub fn toggle_scroll_inertia(&mut self) {
         self.config.scroll_inertia = !self.config.scroll_inertia;
         if !self.config.scroll_inertia {
@@ -333,7 +269,6 @@ impl App {
         self.remember(Setting::ScrollInertia, self.config.scroll_inertia);
     }
 
-    /// Lets the list be pulled past its ends, or not, and remembers the choice.
     pub fn toggle_overscroll(&mut self) {
         self.config.overscroll = !self.config.overscroll;
         if !self.config.overscroll {
@@ -342,23 +277,16 @@ impl App {
         self.remember(Setting::Overscroll, self.config.overscroll);
     }
 
-    /// Saves one setting into `config.kdl`, naming it there from now on. Only that setting is
-    /// recorded, because what the open folder shows may come from a rule or a remembered visit,
-    /// and that must not become the global default for the folders those leave alone.
     fn remember(&mut self, changed: Setting, on: bool) {
         self.config.remember(changed, on);
         self.save_setting(changed);
     }
 
-    /// Takes a setting out of `config.kdl`, so the next launch uses the default, and uses it
-    /// now too.
     pub fn reset_setting(&mut self, setting: Setting) {
         self.config.reset(setting);
         let _ = self.store.edit(crate::config::CONFIG, |doc| {
             crate::settings::Settings::clear(doc, setting)
         });
-        // A rule or a remembered visit still outranks the global default, so the open folder
-        // is resolved again rather than forced back to the setting just reset.
         self.apply_rules();
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
@@ -370,12 +298,10 @@ impl App {
         }
     }
 
-    /// The columns the list shows, and which one it sorts by.
     pub fn sort_column(&self) -> (&str, SortDir) {
         (self.sort.0.as_str(), self.sort.1)
     }
 
-    /// A header click: the sort column flips, another column starts ascending.
     pub fn sort_by(&mut self, column: &str) {
         self.sort = if self.sort.0 == column {
             (column.to_owned(), self.sort.1.flip())
@@ -393,7 +319,6 @@ impl App {
         self.apply_filter();
     }
 
-    /// Sets a column's width as dragging its header edge does, clamped to a usable range.
     pub fn resize_column(&mut self, column: &str, width: f32) {
         match column {
             "size" => self.size_width = width.clamp(64.0, 320.0),
@@ -402,7 +327,6 @@ impl App {
         }
     }
 
-    /// Puts a column back to the width it starts at.
     pub fn reset_column(&mut self, column: &str) {
         match column {
             "size" => self.size_width = 92.0,
@@ -412,7 +336,6 @@ impl App {
     }
 
     pub fn phrase_for_count(&self) -> String {
-        // The rows are still being read: the count is not zero, it is not known yet.
         if self.is_scanning() {
             return "Reading…".into();
         }

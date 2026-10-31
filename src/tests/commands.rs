@@ -1,5 +1,3 @@
-//! The command bar.
-
 use super::helpers::*;
 use crate::app::{SettingsTab, SheetKind};
 use crate::keybinds::Action;
@@ -181,12 +179,10 @@ fn the_arrows_scroll_the_bar_and_keep_rows_around_the_highlight() {
         key: Key::Down,
         mods: Mods::default(),
     };
-    // Enough presses to take the highlight past the fold of the 380-point list.
     for _ in 0..10 {
         rt.key(down.clone());
         rt.frame(0.1);
     }
-    // The reveal glides, so let it come to rest.
     for _ in 0..60 {
         rt.frame(1.0 / 60.0);
     }
@@ -239,7 +235,6 @@ fn a_new_query_takes_the_bar_back_to_its_first_row() {
         mods: Mods::default(),
     });
     rt.frame(0.1);
-    // The scroll back to the top glides, so let it come to rest.
     for _ in 0..60 {
         rt.frame(1.0 / 60.0);
     }
@@ -302,7 +297,6 @@ fn the_command_bar_draws_shortcuts_as_keycaps() {
     rt.invalidate();
     rt.frame(0.1);
 
-    // A keycap is a legend on a face, sitting in the chord's tray.
     let first = rt.state.keybinds.keycaps(Action::Rename)[0].clone();
     let drawn = rt.elements().iter().any(|e| {
         e.path.contains("/command-rename/")

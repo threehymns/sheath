@@ -1,5 +1,3 @@
-//! The settings panel, its switches, and the files they save to.
-
 use super::helpers::*;
 use crate::app::{App, SettingsTab};
 use crate::keybinds::{Action, Keybinds};
@@ -21,7 +19,6 @@ fn done_sits_in_the_dialogs_corner_outside_the_panel() {
     let (cut, _) = rt
         .presented("corner-cut")
         .expect("the panel's corner is cut");
-    // The inset the panel keeps from the dialog's edge, so Done shares the dialog's corner.
     let inset = dialog[0] + dialog[2] - (panel[0] + panel[2]);
     assert!(
         (done[0] + done[2] - (dialog[0] + dialog[2] - inset)).abs() < 0.6
@@ -36,8 +33,6 @@ fn done_sits_in_the_dialogs_corner_outside_the_panel() {
         (cut[0] + cut[2] - (panel[0] + panel[2])).abs() < 0.6,
         "the cut ends on the panel's right edge: {cut:?} against {panel:?}"
     );
-    // The bite, its gap around Done, and room for the panel's own 8 pt corner radius where it
-    // rounds down onto the panel's right edge.
     assert!(
         (cut[2] - (done[2] + 8.0 + 8.0)).abs() < 0.6,
         "the cut is Done plus its gap and the panel corner's radius: {cut:?} against {done:?}"
@@ -108,15 +103,12 @@ fn the_settings_modal_takes_presses_from_the_browser() {
     let mut rt = runtime(app);
     rt.frame(0.0);
     click(&mut rt, "open-settings");
-    // The row is still laid out under the dialog; a press there lands on the settings rather
-    // than the browser.
     let (x, y) = rt.find("f:alpha").expect("the row is under the dialog");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.1);
     assert!(rt.state.selected.is_none(), "no row was clicked");
 
-    // A press outside the dialog lands on the scrim, which dismisses the settings.
     rt.pointer_down(8.0, 8.0);
     rt.pointer_up(8.0, 8.0);
     rt.frame(0.1);
@@ -196,7 +188,6 @@ fn saved_settings_load_at_launch() {
     assert!(!saved.inspector);
 
     let mut app = App::open_with(dir.path().to_path_buf(), saved);
-    // A big folder is read off the main thread, so wait it out before reading its rows.
     app.settle_scan();
     assert!(app.show_hidden);
     assert!(!app.inspector.is_open());
@@ -362,8 +353,6 @@ fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
     );
 }
 
-/// Hex's settings: the rail sits on the window's background, and each page's rows live in a
-/// card beside it.
 #[test]
 fn the_settings_pages_group_their_rows_into_a_card_beside_the_rail() {
     let dir = fixture();
@@ -394,8 +383,6 @@ fn the_settings_pages_group_their_rows_into_a_card_beside_the_rail() {
     );
 }
 
-/// A shortcut the file names can be reset like a setting: the undo takes its line out of
-/// `keybinds.kdl`, and an action the file leaves alone has no undo at all.
 #[test]
 fn resetting_a_keybind_takes_its_line_out_of_the_file() {
     let dir = fixture();
@@ -435,8 +422,6 @@ fn resetting_a_keybind_takes_its_line_out_of_the_file() {
     assert!(!saved_keybinds(&dir).is_custom(Action::Rename));
 }
 
-/// A setting the config file names can be reset, which takes its key out rather than writing
-/// the default down; a setting the file doesn't name has no Reset at all.
 #[test]
 fn resetting_a_setting_takes_its_key_out_of_the_config() {
     let dir = fixture();

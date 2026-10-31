@@ -1,10 +1,8 @@
-//! The open folder watched for changes made from outside the app.
-
 use super::helpers::*;
 use std::fs;
 
-/// The inotify instances this process holds open: on Linux a live watcher is one of them, so a
-/// number that keeps climbing means watchers are left behind.
+/// The inotify instances this process holds open; a count that keeps climbing means leaked
+/// watchers.
 #[cfg(target_os = "linux")]
 fn inotify_instances() -> usize {
     let Ok(fds) = fs::read_dir("/proc/self/fd") else {
@@ -19,7 +17,6 @@ fn inotify_instances() -> usize {
         .count()
 }
 
-/// Whether a row named `name` is in the list on screen.
 fn shown(rt: &rune::Runtime<crate::app::App>, name: &str) -> bool {
     rt.state
         .visible
@@ -85,9 +82,7 @@ fn the_watcher_follows_the_window_to_another_folder() {
     rt.state.navigate(other.path().to_path_buf());
     rt.frame(0.1);
 
-    // A change in the folder the app left is not this list's business.
     fs::write(dir.path().join("left-behind.txt"), "x").unwrap();
-    // One in the folder now on screen is.
     fs::write(other.path().join("arrived.txt"), "x").unwrap();
     let mut landed = false;
     for _ in 0..100 {
@@ -123,8 +118,6 @@ fn switching_folders_leaves_no_watcher_behind() {
         app.navigate(dir.path().to_path_buf());
         app.settle_scan();
     }
-    // A dropped watcher closes its inotify instance as its thread winds down, which can trail
-    // the navigation by a moment.
     let mut left = inotify_instances();
     for _ in 0..100 {
         if left <= first {

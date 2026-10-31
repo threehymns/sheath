@@ -1,5 +1,3 @@
-//! The command bar: the actions with their shortcuts, filtered by what is typed.
-
 use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
@@ -7,11 +5,8 @@ use rune::{Cursor, El, Icon, Key, ScrollSpec, Tx, col, el, icon, row, text};
 use rune_kit::{Kit, TextInput, glyphs, scrim};
 use rune_theme_opencode as theme;
 
-/// A row's height and the gap under it: what one arrow press moves the highlight by.
 const ROW_H: f32 = 32.0;
 const ROW_GAP: f32 = 1.0;
-/// The rows the bar keeps between the highlight and the edge it scrolls to, so an arrow key
-/// stops with the rows around the highlight in view instead of pinning it to the edge.
 const CLEARANCE_ROWS: f32 = 3.0;
 
 pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
@@ -24,13 +19,11 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .placeholder("Type a command")
         .leading_icon(k.glyph.search)
         .width(None)
-        // The bar itself is the field's frame, so the input carries no fill or border of its own.
         .plain()
         .on_edit(|s: &mut App| s.palette_edit())
         .on_change(|s: &mut App, tx| s.palette_requery(tx))
         .on_submit(|s: &mut App, tx| s.run_palette_command(tx))
         .on_key(|s: &mut App, event, tx| {
-            // The field owns the keyboard here, so the bar's keys are the ones it leaves over.
             if event.key == Key::Escape {
                 s.close_palette();
                 return true;
@@ -52,8 +45,7 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         })
         .build(k)
         .key("command-field");
-    // The padding lives on the list, not on each row: a row that is `w_full` and also has
-    // margins would be wider than the bar and clip at its right edge.
+    // Padding lives on the list, not on each row: margins on a `w_full` row would overflow it.
     let mut list = col()
         .key("command-list")
         .w_full()
@@ -98,9 +90,6 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             );
         let caps = s.keybinds.keycaps(action);
         if !caps.is_empty() {
-            // The keys sit on their row, so a highlighted row's tint carries into the well.
-            // The row paints its overlay over the panel; compositing it here gives the opaque
-            // colour the tray mixes from.
             let hover = k.c.hover;
             let surface = if selected {
                 hover.mix(panel, 1.0 - hover.a)
@@ -130,16 +119,10 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .w(560.0)
         .max_h(440.0)
         .radius(10.0)
-        // A step below the page, so the shortcuts' recessed trays read as wells rather than
-        // sitting on the same brightness.
         .fill(panel)
         .border(1.0, k.c.border_muted)
         .clip_rounded(10.0)
-        // A modal, so Escape closes the bar rather than just blurring the field, and focus stays
-        // inside while it is up.
         .modal(true, |s: &mut App| s.close_palette())
-        // The field pads itself, so the header only adds the list's own inset: the search icon
-        // lands on the same column as the rows' icons and the well of the bar is even all round.
         .child(row().px(6.0).py(6.0).child(field))
         .child(
             el().key("command-rule")
@@ -156,8 +139,6 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                     stick_bottom: false,
                 })
                 .scroll_edge_fade(12.0)
-                // The arrows stop the highlight short of the edge, with the rows around it in
-                // view, rather than scrolling it flush against the fade.
                 .scroll_margin(CLEARANCE_ROWS * (ROW_H + ROW_GAP))
                 .child(list),
         );

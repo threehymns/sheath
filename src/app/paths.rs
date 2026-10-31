@@ -1,5 +1,3 @@
-//! Where the app launches, and the system paths and launchers it works with.
-
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -70,7 +68,7 @@ pub(super) fn open_external(path: &Path) -> Result<(), String> {
     let mut command = Command::new("xdg-open");
     match command.arg(path).spawn() {
         Ok(mut child) => {
-            // Reap the launcher so opening many files doesn't accumulate zombies.
+            // Reap the launcher so opening many files doesn't collect zombies.
             std::thread::spawn(move || {
                 let _ = child.wait();
             });

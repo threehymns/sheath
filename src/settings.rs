@@ -1,12 +1,8 @@
-//! The settings saved under the `settings` node of `config.kdl`. Keybinds live in their own
-//! file, so editing one never rewrites the other. Saves change the one node they are about and
-//! leave every other byte of the file alone.
-
 use kdl::{KdlDocument, KdlNode};
 
-/// A setting the file can name. One the file doesn't name keeps its default, and saving removes
-/// its key, so resetting a setting is deleting a line rather than writing the default down.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// A setting the file does not name keeps its default; saving removes the key instead of writing
+// the default down.
 pub enum Setting {
     ShowHidden,
     Inspector,
@@ -24,7 +20,6 @@ impl Setting {
         Setting::Overscroll,
     ];
 
-    /// The key the file uses, and the stable name the element keys use.
     pub fn name(self) -> &'static str {
         match self {
             Setting::ShowHidden => "show-hidden",
@@ -35,7 +30,6 @@ impl Setting {
         }
     }
 
-    /// The short name a setting's controls are keyed by.
     pub fn id(self) -> &'static str {
         match self {
             Setting::ShowHidden => "hidden",
@@ -46,7 +40,6 @@ impl Setting {
         }
     }
 
-    /// What the app does when the file doesn't name it.
     pub fn default_on(self) -> bool {
         match self {
             Setting::ShowHidden | Setting::GridLayout => false,
@@ -91,20 +84,13 @@ impl Setting {
     }
 }
 
-/// What the browser remembers about how it was left, apart from the folders that remember their
-/// own presentation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub show_hidden: bool,
     pub inspector: bool,
-    /// The folder shows as a grid of tiles rather than a table of rows when no rule and no
-    /// remembered state says otherwise.
     pub grid: bool,
-    /// The list keeps moving after the wheel stops.
     pub scroll_inertia: bool,
-    /// The list can be pulled past its first and last row, then springs back.
     pub overscroll: bool,
-    /// The settings the file names; the rest are defaults a save leaves out.
     present: [bool; 5],
 }
 
@@ -114,8 +100,6 @@ impl Default for Settings {
             show_hidden: false,
             inspector: true,
             grid: false,
-            // Both are what the platform's own scrolling does, so they start on; the panel
-            // can turn either off.
             scroll_inertia: true,
             overscroll: true,
             present: [false; 5],
@@ -128,8 +112,6 @@ impl Settings {
         Settings::default()
     }
 
-    /// The settings the `settings` node names. A key the file leaves out, or cannot be read as
-    /// a boolean, keeps its default, so an edited file degrades instead of breaking the app.
     pub fn from_doc(doc: Option<&KdlDocument>) -> Settings {
         let mut settings = Settings::defaults();
         let Some(doc) = doc else {
@@ -154,13 +136,10 @@ impl Settings {
         settings
     }
 
-    /// Whether the file names this setting, so it can be reset.
     pub fn is_set(&self, setting: Setting) -> bool {
         self.present[setting.index()]
     }
 
-    /// Writes `setting` as a child of the `settings` node, leaving the rest of the document
-    /// exactly as it was: the node keeps its own whitespace and the comments above it.
     pub fn write(&self, doc: &mut KdlDocument, setting: Setting) {
         let body = format!(
             "{} {}",
@@ -174,36 +153,29 @@ impl Settings {
         write_child(doc, "settings", setting.name(), &body);
     }
 
-    /// Records `changed`'s new value, naming it in the file from now on. The other settings
-    /// stay as they were: a rule or a remembered visit may be what the folder shows, and that
-    /// is not the global default.
     pub fn remember(&mut self, changed: Setting, on: bool) {
         changed.set(self, on);
         self.present[changed.index()] = true;
     }
 
-    /// Takes a setting back to its default, so the file no longer names it.
     pub fn reset(&mut self, setting: Setting) {
         setting.set(self, setting.default_on());
         self.present[setting.index()] = false;
     }
 
-    /// Takes a setting's key out, so the default applies again.
     pub fn clear(doc: &mut KdlDocument, setting: Setting) {
         remove_child(doc, "settings", setting.name());
     }
 }
 
-/// The position of the top-level `parent` node, if the document has one.
 fn parent_index(doc: &KdlDocument, parent: &str) -> Option<usize> {
     doc.nodes()
         .iter()
         .position(|node| node.name().value() == parent)
 }
 
-/// Writes `name value` under `parent`, replacing the node that names it and keeping that node's
-/// leading whitespace and comments. A missing parent or child is created from parsed text, so it
-/// picks up the indentation a hand-written file has.
+// Rewrites the one child and keeps the parent's indentation, so the file's comments and layout
+// survive a save.
 pub fn write_child(doc: &mut KdlDocument, parent: &str, name: &str, body: &str) {
     let Some(index) = parent_index(doc, parent) else {
         let text = format!("\n{parent} {{\n    {body}\n}}\n");
@@ -249,7 +221,6 @@ pub fn write_child(doc: &mut KdlDocument, parent: &str, name: &str, body: &str) 
     }
 }
 
-/// Removes `name` from `parent`, leaving the parent and everything else in place.
 pub fn remove_child(doc: &mut KdlDocument, parent: &str, name: &str) {
     let Some(index) = parent_index(doc, parent) else {
         return;

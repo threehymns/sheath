@@ -1,5 +1,3 @@
-//! The sidebar place menu a right-click opens: its actions, and the rename field.
-
 use super::helpers::*;
 use crate::app::SheetKind;
 use crate::places::Places;
@@ -169,7 +167,6 @@ fn the_place_menu_renames_the_folder_on_disk_and_follows_it() {
     let mut rt = runtime(app);
     rt.frame(0.0);
 
-    // Stand in the folder being renamed, so the browser has to move with it.
     rt.state.navigate(alpha.clone());
     rt.frame(0.1);
     assert_eq!(rt.state.cwd.as_path(), alpha.as_path());
@@ -240,7 +237,6 @@ fn the_place_menu_shows_a_place_in_its_folder() {
     let mut rt = runtime(app);
     rt.frame(0.0);
 
-    // Move away, so showing the place has to bring its folder back.
     rt.state.navigate(second.clone());
     rt.frame(0.1);
     assert_eq!(rt.state.cwd.as_path(), second.as_path());

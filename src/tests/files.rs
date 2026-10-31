@@ -1,5 +1,3 @@
-//! New folders, copy and paste, duplication, and the inspector they refresh.
-
 use super::helpers::*;
 use crate::keybinds::Action;
 use rune::Tx;
@@ -34,7 +32,6 @@ fn the_toolbar_button_creates_and_selects_a_folder() {
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
     rt.frame(0.1);
-    // The new folder's rows land with the read: the frames after the press show its row.
     rt.frame(0.1);
     assert!(dir.path().join("New Folder").is_dir());
     assert_eq!(rt.state.selected.as_deref(), Some("f:New Folder"));
@@ -62,7 +59,6 @@ fn the_inspector_swaps_details_without_moving_them() {
         "the pane starts on its empty state"
     );
 
-    // A press and one frame: the swap has to have landed by the frame after the press.
     let (x, y) = rt.find("f:notes.md").expect("the row is on screen");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
@@ -83,7 +79,6 @@ fn the_inspector_swaps_details_without_moving_them() {
 #[test]
 fn the_inspector_summarises_a_selection_of_several_rows() {
     let dir = fixture();
-    // The table owns the selection, so select the way a click does.
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
     click(&mut rt, "f:file2.txt");
@@ -94,7 +89,6 @@ fn the_inspector_summarises_a_selection_of_several_rows() {
         rt.find("preview-scroll").is_none(),
         "no single file preview for several rows"
     );
-    // The two smaller files and the Markdown note, which the fixture writes with 24 bytes.
     assert_eq!(rt.state.selection_size(), 3 + 4 + 24);
     assert_eq!(rt.state.selection_folders(), 0);
 }
@@ -200,7 +194,6 @@ fn there_is_no_paste_until_something_is_copied() {
     app.copy_selection(false);
     assert!(app.action_enabled(Action::Paste));
 
-    // Pasting into the same folder would collide with itself, so a copy takes a new name.
     app.paste();
     assert!(dir.path().join("file2 copy.txt").exists());
 }

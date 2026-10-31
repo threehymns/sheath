@@ -1,28 +1,17 @@
-//! What the settings keybinds are listening for: the action's recorder, the modifiers held so
-//! far, and the chord and error a refused change left.
-
 use rune::{Mods, PhysicalInput, PhysicalKeyCode, Shortcut, ShortcutError, modifier_keycaps};
 
-/// What the recorder made of one physical input.
 pub enum Outcome {
-    /// Not listening: the event belongs to whatever else has it.
     Pass,
-    /// The recorder took the event.
     Consumed,
-    /// The user played a chord: bind it, or clear the action when it is `None`.
     Change(Option<Shortcut>),
 }
 
-/// One action's recording state, between the click that starts it and the chord that ends it.
 #[derive(Default)]
 pub struct Recorder {
     recording: bool,
     held: Mods,
     error: Option<ShortcutError>,
-    /// The chord the error refused, shown with it until a new chord starts. None for a refused
-    /// clear.
     refused: Option<Shortcut>,
-    /// Swallow auto-repeat until the captured or cancelled key is released.
     finishing: Option<PhysicalKeyCode>,
 }
 
@@ -35,12 +24,10 @@ impl Recorder {
         self.error.as_ref()
     }
 
-    /// The chord `finish` just refused, until another chord starts.
     pub fn refused(&self) -> Option<&Shortcut> {
         self.refused.as_ref()
     }
 
-    /// Starts listening, dropping the error the last chord left.
     pub fn begin(&mut self) {
         self.recording = true;
         self.error = None;
@@ -48,7 +35,6 @@ impl Recorder {
         self.finishing = None;
     }
 
-    /// Stops listening without binding anything.
     pub fn cancel(&mut self) {
         self.recording = false;
         self.held = Mods::default();
@@ -56,8 +42,6 @@ impl Recorder {
         self.refused = None;
     }
 
-    /// The keys the field shows: the refused chord, the modifiers held so far, or the chord the
-    /// action is bound to.
     pub fn keycaps(&self, bound: Option<&Shortcut>) -> Vec<String> {
         if let Some(refused) = self.refused.as_ref().filter(|_| self.recording) {
             refused.keycaps()
@@ -68,8 +52,6 @@ impl Recorder {
         }
     }
 
-    /// Takes one physical input. Escape cancels, Backspace clears, and any other key proposes
-    /// the chord it makes with the modifiers held.
     pub fn input(&mut self, event: &PhysicalInput) -> Outcome {
         match *event {
             PhysicalInput::FocusLost => {
@@ -129,8 +111,6 @@ impl Recorder {
         }
     }
 
-    /// Applies the answer to the chord `input` proposed: listening ends when it bound, and the
-    /// error stays on screen with the refused chord when it didn't.
     pub fn finish(&mut self, next: Option<Shortcut>, result: Result<(), ShortcutError>) {
         match result {
             Ok(()) => self.cancel(),
@@ -141,7 +121,6 @@ impl Recorder {
         }
     }
 
-    /// Pressing a new modifier starts another chord: the refused one and its error go.
     fn hold(&mut self, mods: Mods) {
         let held = self.held;
         if (mods.ctrl && !held.ctrl)

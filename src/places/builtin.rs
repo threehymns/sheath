@@ -1,7 +1,3 @@
-//! The places every launch knows about: the home folder and its usual folders, the file
-//! system's root, and the temporary folder. The state file names the ones the user keeps and
-//! where they moved them; anything it leaves out is added at the end of its section.
-
 use super::{Place, Section};
 use crate::app::{home_dir, root_dir};
 use crate::icons;
@@ -9,15 +5,10 @@ use rune::Icon;
 use rune_kit::glyphs;
 use std::path::PathBuf;
 
-/// Where a built-in place opens on this platform.
 enum Anchor {
-    /// The home folder itself.
     Home,
-    /// A folder under home, named the way the platform names it.
     UnderHome(&'static str),
-    /// The root of the file system.
     Root,
-    /// The system's temporary folder.
     Temp,
 }
 
@@ -29,7 +20,6 @@ pub(super) struct Builtin {
     anchor: Anchor,
 }
 
-/// The places every launch knows about, in their starting order.
 pub(super) const BUILTINS: [Builtin; 7] = [
     Builtin {
         id: "home",
@@ -92,8 +82,6 @@ impl Builtin {
         }
     }
 
-    /// Whether the folder is there to show. The temporary folder is hidden when it is the root
-    /// the root place already opens.
     pub(super) fn exists(&self) -> bool {
         self.path().is_some_and(|path| path.is_dir())
             && !(self.id == "temp" && self.path() == Some(root_dir()))

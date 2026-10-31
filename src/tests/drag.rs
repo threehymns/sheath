@@ -1,5 +1,3 @@
-//! Dragging rows onto folders and sidebar places.
-
 use super::helpers::*;
 use rune::{Mods, PhysicalInput};
 use std::fs;
@@ -29,7 +27,6 @@ fn dragging_a_selection_onto_a_folder_moves_all_of_it() {
 
     click(&mut rt, "f:file2.txt");
     click_with(&mut rt, "f:notes.md", shift());
-    // The press lands on a row that is already selected, so the whole selection travels.
     drag_row(&mut rt, "f:file10.txt", "f:alpha");
 
     for name in ["file2.txt", "file10.txt", "notes.md"] {
@@ -80,7 +77,6 @@ fn a_drag_from_an_unselected_rows_columns_sweeps_a_box() {
             "the {column} column is right of the name cell: {at} against {x}, view {view:?}"
         );
 
-        // A press in the columns still reads as a click on the row.
         rt.pointer_down(at, y);
         rt.pointer_up(at, y);
         rt.frame(0.1);
@@ -90,7 +86,6 @@ fn a_drag_from_an_unselected_rows_columns_sweeps_a_box() {
             "a click in the {column} column selects the row"
         );
 
-        // A drag from an unselected row's columns sweeps a box instead of picking it up.
         rt.state.select_id("f:notes.md");
         rt.frame(0.05);
         rt.pointer_down(at, y);
@@ -139,8 +134,6 @@ fn a_drag_on_a_selected_row_picks_it_up_from_anywhere() {
         "the press lands past the name, inside the name column: {blank} against {cell_right}"
     );
 
-    // Wherever on a selected row the press lands, a drag carries it: the selection is what
-    // the gesture means, not the row's blank space.
     for at in [blank, size_x] {
         rt.state.select_id("f:file2.txt");
         rt.frame(0.1);
@@ -164,7 +157,6 @@ fn a_drag_on_a_selected_row_picks_it_up_from_anywhere() {
             "the drag says what it carries"
         );
 
-        // Back at the press, the gesture is the click it began as and nothing moves.
         rt.pointer_move(at, y);
         rt.frame(0.05);
         rt.pointer_up(at, y);
@@ -211,7 +203,6 @@ fn dragging_a_row_against_an_edge_scrolls_the_rows_under_it() {
         "the drop follows the rows that passed under the pointer: {aimed} -> {passed}"
     );
 
-    // The top edge pulls the rows back the other way.
     rt.pointer_move(x, top + 4.0);
     for _ in 0..4 {
         rt.frame(1.0 / 60.0);
@@ -222,7 +213,6 @@ fn dragging_a_row_against_an_edge_scrolls_the_rows_under_it() {
         scroll_offset(&rt)
     );
 
-    // Let the rows settle away from the edge, then drop on the row under the pointer.
     rt.pointer_move(x, top + 200.0);
     rt.frame(1.0 / 60.0);
     let [x1, y1, _, h] = rt.presented("f:d05").expect("a folder row is on screen").0;
@@ -245,7 +235,6 @@ fn an_option_drag_draws_a_box_over_the_rows_and_scrolls_at_the_edge() {
     let [x, top, _, height] = rt.presented("files-table").expect("the list").0;
     let x = x + 40.0;
 
-    // Option starts a box on a row, where a plain press would drag the row instead.
     rt.physical_input(PhysicalInput::Modifiers(Mods {
         alt: true,
         ..Mods::default()
@@ -262,7 +251,6 @@ fn an_option_drag_draws_a_box_over_the_rows_and_scrolls_at_the_edge() {
     let swept = rt.state.selection_len();
     assert!(swept > 1, "the box swept the rows it covers: {swept}");
 
-    // Held at the bottom edge the box scrolls the rows and takes them in.
     rt.pointer_move(x, top + height - 4.0);
     rt.frame(0.05);
     let before = scroll_offset(&rt);
@@ -322,7 +310,6 @@ fn a_drag_onto_a_sidebar_place_moves_the_selection_there() {
     rt.frame(0.0);
     let destination = dir.path().join("moved");
     fs::create_dir(&destination).unwrap();
-    // A place stands in for the sidebar rows, below them where nothing else is drawn.
     let rect = [20.0, 620.0, 180.0, 40.0];
     rt.state.places_at.insert(
         "test-place".to_owned(),
@@ -365,7 +352,6 @@ fn the_name_is_the_handle_and_the_space_past_it_is_canvas() {
         "the name leaves blank column after it: {right} + 40 against {cell_right}"
     );
 
-    // The blank space after a short name clears, and the drag sweeps a box.
     rt.state.select_id("f:notes.md");
     rt.frame(0.05);
     let blank = right + 20.0;
@@ -386,7 +372,6 @@ fn the_name_is_the_handle_and_the_space_past_it_is_canvas() {
         "the file stayed where it was"
     );
 
-    // The name is the handle, including the slop just past the end of the text.
     rt.pointer_down(right + 3.0, y);
     rt.frame(0.05);
     rt.pointer_move(right + 63.0, y);
@@ -422,7 +407,6 @@ fn a_drag_that_comes_back_to_its_start_is_a_click() {
         "the press became a drag"
     );
 
-    // Back where it started, the press is the click it began as: no drop, no move.
     rt.pointer_move(x + 1.0, y + 1.0);
     rt.frame(0.05);
     assert!(

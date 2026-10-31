@@ -1,8 +1,3 @@
-//! The config folder. Each file is parsed once and edited in place, so a save changes the nodes
-//! it was asked to change and nothing else: comments, blank lines, and unknown nodes survive.
-//! Every write replaces the file atomically, and a file that fails to parse is never written
-//! back.
-
 use kdl::KdlDocument;
 use notify::Watcher;
 use rune::Waker;
@@ -12,14 +7,10 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::time::SystemTime;
 
-/// The settings and rules.
 pub const CONFIG: &str = "config.kdl";
 
-/// The keyboard shortcuts, in a file of their own.
 pub const KEYBINDS: &str = "keybinds.kdl";
 
-/// The folder the config files go in: `SHEATH_CONFIG_DIR` when set, else the platform's config
-/// folder.
 pub fn dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("SHEATH_CONFIG_DIR") {
         return Some(PathBuf::from(dir));
@@ -47,8 +38,6 @@ pub fn dir() -> Option<PathBuf> {
     }
 }
 
-/// The folder remembered per-folder state goes in: `SHEATH_STATE_DIR` when set, else the
-/// platform's state folder. It is machine-owned, so it stays out of the config folder.
 pub fn state_dir() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os("SHEATH_STATE_DIR") {
         return Some(PathBuf::from(dir));
@@ -78,8 +67,7 @@ pub fn state_dir() -> Option<PathBuf> {
     }
 }
 
-/// Replaces `path` in one step: the text goes to a sibling temporary file first, so a crash or a
-/// full disk leaves the old file rather than half of a new one.
+/// Writes a sibling temporary file, then renames it, so a failed write leaves the old file whole.
 pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let Some(dir) = path.parent() else {
         return Err(format!("{} has no folder", path.display()));
@@ -97,18 +85,12 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     })
 }
 
-/// A file the app could not read: one line for the panels, and a report that has to stand on its
-/// own away from the app, because Copy hands it to an editor or an assistant.
 #[derive(Clone, Debug)]
 pub struct Problem {
-    /// One line, for the settings panels and the toast's body.
     pub detail: String,
-    /// The file, the place, the line itself, and what the file is meant to hold.
     pub report: String,
 }
 
-/// What `name` is meant to hold, so a report read out of context still says what was being
-/// parsed. The README has the long version.
 fn schema(name: &str) -> &'static str {
     match name {
         CONFIG => {
@@ -126,8 +108,6 @@ fn schema(name: &str) -> &'static str {
     }
 }
 
-/// A report for a rule the schema refuses. The parser names the rule's problem in a sentence but
-/// has no line to point at, so the report says what the file holds instead.
 pub fn schema_problem(name: &str, path: Option<&Path>, error: &str) -> String {
     let mut report = format!("{name} has a rule it cannot read.\n\n  error: {error}\n");
     if let Some(path) = path {
@@ -137,8 +117,6 @@ pub fn schema_problem(name: &str, path: Option<&Path>, error: &str) -> String {
     report
 }
 
-/// The whole report for a file that does not parse: the place, the line the parser stopped on,
-/// and the shape the file was being read against.
 fn syntax_problem(name: &str, path: &Path, err: &kdl::KdlError) -> Problem {
     let Some(diagnostic) = err.diagnostics.first() else {
         return Problem {
@@ -176,7 +154,6 @@ fn syntax_problem(name: &str, path: &Path, err: &kdl::KdlError) -> Problem {
     }
 }
 
-/// A file that exists but could not be read at all: no place to point at.
 fn read_problem(name: &str, path: &Path, err: &std::io::Error) -> Problem {
     Problem {
         detail: format!("Couldn’t read {name}: {err}"),
@@ -187,7 +164,6 @@ fn read_problem(name: &str, path: &Path, err: &std::io::Error) -> Problem {
     }
 }
 
-/// Where a character offset falls, one-based, as an editor counts lines and columns.
 fn line_column(input: &str, offset: usize) -> (usize, usize) {
     let mut line = 1;
     let mut column = 1;
@@ -205,7 +181,6 @@ fn line_column(input: &str, offset: usize) -> (usize, usize) {
     (line, column)
 }
 
-/// The line the parser stopped on between its neighbours, with a caret under the place it named.
 fn excerpt(input: &str, line: usize, column: usize, length: usize) -> String {
     let lines: Vec<&str> = input.lines().collect();
     let mut out = String::new();
@@ -248,19 +223,15 @@ struct Loaded {
     stamp: Option<Stamp>,
 }
 
-/// The config folder: one parsed document per file, and one watcher telling the app when
-/// something else wrote to it.
 pub struct Store {
     dir: Option<PathBuf>,
     files: BTreeMap<&'static str, Loaded>,
     changes: Option<Receiver<()>>,
     _watcher: Option<notify::RecommendedWatcher>,
-    /// Why the last save could not be written, for the panels that show it.
     pub write_error: Option<String>,
 }
 
 impl Store {
-    /// The user's config folder, or a store with nowhere to save when there is none.
     pub fn open() -> Store {
         match dir() {
             Some(dir) => Store::at(dir),
@@ -268,7 +239,6 @@ impl Store {
         }
     }
 
-    /// A store with nowhere to save: the defaults apply and saving is a no-op.
     pub fn none() -> Store {
         let mut files = BTreeMap::new();
         for name in [CONFIG, KEYBINDS] {
@@ -290,7 +260,6 @@ impl Store {
         }
     }
 
-    /// The files in `dir`, for a config folder chosen by the caller.
     pub fn at(dir: PathBuf) -> Store {
         let mut store = Store::none();
         store.dir = Some(dir);
@@ -300,17 +269,14 @@ impl Store {
         store
     }
 
-    /// The path of a config file, when there is a folder to keep it in.
     pub fn path(&self, name: &str) -> Option<PathBuf> {
         self.dir.as_ref().map(|dir| dir.join(name))
     }
 
-    /// The parsed document, or `None` when the file on disk could not be read as KDL.
     pub fn doc(&self, name: &str) -> Option<&KdlDocument> {
         self.files.get(name).and_then(|file| file.doc.as_ref())
     }
 
-    /// Why a file could not be read, in one line, for the panels that show it.
     pub fn error(&self, name: &str) -> Option<&str> {
         self.files
             .get(name)
@@ -318,35 +284,26 @@ impl Store {
             .map(|problem| problem.detail.as_str())
     }
 
-    /// The whole problem with a file, for the toast's Copy button.
     pub fn problem(&self, name: &str) -> Option<&Problem> {
         self.files.get(name).and_then(|file| file.problem.as_ref())
     }
 
-    /// Whether a file parses, so its nodes can be edited.
     pub fn writable(&self, name: &str) -> bool {
         self.files
             .get(name)
             .is_some_and(|file| file.doc.is_some() && file.problem.is_none())
     }
 
-    /// Edits the document and writes it back. The edit lands on a copy, so a failed write leaves
-    /// the document the app holds exactly as it was. A file that failed to parse is never
-    /// written: the caller keeps showing the error instead.
     pub fn edit(
         &mut self,
         name: &'static str,
         edit: impl FnOnce(&mut KdlDocument),
     ) -> Result<(), String> {
         let Some(path) = self.path(name) else {
-            // A store with no folder cannot write anything. Reporting the save instead would
-            // leave the panels saying a rule landed while nothing was written.
             let error = "Couldn’t find a folder to save the config in.".to_owned();
             self.write_error = Some(error.clone());
             return Err(error);
         };
-        // The document kept here is the last one that parsed, not what is on disk now. Writing
-        // it back would throw away whatever the user is in the middle of typing.
         if !self.writable(name) {
             return Err(format!(
                 "{} does not parse, so nothing is written to it",
@@ -361,6 +318,7 @@ impl Store {
             self.write_error = Some(error.clone());
             return Err(error);
         };
+        // The edit lands on a copy, so a failed write leaves the stored document as it was.
         let mut doc = doc;
         edit(&mut doc);
         let text = doc.to_string();
@@ -377,13 +335,11 @@ impl Store {
         Ok(())
     }
 
-    /// Starts watching the config folder. The watcher tells the app a file changed, not what
-    /// changed: the reply is a re-read, which keeps it indifferent to how an editor saves.
+    /// Re-reads a file when it changes; the watcher reports which file changed, not what changed.
     pub fn watch(&mut self, wake: Waker) {
         let Some(dir) = self.dir.clone() else {
             return;
         };
-        // A first run has no config folder yet, and there is nothing to watch until it exists.
         let _ = fs::create_dir_all(&dir);
         let (tx, rx) = mpsc::channel();
         let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
@@ -411,7 +367,6 @@ impl Store {
         self._watcher = Some(watcher);
     }
 
-    /// Re-reads a file whose stamp moved. True when its contents changed.
     fn reload(&mut self, name: &'static str) -> bool {
         let Some(path) = self.path(name) else {
             return false;
@@ -424,7 +379,6 @@ impl Store {
         true
     }
 
-    /// Reads and parses one file, keeping the old document when the new text does not parse.
     fn read(&mut self, name: &'static str) {
         let Some(path) = self.path(name) else {
             return;
@@ -433,6 +387,8 @@ impl Store {
         let (doc, problem) = match fs::read_to_string(&path) {
             Ok(text) => match text.parse::<KdlDocument>() {
                 Ok(doc) => (Some(doc), None),
+                // Keep the last document that parsed; writing it back would discard the user's
+                // edits in progress.
                 Err(err) => (
                     self.files.get(name).and_then(|file| file.doc.clone()),
                     Some(syntax_problem(name, &path, &err)),
@@ -454,12 +410,8 @@ impl Store {
                 stamp,
             },
         );
-        // A file that does not parse has its stamp recorded too, so every later poll does not
-        // re-read it until it changes again.
     }
 
-    /// Drains the watcher and re-reads whatever changed. True when the app should apply the new
-    /// documents.
     pub fn poll(&mut self) -> bool {
         let Some(changes) = &self.changes else {
             return false;

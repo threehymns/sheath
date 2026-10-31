@@ -1,5 +1,3 @@
-//! The list's wheel, inertia and overscroll.
-
 use super::helpers::*;
 use crate::app::App;
 use rune::{Runtime, WheelEvent};
@@ -47,7 +45,6 @@ fn inertia_carries_the_fingers_speed_without_outrunning_them() {
     rt.state.config.scroll_inertia = true;
     rt.frame(0.0);
     let at = trackpad_burst(&mut rt, 8);
-    // While the fingers move they carry the rows: no frame moves more than the wheel's 36.
     for pair in at.windows(2) {
         let moved = pair[1] - pair[0];
         assert!(
@@ -56,7 +53,6 @@ fn inertia_carries_the_fingers_speed_without_outrunning_them() {
         );
     }
 
-    // The fingers stop: the rows keep the speed they had, slowing down until they rest.
     let lifted = at[at.len() - 1];
     let mut coast = Vec::new();
     for _ in 0..120 {

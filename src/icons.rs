@@ -1,5 +1,3 @@
-//! The handful of glyphs the browser needs beyond Rune Kit's built-in set.
-
 use rune::Icon;
 
 pub static HOUSE: Icon = Icon {
@@ -38,7 +36,6 @@ pub static DRIVE: Icon = Icon {
     body: r#"<rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor"/><path d="M2 9.5h12" stroke="currentColor"/><circle cx="11.25" cy="6.25" r=".75" fill="currentColor"/>"#,
 };
 
-/// A drag handle: two columns of three dots, the grip a row that can be moved carries.
 pub static GRIP: Icon = Icon {
     name: "sheath-grip",
     view: 16.0,

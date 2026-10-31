@@ -1,5 +1,3 @@
-//! The modal layers over the browser: the rename, move and trash sheets, and the row menu.
-
 use crate::app::{App, Sheet, SheetKind};
 use crate::keybinds::Action;
 use rune::{El, PointerPress, col, el, row, text};
@@ -177,8 +175,6 @@ fn trash_sheet(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>) {
         .build(k, layers);
 }
 
-/// The sidebar place menu a right-click opens: open the place, show it in its folder, edit the
-/// name the sidebar shows, rename the item on disk, or take it out of the sidebar.
 pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(menu) = &s.place_menu else {
         return;
@@ -208,13 +204,11 @@ pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
         )
         .separator()
         .item(
-            // The name the sidebar shows only: the folder keeps its own name on disk.
             MenuItem::new("Edit Name…")
                 .icon(&theme::icons::EDIT)
                 .on_select(|s: &mut App| s.begin_menu_place_rename()),
         )
         .item(
-            // The folder or file itself: this one moves the place to the new path.
             MenuItem::new("Rename on Disk…")
                 .icon(&glyphs::FOLDER)
                 .disabled(place.path.file_name().is_none())
@@ -236,23 +230,17 @@ pub(super) fn error_text(k: &Kit, error: &str) -> El {
         .wrap()
 }
 
-/// The row menu a right-click opens: the file operations, at the press point. A selection of
-/// several rows moves or trashes all of them, so the labels say how many.
 pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>) {
     let count = s.selection_len();
     let many = count > 1;
-    // The menu offers the opposite of what the row is doing now, so it asks the same
-    // question the filter does, through the same helper.
     let hidden = s
         .selected
         .as_ref()
         .and_then(|id| s.entries.iter().find(|entry| &entry.id == id))
         .is_some_and(|entry| s.entry_hidden(entry));
     context_menu("row-menu", el(), Some(at))
-        // The rule items name whole sentences, so the menu is wider than the kit's default.
         .min_width(240.0)
         .item(
-            // One name at a time: the sheet renames a single row.
             MenuItem::new("Rename")
                 .icon(&theme::icons::EDIT)
                 .shortcut(s.keybinds.menu_label(Action::Rename))

@@ -1,6 +1,3 @@
-//! The Rune view. All layout, painting and input come from Rune; these modules only assemble
-//! the app's state into elements, one region or overlay apiece.
-
 mod dialogs;
 mod grid;
 mod inspector;
@@ -46,9 +43,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         .sidebar_header(text("Sheath").font(k.ty.ui_medium).color(k.c.text_muted))
         .build(k);
     let mut layers = Vec::new();
-    // The selection box a drag draws, over the rows and under any dialog. It is clipped to the
-    // list, so the part a scroll carries past the viewport is cut off rather than painted over
-    // the window: the box is as tall as the rows it spans.
     if let Some(box_rect) = s.marquee_rect() {
         let view = s.rows_view;
         layers.push(
@@ -68,8 +62,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
                 ),
         );
     }
-    // Where a dragged row would land among the sidebar's places: the gap the section opened,
-    // marked by a line, and the item itself following the pointer.
     if let Some(line) = s.place_insert_line() {
         layers.push(
             el().key("place-insert")
@@ -118,8 +110,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if s.settings.is_some() {
         settings_layer(s, k, &mut layers);
     }
-    // A config file the app cannot read says so in the corner: which file, where it stopped, and
-    // a Copy that hands over the whole report.
     if !s.notices.is_empty() {
         let mut region = rune_kit::ToastRegion::new();
         for (index, notice) in s.notices.iter().enumerate() {
@@ -178,11 +168,8 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .on_edit(|s: &mut App| &mut s.search)
         .on_change(|s: &mut App, _| s.apply_filter());
     if s.search.text.is_empty() {
-        // Nothing to clear yet, so the slot shows the chord that reaches the field instead.
         let caps = s.keybinds.keycaps(Action::FocusSearch);
         if !caps.is_empty() {
-            // The field paints its base with a sheen from 6% to 2% white, so the well mixes
-            // from the lifted surface a bare `bg_base` would read as a dark rim.
             let surface = k.c.bg_base.mix(k.c.white, 0.04);
             search = search.trailing(crate::keycaps::tray(
                 k,
@@ -321,9 +308,6 @@ fn main(s: &App, k: &'static Kit) -> El {
                 ),
         );
     }
-    // A folder being read has no rows yet, but it is not empty: show the list's frame with no
-    // rows until the read lands, so switching folders doesn't flash the empty state and
-    // cross-fade the whole list around it.
     if s.visible.is_empty() && !s.is_scanning() {
         content.child(empty_state(s, k).grow(1.0).min_h(0.0))
     } else if s.is_grid() {

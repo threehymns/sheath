@@ -1,11 +1,7 @@
-//! The properties a rule can set: what the file calls each one, the values it accepts, and the
-//! one the form starts it at. The form and its menu read this, and nothing here touches a file.
-
 use crate::app::Layout;
 use crate::rules::{Kind, Prop, Props, SortKey};
 use rune_kit::SortDir;
 
-/// One property the editor can change, in the field that lists its values.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuleProp {
     Layout,
@@ -16,7 +12,6 @@ pub enum RuleProp {
 }
 
 impl RuleProp {
-    /// The properties a rule of `kind` can set, in the order the form lists them.
     pub fn all(kind: Kind) -> &'static [RuleProp] {
         match kind {
             Kind::Folder => &[
@@ -29,7 +24,6 @@ impl RuleProp {
         }
     }
 
-    /// The key the file writes it as, which is what the form calls it too.
     pub fn name(self) -> &'static str {
         match self {
             RuleProp::Layout => "layout",
@@ -40,7 +34,6 @@ impl RuleProp {
         }
     }
 
-    /// The property a key names, for the menu that adds one to the rule.
     pub fn from_name(name: &str) -> Option<RuleProp> {
         [
             RuleProp::Layout,
@@ -53,7 +46,6 @@ impl RuleProp {
         .find(|prop| prop.name() == name)
     }
 
-    /// Every value the file accepts, as the form words them; `inherit` last.
     pub fn options(self) -> &'static [&'static str] {
         match self {
             RuleProp::Layout => &["list", "grid", "inherit"],
@@ -63,7 +55,6 @@ impl RuleProp {
         }
     }
 
-    /// The value the property takes when it is added to the rule.
     pub fn initial(self) -> &'static str {
         match self {
             RuleProp::Layout => "list",
@@ -74,7 +65,6 @@ impl RuleProp {
         }
     }
 
-    /// What the rule holds for it, as one of `options`; `None` when the rule leaves it unset.
     pub fn label(self, props: &Props) -> Option<&'static str> {
         match self {
             RuleProp::Layout => held(
@@ -91,12 +81,10 @@ impl RuleProp {
         }
     }
 
-    /// Whether the rule sets it, to a value or to `inherit`.
     pub fn is_set(self, props: &Props) -> bool {
         self.label(props).is_some()
     }
 
-    /// Sets it from one of `options`.
     pub fn set(self, props: &mut Props, value: &str) {
         let inherit = value == "inherit";
         match self {
@@ -147,7 +135,6 @@ impl RuleProp {
     }
 }
 
-/// The form's one open menu: the properties to add, a property's values, or a matcher's kinds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RuleMenu {
     AddProperty,
@@ -155,7 +142,6 @@ pub enum RuleMenu {
     Matcher { exclude: bool, index: usize },
 }
 
-/// What a property holds, as the form words it; `None` when it is unset.
 fn held<T: Copy>(prop: Prop<T>, of: impl Fn(T) -> &'static str) -> Option<&'static str> {
     match prop {
         Prop::Unset => None,

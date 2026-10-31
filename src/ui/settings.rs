@@ -1,6 +1,3 @@
-//! The settings panel, laid out after Hex: a navigation rail, a raised page of cards, and
-//! Done in the dialog's corner.
-
 use crate::app::{App, SettingsTab};
 use crate::config;
 use crate::corner::CornerControl;
@@ -27,10 +24,6 @@ pub(super) use metrics::*;
 
 use card::{settings_row, settings_section};
 
-/// Settings after Hex's, as a modal: a dialog over the browser holding navigation on its
-/// background and the chosen page in a raised panel beside it, with Done in the dialog's
-/// top-right corner, outside the panel, so the way out is a button rather than a line in the
-/// rail. The scrim, the dialog and Escape all close it.
 pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(tab) = s.settings else {
         return;
@@ -71,7 +64,6 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         }
         nav = nav.child(item);
     }
-    // Version sits at the rail's foot, as Hex's does.
     let version = row().h(20.0).px(6.0).center_y().child(
         text(format!("Version {}", env!("CARGO_PKG_VERSION")))
             .key("settings-version")
@@ -93,7 +85,6 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         SettingsTab::Rules => super::rules::rules_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
     };
-    // Concentric with the dialog's corners: the same 8 pt inset taken off the radius.
     let panel_radius = SETTINGS_RADIUS - SETTINGS_INSET;
     let panel = col()
         .key("settings-panel")
@@ -147,14 +138,10 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .fill(k.c.bg_deep)
             .border(1.0, k.c.border_muted)
             .clip_rounded(SETTINGS_RADIUS)
-            // A modal, so Escape closes it and focus stays inside while it is up; the Rules
-            // tab's open form takes the key first, so Escape closes the form rather than the
-            // panel behind it.
             .modal(true, |s: &mut App| s.dismiss_settings())
             .on_press(|_: &mut App| {})
             .child(sidebar)
             .child(panel)
-            // The bite, then Done in it: the dialog's surface at its corner, not the panel's.
             .child(done.backdrop(k.c.bg_deep, k.c.border_weak))
             .child(
                 done.place(
@@ -183,15 +170,11 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .items_center()
             .child(dialog),
     );
-    // The rule form's open menu is mounted after the panel, so it paints above the card its
-    // field hangs from.
     if tab == SettingsTab::Rules {
         super::rule_editor::rule_editor_layers(s, k, layers);
     }
 }
 
-/// The pane's title, after Hex's pane header. Done is in the dialog's corner, so nothing sits in
-/// the header but the page's name.
 fn settings_header(k: &Kit, tab: SettingsTab) -> El {
     row()
         .key("settings-header")
@@ -218,10 +201,8 @@ fn tab_icon(tab: SettingsTab) -> &'static Icon {
     }
 }
 
+// These switches edit the fallbacks, not what the open folder resolved to, so they read `config`.
 fn general_settings(s: &App, k: &Kit) -> El {
-    // These switches edit the fallbacks, so they read the settings the file holds, not what the
-    // open folder resolved to: a rule or a remembered visit may decide this folder, and the
-    // fallback those leave alone must still be visible and settable here.
     let hidden = Switch::new(s.config.show_hidden)
         .label("Show hidden files")
         .hide_label()
@@ -381,9 +362,6 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
     page
 }
 
-/// One action's shortcut: click to record, Escape cancels while listening, Backspace clears.
-/// The keys are drawn as the app's keycaps, so they match the command bar rather than Rune
-/// Kit's flat chips.
 fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
     let recorder = s
         .recorders
@@ -395,8 +373,6 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
     } else {
         "Record shortcut"
     };
-    // The keys sit straight on the card, as Hex's do; only a recording takes a surface of its
-    // own, so the well the caps sit in follows it.
     let surface = if recorder.is_recording() {
         k.c.layer_01
     } else {
@@ -460,8 +436,6 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
     root
 }
 
-/// An action's shortcut, with an undo beside it while `keybinds.kdl` names the action.
-/// Resetting takes its line out, so the built-in chord is what the file no longer says.
 fn binding_control(s: &App, k: &Kit, action: Action, field: El) -> El {
     let mut row = row().gap(6.0).center_y();
     if s.keybinds.is_custom(action) {
@@ -479,8 +453,6 @@ fn binding_control(s: &App, k: &Kit, action: Action, field: El) -> El {
     row.child(field)
 }
 
-/// A setting's control: its switch, with an undo beside it while the config file names the
-/// setting. Resetting takes the key out, so the default is what the file no longer says.
 fn setting_control(s: &App, k: &Kit, setting: Setting, control: El) -> El {
     let mut row = row().gap(6.0).center_y();
     if s.config.is_set(setting) {
@@ -498,7 +470,6 @@ fn setting_control(s: &App, k: &Kit, setting: Setting, control: El) -> El {
     row.child(control)
 }
 
-/// A file the settings are saved in, with a button that copies its path.
 fn file_path_row(
     k: &Kit,
     glyph: &'static Icon,

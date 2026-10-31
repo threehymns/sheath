@@ -1,6 +1,3 @@
-//! The rule form's actions: Save and Cancel in the corner they are cut into, when they are up,
-//! how they arrive, and the bite that holds them.
-
 use super::helpers::*;
 use rune::{Key, KeyEvent, Mods};
 use std::fs;
@@ -17,7 +14,6 @@ fn the_corner_bite_opens_with_the_buttons_while_its_edge_holds_the_card() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
-    // A change to the draft mounts Save, so the bite takes the room it needs.
     click(&mut rt, "add-match");
     let (form, _) = rt.presented("rule-editor-0").expect("the form is drawn");
     let edge = form[0] + form[2];
@@ -34,8 +30,6 @@ fn the_corner_bite_opens_with_the_buttons_while_its_edge_holds_the_card() {
         widths.push(cut[2]);
         rt.frame(1.0 / 60.0);
     }
-    // The bite is drawn into a box that springs, and the drawing stretches to fill it, so the
-    // half by the card's edge holds still while the rest opens out to the room Save takes.
     assert!(
         widths[0] + 4.0 < widths[widths.len() - 1],
         "the bite opens from its left edge: {widths:?}"
@@ -64,7 +58,6 @@ fn typing_that_makes_the_draft_dirty_animates_the_save_button_in() {
         key: Key::Text("x".into()),
         mods: Mods::default(),
     });
-    // The keystroke lands in its own frame, at once; Save waits for the one after it.
     rt.frame(0.0);
     assert!(
         rt.state.rule_edit.as_ref().is_some_and(|edit| edit.dirty()),
@@ -80,8 +73,6 @@ fn typing_that_makes_the_draft_dirty_animates_the_save_button_in() {
     );
     rt.frame(0.0);
 
-    // The keystroke's own commit lands at once, but Save is drawn from what the frame after it
-    // noticed, so the bite grows to fit both buttons instead of snapping open at full width.
     let arriving = rt
         .presented("rule-editor-actions")
         .expect("Save is up beside Cancel")
@@ -121,7 +112,6 @@ fn an_opening_form_is_revealed_by_its_card_instead_of_painting_over_the_section_
     click(&mut rt, "settings-tab-rules");
     rt.frame(0.3);
 
-    // A press and one frame, to catch the card partway open rather than settled.
     let (x, y) = rt.find("rule-here-0").expect("the rule is on screen");
     rt.pointer_down(x, y);
     rt.pointer_up(x, y);
@@ -216,7 +206,6 @@ fn the_rule_forms_actions_sit_on_the_cards_corner() {
         .expect("the name field")
         .text = "edited".to_owned();
     rt.state.apply_rule_fields();
-    // A click redraws the form, which is what puts the actions up for the new draft.
     click(&mut rt, "rule-field-name");
 
     let (card, _) = rt
@@ -231,8 +220,6 @@ fn the_rule_forms_actions_sit_on_the_cards_corner() {
         (cancel[3] - save[3]).abs() <= 0.5,
         "Cancel is the same height as Save: {cancel:?} and {save:?}"
     );
-    // The bite is the buttons plus the gap on every side, and the form keeps a 4 pt sliver of
-    // card around itself, so the actions end a sliver and a gap inside the card's edges.
     let right = (card[0] + card[2]) - (actions[0] + actions[2]);
     let top = actions[1] - card[1];
     assert!(

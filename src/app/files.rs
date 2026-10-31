@@ -1,20 +1,15 @@
-//! The operations that change files: creating a folder, copying, cutting and pasting, and
-//! duplicating what is selected.
-
 use crate::app::App;
 use rune::Tx;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Rows copied or cut, waiting for a paste: their paths and whether a paste moves them.
 #[derive(Clone, Debug)]
 pub struct Clipboard {
     pub paths: Vec<PathBuf>,
     pub cut: bool,
 }
 
-/// A free name beside `name` in `dir`: "notes copy.md", then "notes copy 2.md".
 fn free_name(dir: &Path, name: &str) -> String {
     let (stem, extension) = match name.rfind('.') {
         Some(0) | None => (name, ""),
@@ -29,7 +24,6 @@ fn free_name(dir: &Path, name: &str) -> String {
     candidate
 }
 
-/// Copies a file, or a folder and everything in it.
 fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
     if from.is_dir() {
         fs::create_dir(to)?;
@@ -44,8 +38,6 @@ fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 impl App {
-    /// Creates `New Folder`, or the next free numbered name, and selects it once the read
-    /// that follows finds it.
     pub fn new_folder(&mut self, _tx: &mut Tx) {
         let mut name = "New Folder".to_owned();
         let mut n = 2;
@@ -56,7 +48,6 @@ impl App {
         let path = self.cwd.join(&name);
         match fs::create_dir(&path) {
             Ok(()) => {
-                // The new row exists once the read lands; select and reveal it there.
                 self.pending_select = Some((vec![format!("f:{name}")], true));
                 self.reload();
                 self.error = None;
@@ -65,8 +56,6 @@ impl App {
         }
     }
 
-    /// Puts the selection on the app's clipboard. A cut pastes as a move and marks the rows
-    /// dimmed until it does.
     pub fn copy_selection(&mut self, cut: bool) {
         let paths: Vec<PathBuf> = self
             .selected_ids()
@@ -81,16 +70,12 @@ impl App {
         self.error = None;
     }
 
-    /// Whether `path` was cut and is waiting for a paste, so the list can dim it.
     pub fn is_cut(&self, path: &Path) -> bool {
         self.clipboard
             .as_ref()
             .is_some_and(|clipboard| clipboard.cut && clipboard.paths.iter().any(|p| p == path))
     }
 
-    /// Copies the clipboard into this folder, or moves what was cut. There is no
-    /// "replace?" prompt: a copy takes a free name of its own, and a cut that would overwrite
-    /// stops and says so.
     pub fn paste(&mut self) {
         let Some(clipboard) = self.clipboard.clone() else {
             return;
@@ -121,7 +106,6 @@ impl App {
                 made.push(name);
             }
             if error.is_none() {
-                // A cut is pasted once, as it is in Finder.
                 self.clipboard = None;
             }
         } else {
@@ -161,10 +145,8 @@ impl App {
         self.finish_paste(made, error);
     }
 
-    /// Reloads after a paste and selects what it made, once the read that follows finds it.
     fn finish_paste(&mut self, made: Vec<String>, error: Option<String>) {
         self.error = error;
-        // A paste that made nothing (a refused cut) leaves the selection where it was.
         if !made.is_empty() {
             self.pending_select =
                 Some((made.iter().map(|name| format!("f:{name}")).collect(), false));

@@ -1,6 +1,3 @@
-//! The grid layout: a virtualised grid of tiles, one per item, drawn by the app so a press, a
-//! box and a drop read the same state the table's rows do.
-
 use crate::app::{
     App, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
@@ -12,23 +9,17 @@ use std::borrow::Cow;
 
 use super::table::{HEADER_HEIGHT, browser_style, mount, sort_label};
 
-/// The theme's small control height. The sort buttons run at it inside the header-tall bar, so
-/// they sit with a little room above and below rather than filling it edge to edge.
 const SORT_BUTTON_HEIGHT: f32 = 20.0;
 
 pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
     let told = s.scroll_told.clone();
     let columns = s.grid_columns();
     let rows = s.grid_rows();
-    // The press, the keys, the drags and the wheel live on the scrolling viewport, as they do
-    // in the table, so a press on the space past the last tile starts a box too.
     col()
         .key("file-grid")
         .w_full()
         .h_full()
         .min_h(0.0)
-        // The grid itself lands at once, so a folder that changes between empty and listed
-        // does not cross-fade its whole wall.
         .transition(Transition::none())
         .child(grid_toolbar(s, k).transition(mount(cut)))
         .child(
@@ -43,8 +34,6 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                     stick_bottom: false,
                 })
                 .focusable(true)
-                // Focus shows in the selected tile, so the grid draws no ring: clipped by its
-                // own viewport, it would read as a border under the sort bar.
                 .no_focus_ring()
                 .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
                 .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
@@ -53,21 +42,12 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                 .on_layout(|s: &mut App, rect| s.rows_view = rect)
                 .on_scroll_offset(move |at| told.set(at))
                 .transition(mount(cut))
-                // The bounce moves the tiles without moving the viewport, so its edges stay put.
                 .child(
                     col()
                         .key("file-grid-rows")
                         .w_full()
-                        // The tiles sit a touch under the sort bar, so the first row's
-                        // highlight is not flush against it. The margin is inside the
-                        // viewport, so the band above the first tile is empty space: a press
-                        // there clears the selection or starts a box like any other gap.
                         .pt(GRID_TOP_MARGIN)
                         .transition(mount(cut))
-                        // Tiles land where they belong: no enter or exit fade, no hover or
-                        // selection crossfade, and no glide when a sort, a filter or a
-                        // refresh moves them. The grid's own motion is the viewport's
-                        // scroll spring and the app's overshoot, outside this subtree.
                         .motion(Spring::NONE)
                         .instant_changes()
                         .hover_motion_within(Spring::NONE, Spring::NONE)
@@ -89,8 +69,6 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
         )
 }
 
-/// The grid's stand-in for the column header: the same sort columns at the header's height, so
-/// the tiles start where the rows do and a sort set here is the one the table shows.
 fn grid_toolbar(s: &App, k: &'static Kit) -> El {
     let style = browser_style(k);
     let (column, direction) = s.sort_column();
@@ -115,8 +93,6 @@ fn grid_toolbar(s: &App, k: &'static Kit) -> El {
         .child(sort("modified", "Date Modified"))
 }
 
-/// One sort column in the grid's toolbar: a click sorts by it, another click reverses it, as a
-/// header cell does.
 fn grid_sort(
     k: &Kit,
     style: &rune_kit::TableStyle,
@@ -139,7 +115,6 @@ fn grid_sort(
         .child(sort_label(k, style, id, title, column, direction))
 }
 
-/// One grid row: as many tiles as the viewport fits across, and none past the last item.
 fn grid_row(s: &App, row_index: usize, columns: usize, k: &'static Kit) -> El {
     let mut line = row()
         .key(format!("grid-row-{row_index}"))
@@ -188,7 +163,6 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
         .items_center()
         .justify_center()
         .transition(Transition::none())
-        // The tile's own hover overlay lands with the pointer, rather than fading.
         .hover_motion(Spring::NONE, Spring::NONE)
         .child(icon(glyph, 34.0).color(icon_color))
         .child(
@@ -205,11 +179,9 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
                 .max_lines(2),
         );
     if s.is_cut(&entry.path) {
-        // Cut tiles wait, dimmed, for a paste.
         tile = tile.opacity(0.45);
     }
     if s.drop_row() == Some(index) {
-        // The folder a dragged selection would land in.
         tile.fill(k.alpha(k.c.text_accent, 0.3))
             .outline(1.0, -1.0, k.c.border_focus)
     } else if s.is_selected(&entry.id) {

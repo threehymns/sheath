@@ -1,5 +1,3 @@
-//! The rule editor: the form's draft, its Save and Cancel, what it refuses, and what closes it.
-
 use super::helpers::*;
 use std::fs;
 
@@ -17,7 +15,6 @@ fn an_editor_closes_when_the_config_file_changes_under_it() {
     rt.frame(0.0);
     click(&mut rt, "open-settings");
     click(&mut rt, "settings-tab-rules");
-    // This rule is named "first", so its row is keyed by that name.
     click(&mut rt, "rule-first-0");
 
     let wake: rune::Waker = std::sync::Arc::new(|| {});
@@ -28,7 +25,6 @@ fn an_editor_closes_when_the_config_file_changes_under_it() {
          folder-rule \"first\" {\n    match path=\"/a\"\n    layout grid\n}\n",
     )
     .unwrap();
-    // A frame's `poll` is what notices a file someone else wrote and applies it.
     let mut reloaded = false;
     for _ in 0..100 {
         rt.frame(0.02);
@@ -78,8 +74,6 @@ fn the_rules_tab_edits_a_rule_in_place() {
         .expect("the matcher's path field")
         .text = "/edited/**".to_owned();
     rt.state.apply_rule_fields();
-    // A click redraws the form from the state the test just changed by hand, which is what puts
-    // Save up for the draft it now holds.
     click(&mut rt, "rule-field-name");
 
     let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
@@ -112,11 +106,8 @@ fn the_rule_editor_picks_a_property_value_from_a_list() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
-    // The card springs open around the form, and its own edge reveals the form as it grows, so
-    // the properties at the form's foot are not there to press until the card has reached them.
     rt.frame(0.3);
 
-    // The field beside `layout` lists the values the file accepts: list, grid, inherit.
     click(&mut rt, "prop-select-layout-trigger");
     assert_eq!(
         rt.state.rule_edit.as_ref().expect("the form is open").menu,
@@ -158,11 +149,8 @@ fn the_rule_editor_removes_a_property_from_the_rule() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
-    // The card reveals the form as it springs open around it, so its foot is pressable once the
-    // card has grown to it.
     rt.frame(0.3);
 
-    // The line reveals its remove button while the pointer rests on it.
     let (x, y) = rt.find("prop-layout").expect("the property has a line");
     rt.pointer_move(x, y);
     rt.frame(0.1);
@@ -211,15 +199,12 @@ fn the_rule_editor_adds_a_property_from_the_menu() {
     let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
-    // The card grows to hold the form on a spring, so the section under it lands a frame or two
-    // later; the press waits for the page to settle.
     rt.frame(0.3);
 
     assert!(
         rt.find("prop-sort").is_none(),
         "a property the rule leaves unset has no line"
     );
-    // Add Property lists what the rule does not set yet: layout, sort, direction, show-hidden.
     click(&mut rt, "add-property-trigger");
     assert_eq!(
         rt.state.rule_edit.as_ref().expect("the form is open").menu,
@@ -290,7 +275,6 @@ fn the_rule_editor_adds_and_removes_a_matcher() {
     assert!(text.contains("path=\"~/second\""), "{text}");
 
     click(&mut rt, "rule-here-0");
-    // The matcher's line reveals its remove button while the pointer rests on it.
     let (x, y) = rt
         .find("rule-field-m1.path")
         .expect("the matcher has a line");
@@ -337,7 +321,6 @@ fn a_rule_editor_writes_nothing_until_it_is_saved() {
         .expect("the matcher's path field")
         .text = "/typed".to_owned();
     rt.state.apply_rule_fields();
-    // A click redraws the tab from the state the test just changed by hand.
     click(&mut rt, "rule-field-name");
 
     assert_eq!(
@@ -438,7 +421,6 @@ fn a_refused_save_says_why_without_moving_the_form() {
     let mut rt = runtime(app);
     open_rule_editor(&mut rt);
 
-    // A match that names nothing is the longest sentence the form refuses with.
     click(&mut rt, "add-match");
     assert!(
         rt.find("rule-editor-error").is_none(),
