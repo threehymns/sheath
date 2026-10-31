@@ -94,6 +94,8 @@ fn is_image(path: &Path) -> bool {
             | "svg"
             | "svgz"
             | "avif"
+            | "heic"
+            | "heif"
             | "ico"
     )
 }

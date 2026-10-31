@@ -6,7 +6,8 @@
 //! itself is limited to the preview size (JPEG by DCT scaling, PNG and the other rasters by
 //! shrinking after decode) and the result is handed to Rune as RGBA, where its mip chain only
 //! covers the small image. PNGs and JPEGs that already fit in the pane skip all of that and are
-//! handed to Rune as they are; the other rasters are decoded here, since Rune cannot read them.
+//! handed to Rune as they are; the other rasters, and AVIF/HEIC, are decoded here, since Rune
+//! cannot read them.
 //!
 //! Decodes run through `Latest`, like folder scans: a newer selection supersedes a queued one
 //! and a short debounce keeps a held arrow key from decoding every row on the way past. The
@@ -204,6 +205,12 @@ fn decode(key: &Key) -> Decoded {
         Ok(bytes) => bytes,
         Err(err) => return Decoded::Failed(err.to_string()),
     };
+    // AVIF and HEIC are ISOBMFF rasters whose codecs the image crate does not carry.
+    match extension.as_str() {
+        "avif" => return avif(&bytes, key),
+        "heic" | "heif" => return heic(&bytes, key),
+        _ => {}
+    }
     match image::guess_format(&bytes) {
         Ok(ImageFormat::Jpeg) => jpeg(&bytes, key),
         // Rune decodes PNG itself, so a small one is still handed over; the formats below it
@@ -213,6 +220,118 @@ fn decode(key: &Key) -> Decoded {
         // SVG (sniffed by Rune) and anything else Rune's cache either decodes or reports in
         // the inspector as before.
         _ => Decoded::ViaRune(key.path.clone()),
+    }
+}
+
+/// AVIF also has no scaled decode: decode whole, then shrink. The decoder applies the
+/// container's own transforms, so no EXIF orientation is read here.
+fn avif(bytes: &[u8], key: &Key) -> Decoded {
+    let image = avif_decode::Decoder::from_avif(bytes)
+        .and_then(|decoder| decoder.to_image())
+        .map_err(|err| err.to_string());
+    match image {
+        Ok(image) => {
+            let (width, height, pixels) = avif_rgba(image);
+            match shrink(width, height, pixels, key.pixels) {
+                Ok((width, height, pixels)) => Decoded::Rgba {
+                    width,
+                    height,
+                    pixels,
+                },
+                Err(err) => Decoded::Failed(err),
+            }
+        }
+        Err(err) => Decoded::Failed(err),
+    }
+}
+
+/// AVIF hands back whatever layout the file carries; a preview is always RGBA.
+fn avif_rgba(image: avif_decode::Image) -> (u32, u32, Vec<u8>) {
+    use avif_decode::Image;
+    match image {
+        Image::Rgba8(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| [p.r, p.g, p.b, p.a])
+                .collect(),
+        ),
+        Image::Rgb8(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| [p.r, p.g, p.b, 255])
+                .collect(),
+        ),
+        Image::Rgba16(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| {
+                    [
+                        (p.r >> 8) as u8,
+                        (p.g >> 8) as u8,
+                        (p.b >> 8) as u8,
+                        (p.a >> 8) as u8,
+                    ]
+                })
+                .collect(),
+        ),
+        Image::Rgb16(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| [(p.r >> 8) as u8, (p.g >> 8) as u8, (p.b >> 8) as u8, 255])
+                .collect(),
+        ),
+        Image::Gray8(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| [p.value(), p.value(), p.value(), 255])
+                .collect(),
+        ),
+        Image::Gray16(image) => (
+            image.width() as u32,
+            image.height() as u32,
+            image
+                .buf()
+                .iter()
+                .flat_map(|p| {
+                    let v = (p.value() >> 8) as u8;
+                    [v, v, v, 255]
+                })
+                .collect(),
+        ),
+    }
+}
+
+/// HEIC/HEIF, decoded whole too. The decoder applies the container's orientation and converts
+/// Display P3 to sRGB, so the result is drawn as it arrives.
+fn heic(bytes: &[u8], key: &Key) -> Decoded {
+    match heif_oxide::decode_bytes(bytes) {
+        Ok(image) => {
+            let (width, height) = (image.width, image.height);
+            match shrink(width, height, image.to_rgba8(), key.pixels) {
+                Ok((width, height, pixels)) => Decoded::Rgba {
+                    width,
+                    height,
+                    pixels,
+                },
+                Err(err) => Decoded::Failed(err),
+            }
+        }
+        Err(err) => Decoded::Failed(err.to_string()),
     }
 }
 
@@ -324,11 +443,27 @@ fn scaled_raster(
     decoder.set_limits(limits).map_err(|err| err.to_string())?;
     let mut image = DynamicImage::from_decoder(decoder).map_err(|err| err.to_string())?;
     image.apply_orientation(orientation);
-    if image.width() > max || image.height() > max {
-        image = image.thumbnail(max, max);
-    }
+    let (width, height) = (image.width(), image.height());
+    shrink(width, height, image.into_rgba8().into_raw(), max).map(Some)
+}
+
+/// Shrink a decoded picture to the preview box, box-filtered, and hand back its RGBA.
+fn shrink(
+    width: u32,
+    height: u32,
+    pixels: Vec<u8>,
+    max: u32,
+) -> Result<(u32, u32, Vec<u8>), String> {
+    let image = RgbaImage::from_raw(width, height, pixels)
+        .ok_or("decoded pixels do not match the image size")?;
+    let image = DynamicImage::ImageRgba8(image);
+    let image = if image.width() > max || image.height() > max {
+        image.thumbnail(max, max)
+    } else {
+        image
+    };
     let image = image.into_rgba8();
-    Ok(Some((image.width(), image.height(), image.into_raw())))
+    Ok((image.width(), image.height(), image.into_raw()))
 }
 
 fn finish(

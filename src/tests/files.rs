@@ -487,6 +487,46 @@ fn the_other_common_picture_formats_decode_in_the_preview() {
     );
 }
 
+// Tiny fixtures made with heif-enc and ffmpeg's AVIF muxer: a 64×48 still each.
+#[test]
+fn avif_and_heic_previews_decode() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("photo.avif"),
+        include_bytes!("fixtures/picture.avif"),
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("photo.heic"),
+        include_bytes!("fixtures/picture.heic"),
+    )
+    .unwrap();
+    let mut app = app(&dir);
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(|| {})));
+    for name in ["photo.avif", "photo.heic"] {
+        app.select_id(&format!("f:{name}"));
+        assert!(
+            matches!(app.preview, Some(crate::app::Preview::Image)),
+            "{name} previews as a picture"
+        );
+        app.settle_preview();
+        assert!(
+            app.preview_error.is_none(),
+            "{name}: {:?}",
+            app.preview_error
+        );
+        let image = app
+            .preview_image
+            .as_ref()
+            .unwrap_or_else(|| panic!("{name} decoded"));
+        assert_eq!(
+            image.size(),
+            Some([64, 48]),
+            "{name} decoded at its own size"
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn making_an_alias_points_a_new_name_at_the_row() {

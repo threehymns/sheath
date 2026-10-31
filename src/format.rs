@@ -92,6 +92,8 @@ pub fn kind(name: &str, is_dir: bool, is_symlink: bool) -> String {
         "gif" => "GIF image",
         "webp" => "WebP image",
         "bmp" => "BMP image",
+        "avif" => "AVIF image",
+        "heic" | "heif" => "HEIC image",
         "tif" | "tiff" => "TIFF image",
         "ico" => "Icon",
         "svg" => "SVG image",
