@@ -353,6 +353,27 @@ fn a_picture_previews_responsively_in_the_inspector() {
     );
 }
 
+// Rune finishes the mips after the decode lands, and a window only redraws when poll says the
+// state the view reads changed. Without that one frame the inspector keeps the decoding
+// placeholder up until the selection changes.
+#[test]
+fn a_finished_picture_asks_for_the_frame_that_draws_it() {
+    let dir = fixture();
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><rect width="200" height="100"/></svg>"#;
+    fs::write(dir.path().join("drawing.svg"), svg).unwrap();
+    let mut app = app(&dir);
+    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(|| {})));
+    app.select_id("f:drawing.svg");
+    app.settle_preview();
+    app.preview_image.as_ref().unwrap().wait().unwrap();
+
+    assert!(app.land_preview(), "the finished picture asks for a redraw");
+    assert!(
+        !app.land_preview(),
+        "a ready picture doesn't keep asking for frames"
+    );
+}
+
 #[test]
 fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     let dir = fixture();

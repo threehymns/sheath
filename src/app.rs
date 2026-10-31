@@ -94,6 +94,9 @@ pub struct App {
     pub preview_image: Option<rune::Image>,
     // Why the preview is not a picture, when this app's decoder could not read it.
     pub preview_error: Option<String>,
+    // Rune finishes a kept preview after the decode lands; the first poll that sees it asks
+    // for the frame that draws it, so the decoding placeholder doesn't stay.
+    preview_ready: bool,
     previews: preview::Previewer,
     // Only a folder on demand: walking a tree costs too much to do for every row.
     pub folder_size: Option<(u64, usize)>,
@@ -234,6 +237,7 @@ impl App {
             images: None,
             preview_image: None,
             preview_error: None,
+            preview_ready: false,
             previews: preview::Previewer::default(),
             folder_size: None,
             search_all: false,
