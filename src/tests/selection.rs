@@ -23,6 +23,37 @@ fn clicking_selects_a_row_and_double_clicking_enters_the_folder() {
 }
 
 #[test]
+fn nothing_in_the_file_area_takes_focus_but_its_viewport() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    // The keys reach the rows through the scrolling viewport, and it draws no ring: the
+    // selected row is the one cue. Nothing else in either layout may become a focus target,
+    // which would paint a ring of its own.
+    for layout in ["list", "grid"] {
+        if layout == "grid" {
+            click(&mut rt, "toggle-layout");
+            rt.frame(0.2);
+        }
+        let mut focusable: Vec<String> = rt
+            .elements()
+            .into_iter()
+            .filter(|e| {
+                e.focusable && (e.path.contains("/file-table") || e.path.contains("/file-grid"))
+            })
+            .map(|e| e.key.unwrap_or_else(|| e.path.clone()))
+            .collect();
+        focusable.sort();
+        assert_eq!(
+            focusable,
+            ["files-table"],
+            "{layout}: the file area's focus targets"
+        );
+    }
+}
+
+#[test]
 fn arrow_keys_walk_the_rows_when_nothing_has_focus() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
