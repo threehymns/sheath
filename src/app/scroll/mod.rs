@@ -6,20 +6,32 @@ use std::mem;
 
 use rune::{GesturePhase, WheelEvent};
 
-// Per-second decay of the coast's speed; a larger value stops the rows sooner.
-const SCROLL_DECAY: f32 = 3.5;
+// Per-second decay of the coast's speed; UIKit's normal deceleration rate (0.998 a
+// millisecond) works out to about 2, and a larger value stops the rows sooner.
+const SCROLL_DECAY: f32 = 2.0;
 
 // Share of a notched wheel's delta that becomes coast speed.
 const SCROLL_GAIN: f32 = 0.75;
 
-// Fastest coast, in points per second.
-const SCROLL_MAX_VELOCITY: f32 = 6000.0;
+// Fastest measured flick speed and notched wheel coast, in points per second; a sustained
+// fast flick adds the boost below on top.
+const SCROLL_MAX_VELOCITY: f32 = 12000.0;
 
 // Coast speed, in points per second, at which the rows come to rest.
 const SCROLL_MIN_VELOCITY: f32 = 8.0;
 
-// Seconds for a slower wheel speed to pull the coast down, so a flick's last frame still glides.
-const SCROLL_SPEED_SMOOTH: f32 = 0.15;
+// Frames a flick's speed must stay fast through for it to gain on release.
+const SCROLL_BOOST_FRAMES: usize = 3;
+
+// Speeds, in points per second, between which a sustained flick gains the full boost share.
+const SCROLL_BOOST_FROM: f32 = 3000.0;
+const SCROLL_BOOST_TO: f32 = 6000.0;
+
+// Share of the release speed a fully sustained fast flick adds to its coast.
+const SCROLL_BOOST_SHARE: f32 = 0.5;
+
+// Share of a stroke's peak speed below which its last frames mean the fingers stopped.
+const SCROLL_STOP_SHARE: f32 = 0.2;
 
 // Per-second decay while the fingers rest, much quicker than the coast's.
 const SCROLL_HOLD_DECAY: f32 = 12.0;
@@ -78,6 +90,11 @@ pub(super) struct Scroll {
     last_t: Option<f64>,
     since: f32,
     dt: f32,
+    stroke: [f32; SCROLL_BOOST_FRAMES],
+    stroke_at: usize,
+    stroke_seen: usize,
+    stroke_peak: f32,
+    pushing: bool,
 }
 
 impl Scroll {
@@ -167,6 +184,7 @@ impl Scroll {
             } else {
                 self.velocity = (self.velocity - wheel.dy * SCROLL_GAIN)
                     .clamp(-SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
+                self.pushing = false;
             }
         }
         out.again = true;
@@ -197,15 +215,27 @@ impl Scroll {
         let current = self.current();
         let pushed = mem::take(&mut self.push);
         if dt > 0.0 && pushed != 0.0 {
+            // The fingers' speed this frame is the speed they would lift at. Keeping an earlier
+            // frame's speed would carry momentum through a slowdown the fingers already made.
             let speed = (-pushed / dt).clamp(-SCROLL_MAX_VELOCITY, SCROLL_MAX_VELOCITY);
-            let rising =
-                speed.abs() > self.velocity.abs() || speed.signum() != self.velocity.signum();
-            if rising {
-                self.velocity = speed;
-            } else {
-                let blend = 1.0 - (-dt / SCROLL_SPEED_SMOOTH).exp();
-                self.velocity += (speed - self.velocity) * blend;
+            if !self.pushing {
+                self.stroke = [0.0; SCROLL_BOOST_FRAMES];
+                self.stroke_at = 0;
+                self.stroke_seen = 0;
+                self.stroke_peak = 0.0;
+                self.pushing = true;
             }
+            self.velocity = speed;
+            self.stroke[self.stroke_at] = speed.abs();
+            self.stroke_at = (self.stroke_at + 1) % SCROLL_BOOST_FRAMES;
+            self.stroke_seen = (self.stroke_seen + 1).min(SCROLL_BOOST_FRAMES);
+            self.stroke_peak = self.stroke_peak.max(speed.abs());
+        } else if dt > 0.0 && self.pushing {
+            // The stroke ended: launch at the speed of its last few frames, so one small final
+            // delta doesn't erase a flick but a sustained slowdown does.
+            self.pushing = false;
+            let sign = self.velocity.signum();
+            self.velocity = sign * self.stroke_release();
         }
         if dt > 0.0 && self.held {
             self.hold = if pushed == 0.0 {
@@ -234,7 +264,9 @@ impl Scroll {
             out.redraw = true;
             out.again = true;
         }
-        if dt > 0.0 && !self.held && self.velocity.abs() >= SCROLL_MIN_VELOCITY {
+        // A frame with its own precise deltas is still the fingers moving; the coast starts
+        // once they stop delivering, at the speed of the last frame that did.
+        if dt > 0.0 && pushed == 0.0 && !self.held && self.velocity.abs() >= SCROLL_MIN_VELOCITY {
             let max = limits.max;
             let next = (current + self.velocity * dt).clamp(0.0, max);
             if (next - current).abs() > 0.01 {
@@ -261,9 +293,45 @@ impl Scroll {
         out
     }
 
+    // The middle of the last few frame speeds: one slow frame doesn't erase a flick, while a
+    // slowdown that lasts through the release does.
+    fn stroke_recent(&self) -> f32 {
+        if self.stroke_seen == 0 {
+            return 0.0;
+        }
+        if self.stroke_seen < SCROLL_BOOST_FRAMES {
+            return self.stroke[(self.stroke_at + SCROLL_BOOST_FRAMES - 1) % SCROLL_BOOST_FRAMES];
+        }
+        let mut speeds = self.stroke;
+        speeds.sort_by(f32::total_cmp);
+        speeds[SCROLL_BOOST_FRAMES / 2]
+    }
+
+    fn stroke_boost(&self, recent: f32) -> f32 {
+        if self.stroke_seen < SCROLL_BOOST_FRAMES {
+            return 1.0;
+        }
+        let share =
+            ((recent - SCROLL_BOOST_FROM) / (SCROLL_BOOST_TO - SCROLL_BOOST_FROM)).clamp(0.0, 1.0);
+        1.0 + share * SCROLL_BOOST_SHARE
+    }
+
+    // The speed to launch a coast at: none when the last frames are a small share of the
+    // stroke's peak, else the recent speed with the sustained-flick boost on top.
+    fn stroke_release(&self) -> f32 {
+        let recent = self.stroke_recent();
+        if recent < self.stroke_peak * SCROLL_STOP_SHARE {
+            return 0.0;
+        }
+        recent * self.stroke_boost(recent)
+    }
+
     fn halt(&mut self) -> Step {
         self.velocity = 0.0;
         self.push = 0.0;
+        self.pushing = false;
+        self.stroke_seen = 0;
+        self.stroke_peak = 0.0;
         let mut out = Step::NONE;
         if self.step != 0.0 {
             let back = self.current() - self.step;
@@ -277,6 +345,9 @@ impl Scroll {
     pub(super) fn stop(&mut self) {
         self.velocity = 0.0;
         self.push = 0.0;
+        self.pushing = false;
+        self.stroke_seen = 0;
+        self.stroke_peak = 0.0;
         self.held = false;
         self.hold = 0.0;
         self.step = 0.0;
@@ -287,6 +358,9 @@ impl Scroll {
     pub(super) fn stop_coast(&mut self) {
         self.velocity = 0.0;
         self.push = 0.0;
+        self.pushing = false;
+        self.stroke_seen = 0;
+        self.stroke_peak = 0.0;
     }
 
     pub(super) fn stop_bounce(&mut self) {

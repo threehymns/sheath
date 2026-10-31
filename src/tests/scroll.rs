@@ -55,7 +55,7 @@ fn inertia_carries_the_fingers_speed_without_outrunning_them() {
 
     let lifted = at[at.len() - 1];
     let mut coast = Vec::new();
-    for _ in 0..120 {
+    for _ in 0..200 {
         rt.frame(1.0 / 60.0);
         coast.push(scroll_offset(&rt));
     }

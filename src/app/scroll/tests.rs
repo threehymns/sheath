@@ -58,6 +58,89 @@ fn tick(t: &mut f64) -> f64 {
     *t
 }
 
+fn coast_after(deltas: &[f32]) -> f32 {
+    let l = limits(20_000.0);
+    let mut v = Viewport::new(l.max);
+    let mut s = Scroll::default();
+    let mut t = 0.0;
+    frame(&mut v, &mut s, l, t);
+    for (i, &dy) in deltas.iter().enumerate() {
+        let phase = if i == 0 {
+            GesturePhase::Began
+        } else {
+            GesturePhase::Moved
+        };
+        gesture(&mut s, &mut v, l, dy, phase);
+        frame(&mut v, &mut s, l, tick(&mut t));
+    }
+    gesture(&mut s, &mut v, l, 0.0, GesturePhase::Ended);
+    frame(&mut v, &mut s, l, tick(&mut t));
+    let lifted = v.at;
+    for _ in 0..120 {
+        frame(&mut v, &mut s, l, tick(&mut t));
+    }
+    v.at - lifted
+}
+
+fn coast_after_moved(deltas: &[f32]) -> f32 {
+    let l = limits(20_000.0);
+    let mut v = Viewport::new(l.max);
+    let mut s = Scroll::default();
+    let mut t = 0.0;
+    frame(&mut v, &mut s, l, t);
+    for &dy in deltas {
+        wheel(&mut s, &mut v, l, dy);
+        frame(&mut v, &mut s, l, tick(&mut t));
+    }
+    let lifted = v.at;
+    for _ in 0..120 {
+        frame(&mut v, &mut s, l, tick(&mut t));
+    }
+    v.at - lifted
+}
+
+#[test]
+fn a_trackpad_without_phases_that_slows_before_lifting_almost_stops() {
+    let flicked = coast_after_moved(&[-30.0; 4]);
+    let stopped = coast_after_moved(&[-30.0, -30.0, -10.0, -4.0, -1.0]);
+    assert!(flicked > 100.0, "a flick carries {flicked} points");
+    assert!(
+        stopped < 1.0,
+        "a release on a stop carries almost nothing: {flicked} -> {stopped}"
+    );
+}
+
+#[test]
+fn a_gesture_that_slows_before_lifting_almost_stops() {
+    let flicked = coast_after(&[-30.0, -30.0, -30.0, -30.0]);
+    let stopped = coast_after(&[-30.0, -30.0, -10.0, -4.0, -1.0]);
+    assert!(flicked > 100.0, "a flick carries {flicked} points");
+    assert!(
+        stopped < 1.0,
+        "a release on a stop carries almost nothing: {flicked} -> {stopped}"
+    );
+}
+
+#[test]
+fn a_sustained_fast_flick_gets_an_extra_push() {
+    let steady = coast_after_moved(&[-60.0; 5]);
+    let slowed = coast_after_moved(&[-60.0, -60.0, -60.0, -20.0, -20.0]);
+    assert!(
+        steady > slowed * 2.0,
+        "a flick that stays fast carries further: steady {steady}, slowed {slowed}"
+    );
+}
+
+#[test]
+fn one_slow_frame_does_not_kill_a_fast_flick() {
+    let steady = coast_after_moved(&[-60.0; 5]);
+    let blipped = coast_after_moved(&[-60.0, -60.0, -60.0, -10.0, -60.0]);
+    assert!(
+        blipped > steady * 0.9,
+        "a single slow frame leaves the flick intact: steady {steady}, blipped {blipped}"
+    );
+}
+
 #[test]
 fn a_hard_flick_carries_a_lot_further() {
     let l = limits(6000.0);
