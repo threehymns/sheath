@@ -60,6 +60,13 @@ impl Watch {
         self.path = None;
     }
 
+    /// How many watchers this app holds open. Retargeting must keep it at one, whatever the
+    /// folder it visits.
+    #[cfg(test)]
+    pub(super) fn watchers(&self) -> usize {
+        usize::from(self.watcher.is_some())
+    }
+
     pub(super) fn poll(&mut self) -> bool {
         let Some(changes) = &self.changes else {
             return false;

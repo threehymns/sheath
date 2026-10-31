@@ -368,6 +368,11 @@ impl App {
     pub fn watch(&mut self, wake: Waker) {
         self.watch.start(&self.cwd, wake);
     }
+
+    #[cfg(test)]
+    pub(crate) fn watchers(&self) -> usize {
+        self.watch.watchers()
+    }
 }
 
 pub fn setup(s: &mut App, wake: Waker) {

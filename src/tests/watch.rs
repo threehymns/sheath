@@ -118,6 +118,13 @@ fn switching_folders_leaves_no_watcher_behind() {
         app.navigate(dir.path().to_path_buf());
         app.settle_scan();
     }
+    assert_eq!(
+        app.watchers(),
+        1,
+        "the app holds one watcher after twenty switches, not one per visit"
+    );
+    // Other tests run in parallel and open their own watchers, so the process-wide count is only
+    // meaningful as a bound: a leak of one per switch would climb by forty, not by a few.
     let mut left = inotify_instances();
     for _ in 0..100 {
         if left <= first {
@@ -126,5 +133,8 @@ fn switching_folders_leaves_no_watcher_behind() {
         std::thread::sleep(std::time::Duration::from_millis(10));
         left = inotify_instances();
     }
-    assert_eq!(left, first, "twenty switches hold one watcher, not twenty");
+    assert!(
+        left < first + 10,
+        "twenty switches hold one watcher, not twenty: {left} against {first}"
+    );
 }
