@@ -216,6 +216,45 @@ fn the_gaps_between_tiles_start_a_box_rather_than_a_drag() {
 }
 
 #[test]
+fn a_box_sweeps_only_the_tiles_it_covers() {
+    let dir = long_folder(24);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-layout");
+    for _ in 0..30 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    let (x, y) = rt.find("f:file00.txt").expect("the first tile");
+    let edge = x + TILE_WIDTH / 2.0;
+    // A box that stays in the gap after the first tile covers neither tile.
+    rt.pointer_down(edge + 2.0, y);
+    rt.frame(0.05);
+    rt.pointer_move(edge + 5.0, y + 6.0);
+    rt.frame(0.05);
+    assert_eq!(
+        rt.state.selection_len(),
+        0,
+        "a box drawn only in the gap takes nothing"
+    );
+    rt.pointer_up(edge + 5.0, y + 6.0);
+    rt.frame(0.1);
+
+    // One that reaches into the next tile takes it, and not the tile before the gap.
+    rt.pointer_down(edge + 2.0, y);
+    rt.frame(0.05);
+    rt.pointer_move(edge + TILE_GAP + 6.0, y + 6.0);
+    rt.frame(0.05);
+    assert_eq!(
+        rt.state.selected_ids(),
+        ["f:file01.txt"],
+        "only the tile the box covers"
+    );
+    rt.pointer_up(edge + TILE_GAP + 6.0, y + 6.0);
+    rt.frame(0.1);
+}
+
+#[test]
 fn the_grid_toolbar_sorts_from_the_tiles() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));

@@ -101,7 +101,10 @@ impl App {
     }
 
     /// The visible indices a box covers, in the list's own points. A tile the box touches
-    /// counts, as a row the box touches does.
+    /// counts, as a row the box touches does; the gaps around the tiles hold no tile, so a box
+    /// drawn only in them takes nothing. A box with no extent on one axis is measured as the
+    /// hairline the view draws for it, so a drag straight down still sweeps the tiles it runs
+    /// through.
     pub(super) fn grid_indices_in_rect(
         &self,
         left: f32,
@@ -112,22 +115,26 @@ impl App {
         if right < left || bottom < top {
             return Vec::new();
         }
+        let right = right.max(left + 1.0);
+        let bottom = bottom.max(top + 1.0);
         let columns = self.grid_columns();
         let row = |y: f32| (y / GRID_ROW_HEIGHT).floor().max(0.0) as usize;
         let column = |x: f32| {
             (((x - GRID_PAD) / (TILE_WIDTH + TILE_GAP)).floor().max(0.0) as usize).min(columns - 1)
         };
         let first_row = row(top);
-        let last_row = row((bottom - 0.1).max(top));
+        let last_row = row(bottom - 0.1);
         let first_column = column(left);
-        if right <= GRID_PAD {
-            return Vec::new();
-        }
         let last_column = column(right - 0.1);
         let mut indices = Vec::new();
         for row in first_row..=last_row {
             for column in first_column..=last_column {
-                if let Some(index) = self.index_at_cell(row, column) {
+                // The cell's tile, not the cell: the gap after a tile is not part of it.
+                let x = GRID_PAD + column as f32 * (TILE_WIDTH + TILE_GAP);
+                let y = row as f32 * GRID_ROW_HEIGHT;
+                let covered =
+                    left < x + TILE_WIDTH && right > x && top < y + TILE_HEIGHT && bottom > y;
+                if covered && let Some(index) = self.index_at_cell(row, column) {
                     indices.push(index);
                 }
             }
