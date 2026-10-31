@@ -219,9 +219,17 @@ pub(super) fn drag_box(rt: &mut Runtime<App>, to: &str, mods: Mods) {
     rt.frame(0.1);
 }
 
-/// Drags one row's press onto another row with the pointer, as a file drag does.
+/// A point on a row's icon, the part of a row a drag picks up: a few points inside the cell,
+/// so a test never depends on how wide that row's name happens to be.
+pub(super) fn name_point(rt: &Runtime<App>, key: &str) -> (f32, f32) {
+    let [x, y, _, h] = rt.presented(key).expect("the row is on screen").0;
+    (x + 12.0, y + h * 0.5)
+}
+
+/// Drags one row's press onto another row with the pointer, as a file drag does. The press
+/// lands on the row's icon and name, the only part of it that picks the row up.
 pub(super) fn drag_row(rt: &mut Runtime<App>, from: &str, to: &str) {
-    let (x0, y0) = rt.find(from).expect("the first row is on screen");
+    let (x0, y0) = name_point(rt, from);
     let (x1, y1) = rt.find(to).expect("the second row is on screen");
     rt.pointer_down(x0, y0);
     rt.frame(0.05);

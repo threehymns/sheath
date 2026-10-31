@@ -305,25 +305,31 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
     } else {
         k.c.icon_muted
     };
+    // The name sizes itself to the text it shows and reports where it ended: the handle a
+    // row is picked up by is its icon and name, not the whole, much wider, name column. The
+    // cell still spans the column, so a long name truncates at its edge.
+    let path = entry.path.display().to_string();
+    let name = text(entry.name.clone())
+        .key(format!("name-{}", entry.id))
+        .font(style.font)
+        .color(if entry.is_symlink {
+            style.muted
+        } else {
+            style.text
+        })
+        .shrink()
+        .min_w(0.0)
+        .truncate()
+        .on_layout(move |s: &mut App, rect| {
+            s.name_at.insert(path.clone(), rect[0] + rect[2]);
+        });
     let mut content = row()
         .gap(8.0)
         .center_y()
         .w_full()
         .h_full()
         .child(icon(glyph, 16.0).color(icon_color))
-        .child(
-            text(entry.name.clone())
-                .font(style.font)
-                .color(if entry.is_symlink {
-                    style.muted
-                } else {
-                    style.text
-                })
-                .grow(1.0)
-                .shrink()
-                .min_w(0.0)
-                .truncate(),
-        );
+        .child(name);
     if entry.is_symlink {
         content = content.child(icon(&icons::LINK, 11.0).color(k.c.icon_faint));
     }

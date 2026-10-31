@@ -21,6 +21,10 @@ pub struct Marquee {
     extend: bool,
     /// False until the pointer has travelled far enough to be a box rather than a click.
     pub dragging: bool,
+    /// The row a second press landed on: a release without a drag opens it. A press on a
+    /// row's blank space sweeps a box rather than dragging the row, but opening is still the
+    /// row's, so the double click that would open it must survive the box it starts.
+    pub(super) pending_open: Option<String>,
 }
 
 impl Marquee {
@@ -41,6 +45,7 @@ impl Marquee {
             toggle,
             extend,
             dragging: false,
+            pending_open: None,
         }
     }
 }

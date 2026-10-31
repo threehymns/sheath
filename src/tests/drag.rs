@@ -51,7 +51,7 @@ fn dropping_a_row_on_a_file_or_empty_space_moves_nothing() {
     drag_row(&mut rt, "f:file2.txt", "f:notes.md");
     assert!(dir.path().join("file2.txt").exists());
 
-    let (x0, y0) = rt.find("f:file2.txt").expect("the row is on screen");
+    let (x0, y0) = name_point(&rt, "f:file2.txt");
     let (x1, y1) = rt.find("files-table").expect("the list is on screen");
     rt.pointer_down(x0, y0);
     rt.frame(0.05);
@@ -126,7 +126,7 @@ fn dragging_a_row_against_an_edge_scrolls_the_rows_under_it() {
     }
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
-    let (x, y) = rt.find("f:d00").expect("the first folder");
+    let (x, y) = name_point(&rt, "f:d00");
     let [_, top, _, height] = rt.presented("files-table").expect("the list").0;
     let edge = top + height - 4.0;
 
@@ -241,7 +241,7 @@ fn a_row_drag_shows_a_badge_and_no_selection_box() {
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
 
-    let (x0, y0) = rt.find("f:file2.txt").expect("the row is on screen");
+    let (x0, y0) = name_point(&rt, "f:file2.txt");
     let (x1, y1) = rt.find("f:alpha").expect("the folder row is on screen");
     rt.pointer_down(x0, y0);
     rt.frame(0.05);
@@ -280,7 +280,7 @@ fn a_drag_onto_a_sidebar_place_moves_the_selection_there() {
     );
 
     click(&mut rt, "f:file2.txt");
-    let (x0, y0) = rt.find("f:file2.txt").expect("the row is on screen");
+    let (x0, y0) = name_point(&rt, "f:file2.txt");
     rt.pointer_down(x0, y0);
     rt.frame(0.05);
     rt.pointer_move(rect[0] + 40.0, rect[1] + 20.0);
@@ -291,6 +291,99 @@ fn a_drag_onto_a_sidebar_place_moves_the_selection_there() {
 
     assert!(destination.join("file2.txt").exists());
     assert!(!dir.path().join("file2.txt").exists());
+}
+
+#[test]
+fn the_name_is_the_handle_and_the_space_past_it_is_canvas() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    rt.frame(0.1);
+
+    let (name, _) = rt.presented("name-f:file2.txt").expect("the name is drawn");
+    let right = name[0] + name[2];
+    let y = name[1] + name[3] * 0.5;
+    let cell_right =
+        rt.state.rows_view[0] + rt.state.rows_view[2] - rt.state.size_width - rt.state.date_width;
+    assert!(
+        right + 40.0 < cell_right,
+        "the name leaves blank column after it: {right} + 40 against {cell_right}"
+    );
+
+    // The blank space after a short name clears, and the drag sweeps a box.
+    rt.state.select_id("f:notes.md");
+    rt.frame(0.05);
+    let blank = right + 20.0;
+    rt.pointer_down(blank, y);
+    rt.frame(0.05);
+    rt.pointer_move(blank, y + crate::app::ROW_HEIGHT);
+    rt.frame(0.05);
+    assert!(
+        rt.state.file_drag.is_none(),
+        "the blank space picks nothing up"
+    );
+    assert!(rt.state.marquee.is_some(), "it draws a box instead");
+    assert!(rt.find("drag-badge").is_none(), "nothing is dragged");
+    rt.pointer_up(blank, y + crate::app::ROW_HEIGHT);
+    rt.frame(0.1);
+    assert!(
+        dir.path().join("file2.txt").is_file(),
+        "the file stayed where it was"
+    );
+
+    // The name is the handle, including the slop just past the end of the text.
+    rt.pointer_down(right + 3.0, y);
+    rt.frame(0.05);
+    rt.pointer_move(right + 63.0, y);
+    rt.frame(0.05);
+    assert!(
+        rt.state
+            .file_drag
+            .as_ref()
+            .is_some_and(|drag| drag.dragging),
+        "3 points past the name still picks the row up"
+    );
+    rt.pointer_up(right + 63.0, y);
+    rt.frame(0.1);
+    assert!(dir.path().join("file2.txt").is_file(), "and moved nothing");
+}
+
+#[test]
+fn a_drag_that_comes_back_to_its_start_is_a_click() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    let (x, y) = name_point(&rt, "f:file2.txt");
+    rt.pointer_down(x, y);
+    rt.frame(0.05);
+    rt.pointer_move(x + 60.0, y + 60.0);
+    rt.frame(0.05);
+    assert!(
+        rt.state
+            .file_drag
+            .as_ref()
+            .is_some_and(|drag| drag.dragging),
+        "the press became a drag"
+    );
+
+    // Back where it started, the press is the click it began as: no drop, no move.
+    rt.pointer_move(x + 1.0, y + 1.0);
+    rt.frame(0.05);
+    assert!(
+        rt.state
+            .file_drag
+            .as_ref()
+            .is_some_and(|drag| !drag.dragging),
+        "coming back to the press releases the drag it armed"
+    );
+    assert!(rt.find("drag-badge").is_none(), "nothing is carried");
+    rt.pointer_up(x + 1.0, y + 1.0);
+    rt.frame(0.1);
+
+    assert!(dir.path().join("file2.txt").is_file(), "no file moved");
+    assert_eq!(rt.state.selected.as_deref(), Some("f:file2.txt"));
+    assert_eq!(rt.state.selection_len(), 1);
 }
 
 #[test]

@@ -4,12 +4,14 @@
 //!
 //! The behaviour is split by job: `browse` reads and orders the folder, `grid` the tile
 //! layout's geometry, `selection` owns which rows are picked, `drag` the pointer gestures,
-//! `files` and `sheets` the operations that change files, `commands` what a shortcut or menu
-//! can ask for, `scrolling` the list's momentum, and `input` the keys the window takes.
+//! `drop` where those gestures land, `files` and `sheets` the operations that change files,
+//! `commands` what a shortcut or menu can ask for, `scrolling` the list's momentum, and
+//! `input` the keys the window takes.
 
 mod browse;
 mod commands;
 mod drag;
+mod drop;
 mod entry;
 mod files;
 mod grid;
@@ -26,7 +28,8 @@ mod sheets;
 mod watch;
 
 pub use commands::{Palette, SettingsTab};
-pub use drag::{FileDrag, PlaceAt, list_drag};
+pub use drag::{FileDrag, list_drag};
+pub use drop::PlaceAt;
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
 pub use grid::{
@@ -182,6 +185,10 @@ pub struct App {
     /// Each sidebar section's rect in window points, from the last layout. A row dropped
     /// there — its heading, or the space between its rows — is added to it as a place.
     pub sections_at: BTreeMap<Section, [f32; 4]>,
+    /// Where each row's name ended, in window points, keyed by path, from the last layout.
+    /// Only layout knows how wide the text is, so the press that picks a row up reads its
+    /// handle from here.
+    pub name_at: BTreeMap<String, f32>,
     /// The Size and Date columns' widths, which header dragging changes.
     pub size_width: f32,
     pub date_width: f32,
@@ -298,6 +305,7 @@ impl App {
             scroll: Scroll::default(),
             places_at: BTreeMap::new(),
             sections_at: BTreeMap::new(),
+            name_at: BTreeMap::new(),
             size_width: 92.0,
             date_width: 158.0,
             scan: Latest::default(),

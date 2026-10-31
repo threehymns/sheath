@@ -269,9 +269,8 @@ fn the_grid_toolbar_sorts_from_the_tiles() {
         "the grid offers the sort controls its header used to"
     );
     assert_eq!(
-        rt.state.rows_view[1],
-        list_top + GRID_TOP_MARGIN,
-        "the grid starts under the sort toolbar's height, plus its top margin"
+        rt.state.rows_view[1], list_top,
+        "the viewport starts under the sort toolbar, as the list's does"
     );
     let (toolbar, _) = rt
         .presented("grid-toolbar")
@@ -351,6 +350,52 @@ fn the_sort_chevron_turns_over_when_the_direction_reverses() {
         "a descending sort points down: {}",
         turn(&rt)
     );
+}
+
+#[test]
+fn the_band_under_the_sort_bar_is_empty_space_and_the_card_starts_at_its_edge() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-layout");
+    rt.frame(0.1);
+
+    // The margin under the bar is inside the viewport: a press there is empty space, not the
+    // tile row the raw point would round to.
+    let (toolbar, _) = rt.presented("grid-toolbar").expect("the sort toolbar");
+    let band = toolbar[1] + toolbar[3] + GRID_TOP_MARGIN * 0.5;
+    let x = rt.state.rows_view[0] + 40.0;
+    rt.state.select_id("f:notes.md");
+    rt.frame(0.05);
+    rt.pointer_down(x, band);
+    rt.frame(0.05);
+    rt.pointer_move(x + 40.0, band);
+    rt.frame(0.05);
+    assert!(
+        rt.state.marquee.is_some(),
+        "the margin under the sort bar starts a box"
+    );
+    assert!(rt.state.file_drag.is_none(), "it picks no tile up");
+    assert_eq!(rt.state.selection_len(), 0, "and clears the selection");
+    rt.pointer_up(x + 40.0, band);
+    rt.frame(0.1);
+
+    // The card is the tile's handle right to its edge, padding and all.
+    let (tile, _) = rt.presented("f:alpha").expect("the first tile");
+    let (tx, ty, _, th) = (tile[0], tile[1], tile[2], tile[3]);
+    rt.pointer_down(tx + 2.0, ty + th * 0.5);
+    rt.frame(0.05);
+    rt.pointer_move(tx + 80.0, ty + th * 0.5 + 20.0);
+    rt.frame(0.05);
+    assert!(
+        rt.state
+            .file_drag
+            .as_ref()
+            .is_some_and(|drag| drag.dragging),
+        "the tile's own edge picks it up"
+    );
+    rt.pointer_up(tx + 80.0, ty + th * 0.5 + 20.0);
+    rt.frame(0.1);
 }
 
 #[test]

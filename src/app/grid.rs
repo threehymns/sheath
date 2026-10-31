@@ -52,7 +52,7 @@ impl App {
     /// How tall the list's content is in points: what the scroll's range is measured against.
     pub fn content_height(&self) -> f32 {
         if self.is_grid() {
-            self.grid_rows() as f32 * GRID_ROW_HEIGHT
+            GRID_TOP_MARGIN + self.grid_rows() as f32 * GRID_ROW_HEIGHT
         } else {
             self.visible.len() as f32 * ROW_HEIGHT
         }
@@ -68,20 +68,23 @@ impl App {
             let index = (at.1 / ROW_HEIGHT).floor() as usize;
             return (index < self.visible.len()).then_some(index);
         }
+        // The first row of tiles sits a margin under the viewport's top, so a press in that
+        // band is empty space rather than the tile the raw point would round to.
         let x = at.0 - GRID_PAD;
-        if x < 0.0 {
+        if x < 0.0 || at.1 < GRID_TOP_MARGIN {
             return None;
         }
+        let y = at.1 - GRID_TOP_MARGIN;
         let columns = self.grid_columns();
         let column = (x / (TILE_WIDTH + TILE_GAP)).floor() as usize;
         if column >= columns {
             return None;
         }
-        let row = (at.1 / GRID_ROW_HEIGHT).floor() as usize;
+        let row = (y / GRID_ROW_HEIGHT).floor() as usize;
         // A cell is a tile and the gap that follows it. Only the tile counts as one, so a
         // press between tiles starts a selection box as a press below the rows does.
         let cell_x = x - column as f32 * (TILE_WIDTH + TILE_GAP);
-        let cell_y = at.1 - row as f32 * GRID_ROW_HEIGHT;
+        let cell_y = y - row as f32 * GRID_ROW_HEIGHT;
         if cell_x >= TILE_WIDTH || cell_y >= TILE_HEIGHT {
             return None;
         }
@@ -122,7 +125,7 @@ impl App {
         let right = right.max(left + 1.0);
         let bottom = bottom.max(top + 1.0);
         let columns = self.grid_columns();
-        let row = |y: f32| (y / GRID_ROW_HEIGHT).floor().max(0.0) as usize;
+        let row = |y: f32| ((y - GRID_TOP_MARGIN) / GRID_ROW_HEIGHT).floor().max(0.0) as usize;
         let column = |x: f32| {
             (((x - GRID_PAD) / (TILE_WIDTH + TILE_GAP)).floor().max(0.0) as usize).min(columns - 1)
         };
@@ -135,7 +138,7 @@ impl App {
             for column in first_column..=last_column {
                 // The cell's tile, not the cell: the gap after a tile is not part of it.
                 let x = GRID_PAD + column as f32 * (TILE_WIDTH + TILE_GAP);
-                let y = row as f32 * GRID_ROW_HEIGHT;
+                let y = GRID_TOP_MARGIN + row as f32 * GRID_ROW_HEIGHT;
                 let covered =
                     left < x + TILE_WIDTH && right > x && top < y + TILE_HEIGHT && bottom > y;
                 if covered && let Some(index) = self.index_at_cell(row, column) {

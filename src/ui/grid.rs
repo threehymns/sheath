@@ -39,10 +39,6 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                // The tiles sit a touch under the sort bar, so the first row's highlight is not
-                // flush against it. The viewport's own rect moves with it, which is what the
-                // press maths and the box's clip read.
-                .mt(GRID_TOP_MARGIN)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })
@@ -62,6 +58,11 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                     col()
                         .key("file-grid-rows")
                         .w_full()
+                        // The tiles sit a touch under the sort bar, so the first row's
+                        // highlight is not flush against it. The margin is inside the
+                        // viewport, so the band above the first tile is empty space: a press
+                        // there clears the selection or starts a box like any other gap.
+                        .pt(GRID_TOP_MARGIN)
                         .transition(mount(cut))
                         // Tiles land where they belong: no enter or exit fade, no hover or
                         // selection crossfade, and no glide when a sort, a filter or a

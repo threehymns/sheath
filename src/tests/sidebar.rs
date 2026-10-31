@@ -158,7 +158,7 @@ fn dropping_a_folder_on_a_section_adds_it_as_a_place() {
 
     let source = dir.path().join("alpha");
     click(&mut rt, "f:alpha");
-    let (x0, y0) = rt.find("f:alpha").expect("the folder row is on screen");
+    let (x0, y0) = name_point(&rt, "f:alpha");
     let (section, _) = rt
         .presented("places-favourites")
         .expect("the favourites section is drawn");
@@ -230,7 +230,7 @@ fn dropping_between_places_inserts_there_with_a_preview() {
     // The two point gap between the rows, where an item dropped lands in the order.
     let (x, y) = (alpha_row[0] + 40.0, alpha_row[1] + alpha_row[3] + 1.0);
 
-    let (x0, y0) = rt.find("f:inbox").expect("the folder row is on screen");
+    let (x0, y0) = name_point(&rt, "f:inbox");
     rt.pointer_down(x0, y0);
     rt.frame(0.05);
     rt.pointer_move(x, y);
@@ -303,7 +303,7 @@ fn a_file_place_opens_its_folder_with_the_file_selected() {
     rt.frame(0.0);
 
     let notes = dir.path().join("notes.md");
-    let (x0, y0) = rt.find("f:notes.md").expect("the file row is on screen");
+    let (x0, y0) = name_point(&rt, "f:notes.md");
     let (section, _) = rt
         .presented("places-favourites")
         .expect("the favourites section is drawn");
