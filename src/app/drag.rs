@@ -1,5 +1,5 @@
 use super::marquee::Marquee;
-use crate::app::App;
+use crate::app::{App, FILES};
 use crate::places::Section;
 use rune::{Drag, Mods, Phase, Tx};
 use std::path::PathBuf;
@@ -76,7 +76,7 @@ impl App {
     pub fn index_at_window(&self, at: (f32, f32)) -> Option<usize> {
         self.index_at((
             at.0 - self.rows_view[0],
-            at.1 - self.rows_view[1] + self.told_offset() - self.overshoot(),
+            at.1 - self.rows_view[1] + self.told_offset() - self.overshoot(FILES),
         ))
     }
 

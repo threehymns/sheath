@@ -1,4 +1,4 @@
-use super::{App, FileDrag, PLACE_ROW_GAP, PLACE_ROW_HEIGHT};
+use super::{App, FILES, FileDrag, PLACE_ROW_GAP, PLACE_ROW_HEIGHT};
 use crate::places::Section;
 use rune::Icon;
 use rune_kit::glyphs;
@@ -26,7 +26,7 @@ fn inside(rect: [f32; 4], x: f32, y: f32) -> bool {
 
 impl App {
     pub(super) fn aim_drag(&self, drag: &mut FileDrag) {
-        let scroll = self.scroll.current();
+        let scroll = self.list_scroll();
         drag.row = None;
         drag.place = None;
         drag.place_id = None;
@@ -62,7 +62,7 @@ impl App {
         }
         let local = (
             x - self.rows_view[0],
-            y - self.rows_view[1] + scroll - self.overshoot(),
+            y - self.rows_view[1] + scroll - self.overshoot(FILES),
         );
         let Some(index) = self.index_at(local) else {
             return;

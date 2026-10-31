@@ -1,9 +1,8 @@
-use crate::app::{App, ROW_HEIGHT};
+use crate::app::{App, FILES, ROW_HEIGHT};
 use crate::format;
 use crate::icons;
 use rune::{
-    Align, Cursor, Drag, El, GrowthSpec, Phase, ScrollSpec, Spring, Transition, Tx, col, el, icon,
-    row, text,
+    Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, row, text,
 };
 use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
@@ -31,31 +30,19 @@ pub(super) fn mount(cut: bool) -> Transition {
 
 pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
     let style = browser_style(k);
-    let told = s.scroll_told.clone();
     let viewport = col()
-        .key("files-table")
         .role("grid")
         .label("Files")
         .w_full()
         .grow(1.0)
         .min_h(0.0)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
         .focusable(true)
         .no_focus_ring()
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
-        .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
         .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
         .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
         .on_layout(|s: &mut App, rect| s.rows_view = rect)
-        .on_scroll_offset(move |at| told.set(at))
-        .transition(mount(cut))
-        .child(
-            file_rows(s, k, style)
-                .transition(mount(cut))
-                .offset(0.0, s.overshoot()),
-        );
+        .transition(mount(cut));
     col()
         .key("file-table")
         .w_full()
@@ -63,7 +50,12 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .min_h(0.0)
         .transition(Transition::none())
         .child(file_header(s, k, &style).transition(mount(cut)))
-        .child(viewport)
+        .child(super::scroll_area::scrolled(
+            s,
+            FILES,
+            viewport,
+            file_rows(s, k, style).transition(mount(cut)),
+        ))
 }
 
 fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {

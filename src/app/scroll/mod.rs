@@ -1,6 +1,6 @@
-//! The list's scroll: wheel inertia, overscroll past the ends, and the drag that pushes it. The
-//! viewport stays authoritative, and each frame starts from the offset it reported. Effects
-//! leave as [`Step`] values for `App` to hand to the runtime.
+//! A scroll area's scroll: wheel inertia, overscroll past the ends, and the drag that pushes the
+//! list. The viewport stays authoritative, and each frame starts from the offset it reported.
+//! Effects leave as [`Step`] values for `App` to hand to the runtime.
 
 use std::mem;
 

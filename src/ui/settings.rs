@@ -4,7 +4,7 @@ use crate::corner::CornerControl;
 use crate::icons;
 use crate::keybinds::Action;
 use crate::settings::Setting;
-use rune::{El, Icon, ScrollSpec, Tx, col, icon, row, text};
+use rune::{El, Icon, Tx, col, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
     shortcut_error_message,
@@ -100,27 +100,19 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .padding(0.5)
         .clip_rounded(panel_radius)
         .child(settings_header(k, tab))
-        .child(
+        .child(super::scroll_area::scrolled(
+            s,
+            "settings-scroll",
+            col().w_full().grow(1.0).min_h(0.0).scroll_edge_fade(16.0),
             col()
-                .key("settings-scroll")
+                .key("settings-content")
                 .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .scroll_edge_fade(16.0)
-                .child(
-                    col()
-                        .key("settings-content")
-                        .w_full()
-                        .px(SETTINGS_GUTTER - SETTINGS_ROW_INSET)
-                        .pt(4.0)
-                        .pb(24.0)
-                        .gap(24.0)
-                        .child(body),
-                ),
-        );
+                .px(SETTINGS_GUTTER - SETTINGS_ROW_INSET)
+                .pt(4.0)
+                .pb(24.0)
+                .gap(24.0)
+                .child(body),
+        ));
     let done = CornerControl {
         dialog_width: SETTINGS_DIALOG_WIDTH,
         dialog_radius: SETTINGS_RADIUS,

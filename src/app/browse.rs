@@ -14,7 +14,7 @@ impl App {
         self.watch.retarget(&path);
         self.cwd = path;
         self.visit = Default::default();
-        self.scroll.stop();
+        self.stop_scrolling();
         self.menu = None;
         self.place_menu = None;
         self.marquee = None;
@@ -170,7 +170,7 @@ impl App {
     }
 
     pub fn apply_filter(&mut self) {
-        self.scroll.stop();
+        self.stop_scrolling();
         let query = self.search.text.trim().to_lowercase();
         let hidden: Vec<bool> = self
             .entries
@@ -237,7 +237,7 @@ impl App {
             Layout::Grid
         };
         self.layout_cut = false;
-        self.scroll.stop();
+        self.stop_scrolling();
         if self.rule_presentation().layout.is_some() {
             self.visit.layout = Some(self.layout);
         } else {
@@ -252,7 +252,7 @@ impl App {
         self.remember(Setting::GridLayout, self.config.grid);
         self.apply_rules();
         if self.layout != before {
-            self.scroll.stop();
+            self.stop_scrolling();
         }
     }
 
@@ -264,7 +264,7 @@ impl App {
     pub fn toggle_scroll_inertia(&mut self) {
         self.config.scroll_inertia = !self.config.scroll_inertia;
         if !self.config.scroll_inertia {
-            self.scroll.stop_coast();
+            self.stop_coasting();
         }
         self.remember(Setting::ScrollInertia, self.config.scroll_inertia);
     }
@@ -272,7 +272,7 @@ impl App {
     pub fn toggle_overscroll(&mut self) {
         self.config.overscroll = !self.config.overscroll;
         if !self.config.overscroll {
-            self.scroll.stop_bounce();
+            self.stop_bouncing();
         }
         self.remember(Setting::Overscroll, self.config.overscroll);
     }
@@ -291,10 +291,10 @@ impl App {
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
         if !self.config.scroll_inertia {
-            self.scroll.stop_coast();
+            self.stop_coasting();
         }
         if !self.config.overscroll {
-            self.scroll.stop_bounce();
+            self.stop_bouncing();
         }
     }
 

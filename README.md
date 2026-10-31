@@ -90,8 +90,8 @@ settings {
 ```
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
-bar of the header's height, and is also the toolbar's layout button. `scroll-inertia` lets the
-list coast after the wheel stops; `overscroll` lets it pull past the first or last row and
+bar of the header's height, and is also the toolbar's layout button. `scroll-inertia` lets every
+scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 
 `config.kdl` also holds folder and entry rules, as top-level nodes beside `settings`, in file

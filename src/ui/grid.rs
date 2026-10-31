@@ -1,9 +1,7 @@
 use crate::app::{
-    App, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
+    App, FILES, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
-use rune::{
-    Align, Cursor, El, GrowthSpec, ScrollSpec, Spring, Transition, Tx, col, el, icon, row, text,
-};
+use rune::{Align, Cursor, El, GrowthSpec, Spring, Transition, Tx, col, el, icon, row, text};
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
 
@@ -12,7 +10,6 @@ use super::table::{HEADER_HEIGHT, browser_style, mount, sort_label};
 const SORT_BUTTON_HEIGHT: f32 = 20.0;
 
 pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
-    let told = s.scroll_told.clone();
     let columns = s.grid_columns();
     let rows = s.grid_rows();
     col()
@@ -22,51 +19,44 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
         .min_h(0.0)
         .transition(Transition::none())
         .child(grid_toolbar(s, k).transition(mount(cut)))
-        .child(
+        .child(super::scroll_area::scrolled(
+            s,
+            FILES,
             col()
-                .key("files-table")
                 .role("grid")
                 .label("Files")
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
                 .focusable(true)
                 .no_focus_ring()
                 .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
-                .on_wheel(|s: &mut App, wheel, tx| s.list_wheel(wheel, tx))
                 .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
                 .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
                 .on_layout(|s: &mut App, rect| s.rows_view = rect)
-                .on_scroll_offset(move |at| told.set(at))
+                .transition(mount(cut)),
+            col()
+                .key("file-grid-rows")
+                .w_full()
+                .pt(GRID_TOP_MARGIN)
                 .transition(mount(cut))
-                .child(
-                    col()
-                        .key("file-grid-rows")
-                        .w_full()
-                        .pt(GRID_TOP_MARGIN)
-                        .transition(mount(cut))
-                        .motion(Spring::NONE)
-                        .instant_changes()
-                        .hover_motion_within(Spring::NONE, Spring::NONE)
-                        .growth(GrowthSpec {
-                            spring: Spring::NONE,
-                            ..GrowthSpec::default()
-                        })
-                        .virtual_rows(
-                            rows,
-                            GRID_ROW_HEIGHT,
-                            move |s: &App, r| match s.visible.get(r * columns) {
-                                Some(&i) => Cow::Owned(format!("grid-row:{}", s.entries[i].id)),
-                                None => Cow::Borrowed("grid-row"),
-                            },
-                            move |s: &App, r| grid_row(s, r, columns, k),
-                        )
-                        .offset(0.0, s.overshoot()),
+                .motion(Spring::NONE)
+                .instant_changes()
+                .hover_motion_within(Spring::NONE, Spring::NONE)
+                .growth(GrowthSpec {
+                    spring: Spring::NONE,
+                    ..GrowthSpec::default()
+                })
+                .virtual_rows(
+                    rows,
+                    GRID_ROW_HEIGHT,
+                    move |s: &App, r| match s.visible.get(r * columns) {
+                        Some(&i) => Cow::Owned(format!("grid-row:{}", s.entries[i].id)),
+                        None => Cow::Borrowed("grid-row"),
+                    },
+                    move |s: &App, r| grid_row(s, r, columns, k),
                 ),
-        )
+        ))
 }
 
 fn grid_toolbar(s: &App, k: &'static Kit) -> El {

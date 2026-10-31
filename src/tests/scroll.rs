@@ -116,9 +116,9 @@ fn overscroll_pulls_the_rows_past_the_top_and_springs_them_back() {
     rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
     rt.frame(1.0 / 60.0);
     assert!(
-        rt.state.overshoot() > 1.0,
+        rt.state.overshoot("files-table") > 1.0,
         "the wheel at the top pulled the rows down: {}",
-        rt.state.overshoot()
+        rt.state.overshoot("files-table")
     );
     assert!(
         row_top(&rt) > before + 1.0,
@@ -127,7 +127,39 @@ fn overscroll_pulls_the_rows_past_the_top_and_springs_them_back() {
     for _ in 0..60 {
         rt.frame(1.0 / 60.0);
     }
-    assert_eq!(rt.state.overshoot(), 0.0, "the rows spring back");
+    assert_eq!(
+        rt.state.overshoot("files-table"),
+        0.0,
+        "the rows spring back"
+    );
+}
+
+#[test]
+fn the_command_bar_overscrolls_like_the_list() {
+    let dir = long_folder(10);
+    let mut rt = runtime(app(&dir));
+    rt.state.config.overscroll = true;
+    rt.frame(0.0);
+    rt.key(command_bar_event(&rt.state, false));
+    rt.frame(0.1);
+    let (x, y) = rt
+        .find("command-scroll")
+        .expect("the commands are on screen");
+    rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
+    rt.frame(1.0 / 60.0);
+    assert!(
+        rt.state.overshoot("command-scroll") > 1.0,
+        "the wheel at the top pulls the commands down: {}",
+        rt.state.overshoot("command-scroll")
+    );
+    for _ in 0..60 {
+        rt.frame(1.0 / 60.0);
+    }
+    assert_eq!(
+        rt.state.overshoot("command-scroll"),
+        0.0,
+        "the commands spring back"
+    );
 }
 
 #[test]
@@ -139,5 +171,5 @@ fn without_overscroll_an_end_is_hard() {
     let (x, y) = rt.find("files-table").expect("the list is on screen");
     rt.wheel_event(WheelEvent::new(0.0, 80.0).at(x, y));
     rt.frame(1.0 / 60.0);
-    assert_eq!(rt.state.overshoot(), 0.0);
+    assert_eq!(rt.state.overshoot("files-table"), 0.0);
 }

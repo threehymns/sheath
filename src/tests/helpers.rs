@@ -130,7 +130,7 @@ pub(super) fn event_for(app: &App, action: Action, key: Key) -> KeyEvent {
 }
 
 pub(super) fn scroll_offset(rt: &Runtime<App>) -> f32 {
-    rt.state.scroll_told.get().offset[1]
+    rt.state.told("files-table").get().offset[1]
 }
 
 pub(super) fn trackpad_burst(rt: &mut Runtime<App>, frames: usize) -> Vec<f32> {

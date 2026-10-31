@@ -30,16 +30,14 @@ pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};
 pub use places::{PlaceMenu, PlaceRename, place_rename_edit};
 pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
-pub use scrolling::poll;
+pub use scrolling::{FILES, poll};
 pub use sheets::{Sheet, SheetKind};
 
-use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::time::Instant;
 
-use rune::{Latest, PointerPress, ScrollPos, TextEdit, Tx, Waker};
+use rune::{Latest, PointerPress, TextEdit, Tx, Waker};
 use rune_kit::shell::Reorder;
 use rune_kit::{PaneState, SortDir};
 
@@ -56,7 +54,7 @@ use paths::start_location;
 #[cfg(test)]
 pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
-use scroll::Scroll;
+use scrolling::Scrolls;
 use watch::Watch;
 
 pub const ROW_HEIGHT: f32 = 30.0;
@@ -114,9 +112,8 @@ pub struct App {
     pub keybinds: Keybinds,
     pub recorders: BTreeMap<Action, Recorder>,
     pub store: Store,
-    pub scroll_told: Rc<Cell<ScrollPos>>,
     pub rows_view: [f32; 4],
-    scroll: Scroll,
+    scrolls: Scrolls,
     pub places_at: BTreeMap<String, PlaceAt>,
     pub sections_at: BTreeMap<Section, [f32; 4]>,
     pub name_at: BTreeMap<String, f32>,
@@ -219,9 +216,8 @@ impl App {
             keybinds,
             recorders,
             store,
-            scroll_told: Rc::new(Cell::new(ScrollPos::default())),
             rows_view: [0.0; 4],
-            scroll: Scroll::default(),
+            scrolls: Scrolls::default(),
             places_at: BTreeMap::new(),
             sections_at: BTreeMap::new(),
             name_at: BTreeMap::new(),

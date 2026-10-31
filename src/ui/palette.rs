@@ -1,7 +1,7 @@
 use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
-use rune::{Cursor, El, Icon, Key, ScrollSpec, Tx, col, el, icon, row, text};
+use rune::{Cursor, El, Icon, Key, Tx, col, el, icon, row, text};
 use rune_kit::{Kit, TextInput, glyphs, scrim};
 use rune_theme_opencode as theme;
 
@@ -131,18 +131,16 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .w_full()
                 .fill(k.c.border_muted),
         )
-        .child(
+        .child(super::scroll_area::scrolled(
+            s,
+            "command-scroll",
             col()
-                .key("command-scroll")
                 .w_full()
                 .max_h(380.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
                 .scroll_edge_fade(12.0)
-                .scroll_margin(CLEARANCE_ROWS * (ROW_H + ROW_GAP))
-                .child(list),
-        );
+                .scroll_margin(CLEARANCE_ROWS * (ROW_H + ROW_GAP)),
+            list,
+        ));
     layers.push(
         scrim("command-scrim", |s: &mut App| s.close_palette()).fill(k.alpha(k.c.black, 0.28)),
     );

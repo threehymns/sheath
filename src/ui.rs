@@ -6,6 +6,7 @@ mod path_bar;
 mod rule_editor;
 mod rule_picker;
 mod rules;
+mod scroll_area;
 mod settings;
 mod sidebar;
 mod table;

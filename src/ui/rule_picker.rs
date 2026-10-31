@@ -1,5 +1,5 @@
 use crate::app::App;
-use rune::{Cursor, El, ScrollSpec, col, el, row, text};
+use rune::{Cursor, El, col, el, row, text};
 use rune_kit::{Kit, scrim};
 
 pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
@@ -81,17 +81,12 @@ pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .w_full()
                 .fill(k.c.border_muted),
         )
-        .child(
-            col()
-                .key("rule-picker-scroll")
-                .w_full()
-                .max_h(380.0)
-                .scroll(ScrollSpec {
-                    stick_bottom: false,
-                })
-                .scroll_edge_fade(12.0)
-                .child(list),
-        );
+        .child(super::scroll_area::scrolled(
+            s,
+            "rule-picker-scroll",
+            col().w_full().max_h(380.0).scroll_edge_fade(12.0),
+            list,
+        ));
     layers.push(
         scrim("rule-picker-scrim", |s: &mut App| s.close_rule_picker())
             .fill(k.alpha(k.c.black, 0.28)),

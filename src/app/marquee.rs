@@ -1,4 +1,4 @@
-use super::App;
+use super::{App, FILES};
 use std::collections::BTreeSet;
 
 pub struct Marquee {
@@ -64,7 +64,7 @@ impl App {
             return BTreeSet::new();
         }
         let view = self.rows_view;
-        let offset = self.scroll.current() - self.overshoot();
+        let offset = self.list_scroll() - self.overshoot(FILES);
         let height = self.content_height();
         let top = (a.1.min(b.1) - view[1] + offset).clamp(0.0, height);
         let bottom = (a.1.max(b.1) - view[1] + offset).clamp(0.0, height);
@@ -96,7 +96,7 @@ impl App {
     }
 
     pub(super) fn rows_at(&self) -> f32 {
-        self.scroll.current() - self.overshoot()
+        self.list_scroll() - self.overshoot(FILES)
     }
 
     pub fn marquee_rect(&self) -> Option<[f32; 4]> {

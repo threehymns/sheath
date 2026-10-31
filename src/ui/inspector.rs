@@ -1,6 +1,6 @@
 use crate::app::{App, Preview};
 use crate::format;
-use rune::{Align, El, ScrollSpec, Tx, col, el, icon, row, text};
+use rune::{Align, El, Tx, col, el, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, file_icon, glyphs};
 
 pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
@@ -273,29 +273,21 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
         }
         Some(Preview::Text(body)) => {
             let body: String = body.chars().take(6_000).collect();
-            panel = panel.child(
-                col()
-                    .key("preview-scroll")
-                    .w_full()
-                    .grow(1.0)
-                    .min_h(0.0)
-                    .scroll(ScrollSpec {
-                        stick_bottom: false,
-                    })
-                    .scroll_edge_fade(12.0)
+            panel = panel.child(super::scroll_area::scrolled(
+                s,
+                "preview-scroll",
+                col().w_full().grow(1.0).min_h(0.0).scroll_edge_fade(12.0),
+                el().w_full()
+                    .padding(10.0)
+                    .radius(k.radius.md)
+                    .fill(k.c.layer_02)
                     .child(
-                        el().w_full()
-                            .padding(10.0)
-                            .radius(k.radius.md)
-                            .fill(k.c.layer_02)
-                            .child(
-                                text(body)
-                                    .font(k.ty.mono.lh(16.0))
-                                    .color(k.c.text_muted)
-                                    .wrap_anywhere(),
-                            ),
+                        text(body)
+                            .font(k.ty.mono.lh(16.0))
+                            .color(k.c.text_muted)
+                            .wrap_anywhere(),
                     ),
-            );
+            ));
         }
         Some(Preview::Folder(count)) => {
             let label = if *count == 1 {
