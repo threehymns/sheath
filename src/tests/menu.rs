@@ -23,7 +23,7 @@ fn right_clicking_a_row_opens_the_menu_and_rename_opens_a_focused_sheet() {
     assert!(rt.find("rename-dialog").is_some());
 
     rt.key(KeyEvent {
-        key: Key::Text("renamed.md".into()),
+        key: Key::Text("renamed".into()),
         mods: Mods::default(),
     });
     rt.frame(0.0);

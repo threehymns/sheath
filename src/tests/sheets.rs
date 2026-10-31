@@ -248,3 +248,29 @@ fn go_to_folder_keeps_the_sheet_open_when_the_path_is_not_a_folder() {
     assert!(sheet.error.as_deref().is_some_and(|e| e.contains("folder")));
     assert_eq!(app.cwd, dir.path());
 }
+
+#[test]
+fn rename_starts_on_the_name_and_leaves_the_extension_alone() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:notes.md");
+    app.begin_rename();
+
+    let sheet = app.sheet.as_ref().expect("the rename sheet is up");
+    assert_eq!(sheet.edit.text, "notes.md");
+    assert_eq!(
+        (sheet.edit.anchor, sheet.edit.focus),
+        (0, 5),
+        "“notes” is chosen and the extension is still there to keep"
+    );
+
+    app.close_sheet();
+    app.select_id("f:alpha");
+    app.begin_rename();
+    let sheet = app.sheet.as_ref().expect("the rename sheet is up");
+    assert_eq!(
+        sheet.edit.focus,
+        "alpha".len(),
+        "a folder name has no extension to keep"
+    );
+}

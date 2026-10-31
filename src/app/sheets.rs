@@ -70,11 +70,18 @@ impl App {
         let [id] = ids.as_slice() else {
             return;
         };
-        let Some(name) = self.entry_name(id).map(str::to_owned) else {
+        let Some((_, name, is_dir)) = self.entry_snapshot(id) else {
             return;
         };
+        // A file's extension usually stays, so the field starts on the name before it; a folder
+        // name has no extension to keep.
+        let stem = if is_dir {
+            name.len()
+        } else {
+            name.rfind('.').filter(|at| *at > 0).unwrap_or(name.len())
+        };
         let mut edit = TextEdit::new(name.clone());
-        edit.set_selection(0, name.len());
+        edit.set_selection(0, stem);
         edit.focused = true;
         self.sheet = Some(Sheet {
             kind: SheetKind::Rename,
