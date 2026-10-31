@@ -211,6 +211,7 @@ impl App {
             Action::Paste => self.clipboard.is_some(),
             Action::SelectAll => !self.visible.is_empty(),
             Action::OpenTerminal => self.cwd.is_dir(),
+            Action::Reveal => self.selected.is_some(),
             Action::DeselectAll | Action::InvertSelection => self.selection_len() > 0,
             Action::ShowEntry | Action::HideEntry | Action::ViewEntryRules => {
                 self.selected.is_some()
@@ -257,6 +258,7 @@ impl App {
             Action::HideEntry => self.pin_entry(true),
             Action::PickRule => self.open_rule_picker(),
             Action::OpenTerminal => self.open_terminal_here(),
+            Action::Reveal => self.reveal_selected(),
         }
     }
 }

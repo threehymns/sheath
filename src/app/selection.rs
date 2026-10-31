@@ -321,6 +321,18 @@ impl App {
         }
     }
 
+    pub fn reveal_selected(&mut self) {
+        let Some(id) = self.selected.clone() else {
+            return;
+        };
+        let Some((path, _, _)) = self.entry_snapshot(&id) else {
+            return;
+        };
+        if let Err(err) = super::paths::reveal_external(&path) {
+            self.error = Some(err);
+        }
+    }
+
     pub fn open_row_menu(&mut self, index: usize, at: PointerPress) {
         let Some(id) = self.row_id(index) else {
             self.menu = None;

@@ -185,5 +185,6 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         | Action::PickRule => &theme::icons::EDIT,
         Action::ShowEntry | Action::HideEntry => k.glyph.eye,
         Action::OpenTerminal => &icons::TERMINAL,
+        Action::Reveal => &glyphs::FOLDER_OPEN,
     }
 }

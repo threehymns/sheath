@@ -14,7 +14,7 @@ fn right_clicking_a_row_opens_the_menu_and_rename_opens_a_focused_sheet() {
     assert!(rt.state.menu.is_some(), "the row menu opens at the press");
     assert!(rt.find("row-menu-item0").is_some());
 
-    click(&mut rt, "row-menu-item2");
+    click(&mut rt, "row-menu-item3");
     assert!(rt.state.menu.is_none(), "picking an item closes the menu");
     assert_eq!(
         rt.state.sheet.as_ref().map(|s| s.kind),
@@ -47,10 +47,10 @@ fn the_row_menu_offers_move_and_trash_for_the_clicked_row() {
     rt.frame(0.0);
 
     right_click(&mut rt, "f:file2.txt");
-    assert!(rt.find("row-menu-item3").is_some(), "Move is in the menu");
-    assert!(rt.find("row-menu-item5").is_some(), "Trash is in the menu");
+    assert!(rt.find("row-menu-item4").is_some(), "Move is in the menu");
+    assert!(rt.find("row-menu-item6").is_some(), "Trash is in the menu");
 
-    click(&mut rt, "row-menu-item5");
+    click(&mut rt, "row-menu-item6");
     assert_eq!(
         rt.state.sheet.as_ref().map(|s| s.kind),
         Some(SheetKind::Trash)
@@ -142,11 +142,11 @@ fn the_row_menu_copies_and_duplicates_the_clicked_row() {
     rt.frame(0.0);
 
     right_click(&mut rt, "f:notes.md");
-    click(&mut rt, "row-menu-item6");
+    click(&mut rt, "row-menu-item7");
     assert!(rt.state.clipboard.is_some(), "Copy fills the clipboard");
 
     right_click(&mut rt, "f:notes.md");
-    click(&mut rt, "row-menu-item9");
+    click(&mut rt, "row-menu-item10");
     rt.frame(0.1);
     assert!(
         dir.path().join("notes copy.md").exists(),

@@ -268,6 +268,15 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                 s.open_selected();
             }),
         )
+        .item(
+            MenuItem::new("Reveal in File Manager")
+                .icon(&glyphs::FOLDER_OPEN)
+                .disabled(count == 0)
+                .on_select(|s: &mut App| {
+                    s.close_menu();
+                    s.reveal_selected();
+                }),
+        )
         .separator()
         .item(
             MenuItem::new("Rename")

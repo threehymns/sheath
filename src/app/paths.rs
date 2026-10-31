@@ -119,7 +119,6 @@ fn terminals() -> Vec<String> {
     out
 }
 
-#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
     match command.spawn() {
         Ok(mut child) => {
@@ -143,7 +142,8 @@ pub(super) fn open_external(path: &Path) -> Result<(), String> {
     };
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut command = Command::new("xdg-open");
-    match command.arg(path).spawn() {
+    command.arg(path);
+    match command.spawn() {
         Ok(mut child) => {
             // Reap the launcher so opening many files doesn't collect zombies.
             std::thread::spawn(move || {
@@ -152,5 +152,36 @@ pub(super) fn open_external(path: &Path) -> Result<(), String> {
             Ok(())
         }
         Err(err) => Err(format!("Couldn’t open {}: {err}", path.display())),
+    }
+}
+
+/// Shows the item in the platform's file manager, with the item itself chosen where the platform
+/// can do that.
+pub(super) fn reveal_external(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut command = Command::new("open");
+        command.arg("-R").arg(path);
+        return spawn_reaped(command, &path.display().to_string());
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let mut command = Command::new("explorer");
+        command.arg(format!("/select,{}", path.display()));
+        return spawn_reaped(command, &path.display().to_string());
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        // A folder opens directly; a file opens the folder that holds it.
+        let target = if path.is_dir() {
+            path.to_path_buf()
+        } else {
+            path.parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| path.to_path_buf())
+        };
+        let mut command = Command::new("xdg-open");
+        command.arg(&target);
+        spawn_reaped(command, &target.display().to_string())
     }
 }
