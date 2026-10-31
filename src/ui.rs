@@ -164,11 +164,15 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         // Nothing to clear yet, so the slot shows the chord that reaches the field instead.
         let caps = s.keybinds.keycaps(Action::FocusSearch);
         if !caps.is_empty() {
+            // The field paints its base with a sheen from 6% to 2% white, so the well mixes
+            // from the lifted surface a bare `bg_base` would read as a dark rim.
+            let surface = k.c.bg_base.mix(k.c.white, 0.04);
             search = search.trailing(crate::keycaps::tray(
                 k,
                 "search-shortcut",
                 &caps,
-                k.c.bg_base,
+                surface,
+                crate::keycaps::KeySize::Small,
             ));
         }
     } else {

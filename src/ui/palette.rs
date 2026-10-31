@@ -99,6 +99,7 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 format!("keys-{}", action.id()),
                 &caps,
                 surface,
+                crate::keycaps::KeySize::Small,
             ));
         }
         if selected {

@@ -433,7 +433,13 @@ fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
                 .font(k.ty.ui_compact)
                 .color(k.c.text_faint)
         } else {
-            crate::keycaps::tray(k, format!("record-{}-keys", action.id()), &labels, surface)
+            crate::keycaps::tray(
+                k,
+                format!("record-{}-keys", action.id()),
+                &labels,
+                surface,
+                crate::keycaps::KeySize::Regular,
+            )
         });
     if recorder.is_recording() {
         field = field.fill(surface);
