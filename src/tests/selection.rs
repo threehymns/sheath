@@ -86,7 +86,7 @@ fn shift_clicking_extends_the_selection_from_the_last_click() {
         ["f:file2.txt", "f:file10.txt", "f:notes.md"],
         "Shift-click selects the range between the anchor and the click"
     );
-    assert_eq!(rt.state.phrase_for_count(), "3 of 4 selected");
+    assert_eq!(rt.state.phrase_for_count(), "3 of 4 selected · 31 B");
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn command_a_selects_every_row() {
     });
     rt.frame(0.1);
     assert_eq!(rt.state.selection_len(), 4);
-    assert_eq!(rt.state.phrase_for_count(), "4 of 4 selected");
+    assert_eq!(rt.state.phrase_for_count(), "4 of 4 selected · 31 B");
 }
 
 #[test]

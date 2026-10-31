@@ -370,7 +370,13 @@ impl App {
         let shown = self.visible.len();
         let chosen = self.selection_len();
         if chosen > 1 {
-            return format!("{chosen} of {shown} selected");
+            let size = self.selection_size();
+            let suffix = if size > 0 {
+                format!(" · {}", crate::format::size(size))
+            } else {
+                String::new()
+            };
+            return format!("{chosen} of {shown} selected{suffix}");
         }
         let total = self.unhidden;
         let noun = if shown == 1 { "item" } else { "items" };
