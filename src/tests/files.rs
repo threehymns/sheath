@@ -52,6 +52,35 @@ fn the_inspector_builds_a_scrollable_preview() {
 }
 
 #[test]
+fn the_inspector_swaps_details_without_moving_them() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    assert!(
+        rt.presented("inspector")
+            .is_some_and(|(_, opacity)| opacity == 1.0),
+        "the pane starts on its empty state"
+    );
+
+    // A press and one frame: the swap has to have landed by the frame after the press.
+    let (x, y) = rt.find("f:notes.md").expect("the row is on screen");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(1.0 / 60.0);
+
+    let mut swapped = 0;
+    for e in rt.elements() {
+        if e.exiting || !e.path.contains("pane-body/inspector") {
+            continue;
+        }
+        swapped += 1;
+        assert_eq!(e.opacity, 1.0, "{} fades in", e.path);
+        assert!(!e.moving, "{} glides", e.path);
+    }
+    assert!(swapped > 3, "the details are drawn: {swapped} elements");
+}
+
+#[test]
 fn the_inspector_summarises_a_selection_of_several_rows() {
     let dir = fixture();
     // The table owns the selection, so select the way a click does.

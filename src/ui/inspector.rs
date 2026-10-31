@@ -13,6 +13,7 @@ pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
     let Some(entry) = s.selected_entry() else {
         return col()
             .key("inspector")
+            .instant_changes()
             .w_full()
             .h_full()
             .px(20.0)
@@ -48,6 +49,12 @@ pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
         .unwrap_or_default();
     let mut panel = col()
         .key("inspector")
+        // One pane whatever is selected: the empty state, one entry's details and a summary of
+        // several are all the same column, so Rune reuses the nodes down it. Swapping them has
+        // no meaning to show — the details are replaced, not moved — and left to spring, the
+        // empty state's centred icon is carried into the header and the new icon slides in from
+        // the pane's edge. Land the swap where it belongs instead.
+        .instant_changes()
         .w_full()
         .h_full()
         .min_h(0.0)
@@ -120,6 +127,7 @@ fn selection_inspector(s: &App, k: &Kit) -> El {
     let size = s.selection_size();
     col()
         .key("inspector")
+        .instant_changes()
         .w_full()
         .h_full()
         .min_h(0.0)
