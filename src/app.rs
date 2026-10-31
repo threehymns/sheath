@@ -89,14 +89,9 @@ pub struct App {
     pub typeahead: String,
     typeahead_at: Option<Instant>,
     pub preview: Option<Preview>,
-    // Decodes pictures off the frame, so the inspector can draw one instead of its bytes.
-    pub images: Option<rune::ImageCache>,
     pub preview_image: Option<rune::Image>,
     // Why the preview is not a picture, when this app's decoder could not read it.
     pub preview_error: Option<String>,
-    // Rune finishes a kept preview after the decode lands; the first poll that sees it asks
-    // for the frame that draws it, so the decoding placeholder doesn't stay.
-    preview_ready: bool,
     previews: preview::Previewer,
     // Only a folder on demand: walking a tree costs too much to do for every row.
     pub folder_size: Option<(u64, usize)>,
@@ -234,10 +229,8 @@ impl App {
             typeahead: String::new(),
             typeahead_at: None,
             preview: None,
-            images: None,
             preview_image: None,
             preview_error: None,
-            preview_ready: false,
             previews: preview::Previewer::default(),
             folder_size: None,
             search_all: false,
@@ -429,11 +422,18 @@ impl App {
     pub(crate) fn watchers(&self) -> usize {
         self.watch.watchers()
     }
+
+    /// The image cache a window gets in `setup`, for tests that run without one.
+    #[cfg(test)]
+    pub(crate) fn use_images(&mut self, cache: rune::ImageCache) {
+        self.previews.attach(std::sync::Arc::new(cache));
+    }
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
     s.previews.set_waker(wake.clone());
-    s.images = Some(rune::ImageCache::new(wake.clone()));
+    s.previews
+        .attach(std::sync::Arc::new(rune::ImageCache::new(wake.clone())));
     s.scan.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);

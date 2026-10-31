@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use super::entry::read_preview;
 use super::paths::open_external;
-use super::preview::{Decoded, Finished, PREVIEW_POINTS, PREVIEW_SCALE};
+use super::preview::Finished;
 
 use super::*;
 
@@ -25,7 +25,6 @@ impl App {
         self.preview = None;
         self.preview_image = None;
         self.preview_error = None;
-        self.preview_ready = false;
         self.previews.cancel();
         self.folder_size = None;
     }
@@ -63,71 +62,44 @@ impl App {
                 None
             }
         };
-        self.preview_ready = self
-            .preview_image
-            .as_ref()
-            .is_some_and(|image| image.is_ready());
     }
 
-    // A finished decode, if it is still the picture on screen. Rune turns the RGBA into the
-    // same miped handle it would have produced itself, now from an image the size of the pane.
+    /// A finished preview, if it is still the picture on screen. It arrives decoded and mipped,
+    /// so the frame that lands it can draw it straight away.
     pub(crate) fn land_preview(&mut self) -> bool {
-        let mut redraw = false;
-        if let Some(Finished { key, decoded }) = self.previews.take()
-            && self
-                .selected_entry()
-                .is_some_and(|entry| entry.path == key.path)
+        let Some(finished) = self.previews.take() else {
+            return false;
+        };
+        if self
+            .selected_entry()
+            .is_none_or(|entry| entry.path != finished.key.path)
         {
-            self.preview_ready = false;
-            match decoded {
-                Decoded::Failed(error) => {
+            return false;
+        }
+        let Finished { key, image, error } = finished;
+        match image {
+            Some(image) => {
+                self.preview_error = None;
+                self.preview_image = Some(image.clone());
+                self.previews.remember(key, image);
+            }
+            None => {
+                if let Some(error) = error {
                     self.preview_image = None;
                     self.preview_error = Some(error);
                 }
-                Decoded::Rgba {
-                    width,
-                    height,
-                    pixels,
-                } => {
-                    self.preview_error = None;
-                    if let Some(cache) = &self.images {
-                        let image = cache.rgba(width, height, pixels);
-                        self.preview_image = Some(image.clone());
-                        self.previews.remember(key, image);
-                    }
-                }
-                Decoded::ViaRune(path) => {
-                    self.preview_error = None;
-                    if let Some(cache) = &self.images {
-                        let image = cache.file(path, PREVIEW_POINTS, PREVIEW_SCALE);
-                        self.preview_image = Some(image.clone());
-                        self.previews.remember(key, image);
-                    }
-                }
             }
-            redraw = true;
         }
-        // Rune builds the kept image's mips on its worker, after the decode has landed; its
-        // waker brings us back here, and the finished handle means the placeholder can go.
-        if !self.preview_ready
-            && self
-                .preview_image
-                .as_ref()
-                .is_some_and(|image| image.is_ready())
-        {
-            self.preview_ready = true;
-            redraw = true;
-        }
-        redraw
+        true
     }
 
     /// Wait for the worker, then take its answer. Tests only: a window lands previews in `poll`.
     #[cfg(test)]
-    pub(crate) fn settle_preview(&mut self) {
+    pub(crate) fn settle_preview(&mut self) -> bool {
         while self.previews.is_pending() {
             std::thread::sleep(Duration::from_millis(1));
         }
-        self.land_preview();
+        self.land_preview()
     }
 
     pub fn selected_entry(&self) -> Option<&Entry> {

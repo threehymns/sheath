@@ -8,15 +8,18 @@
 //! Pictures that already fit in the pane skip all of that and are handed to Rune as they are.
 //!
 //! Decodes run through `Latest`, like folder scans: a newer selection supersedes a queued one
-//! and a short debounce keeps a held arrow key from decoding every row on the way past. The last
-//! few previews are kept as image handles, so going back to one is instant.
+//! and a short debounce keeps a held arrow key from decoding every row on the way past. The
+//! worker also waits for Rune's mips, so a preview lands ready to draw: the frame hook only
+//! drains finished work, and the window never wakes for a handle that still paints nothing. The
+//! last few previews are kept as image handles, so going back to one is instant.
 
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
-use rune::{Image, Latest, Waker};
+use rune::{Image, ImageCache, Latest, Waker};
 use std::collections::VecDeque;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 /// The inspector's picture area: 420 pt at 2 device pixels per point.
@@ -38,12 +41,15 @@ pub(super) struct Key {
     pixels: u32,
 }
 
+/// A decoded preview, ready for a frame to draw. `image` is None when this app could not make
+/// one and `error` says why.
 pub(super) struct Finished {
     pub(super) key: Key,
-    pub(super) decoded: Decoded,
+    pub(super) image: Option<Image>,
+    pub(super) error: Option<String>,
 }
 
-pub(super) enum Decoded {
+enum Decoded {
     Rgba {
         width: u32,
         height: u32,
@@ -57,6 +63,8 @@ pub(super) enum Decoded {
 pub(super) struct Previewer {
     jobs: Latest<Finished>,
     recent: VecDeque<(Key, Image)>,
+    // Shared with the app; the worker hands finished RGBA to it off the UI thread.
+    cache: Option<Arc<ImageCache>>,
 }
 
 impl Default for Previewer {
@@ -64,6 +72,7 @@ impl Default for Previewer {
         Previewer {
             jobs: Latest::default().debounce(DEBOUNCE),
             recent: VecDeque::new(),
+            cache: None,
         }
     }
 }
@@ -71,6 +80,10 @@ impl Default for Previewer {
 impl Previewer {
     pub(super) fn set_waker(&mut self, waker: Waker) {
         self.jobs.set_waker(waker);
+    }
+
+    pub(super) fn attach(&mut self, cache: Arc<ImageCache>) {
+        self.cache = Some(cache);
     }
 
     /// A kept render for this file, ready to draw now. Otherwise asks for a new one.
@@ -85,10 +98,9 @@ impl Previewer {
             self.jobs.cancel();
             return Some(image);
         }
-        self.jobs.request(key, |key| {
-            let decoded = decode(&key);
-            Finished { key, decoded }
-        });
+        let cache = self.cache.clone();
+        self.jobs
+            .request(key, move |key| render(&key, cache.as_deref()));
         None
     }
 
@@ -139,6 +151,43 @@ pub(crate) fn bench_decode(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>),
         Decoded::Failed(error) => Err(error),
         Decoded::ViaRune(_) => Err("not a raster preview".into()),
     }
+}
+
+/// Decode and hand the result to Rune's cache, waiting for its mips on this worker. The landed
+/// preview is therefore ready to draw, and the UI thread does no image work at all.
+fn render(key: &Key, cache: Option<&ImageCache>) -> Finished {
+    let finished = |image, error| Finished {
+        key: key.clone(),
+        image,
+        error,
+    };
+    match decode(key) {
+        Decoded::Rgba {
+            width,
+            height,
+            pixels,
+        } => match cache {
+            Some(cache) => finished(Some(settle(cache.rgba(width, height, pixels))), None),
+            // Before setup (a unit test) there is nowhere to put the pixels.
+            None => finished(None, None),
+        },
+        Decoded::ViaRune(path) => match cache {
+            Some(cache) => finished(
+                Some(settle(cache.file(path, PREVIEW_POINTS, PREVIEW_SCALE))),
+                None,
+            ),
+            None => finished(None, None),
+        },
+        Decoded::Failed(error) => finished(None, Some(error)),
+    }
+}
+
+/// Block until Rune has built the handle's mips. On the web there is no blocking; the handle
+/// lands pending, which this desktop app never hits.
+fn settle(image: Image) -> Image {
+    #[cfg(not(target_arch = "wasm32"))]
+    let _ = image.wait();
+    image
 }
 
 fn decode(key: &Key) -> Decoded {

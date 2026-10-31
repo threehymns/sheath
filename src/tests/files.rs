@@ -315,12 +315,11 @@ fn a_picture_previews_responsively_in_the_inspector() {
     fs::write(dir.path().join("drawing.svg"), svg).unwrap();
     let mut app = app(&dir);
     let (wake_tx, _) = std::sync::mpsc::channel();
-    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(move || {
         let _ = wake_tx.send(());
     })));
     app.select_id("f:drawing.svg");
     app.settle_preview();
-    app.preview_image.as_ref().unwrap().wait().unwrap();
 
     let mut rt = runtime(app);
     rt.frame(0.0);
@@ -353,21 +352,23 @@ fn a_picture_previews_responsively_in_the_inspector() {
     );
 }
 
-// Rune finishes the mips after the decode lands, and a window only redraws when poll says the
-// state the view reads changed. Without that one frame the inspector keeps the decoding
-// placeholder up until the selection changes.
+// A window only redraws when poll lands something, so a preview must not land pending: the
+// worker waits for Rune's mips, and the one frame that lands the picture can draw it.
 #[test]
-fn a_finished_picture_asks_for_the_frame_that_draws_it() {
+fn a_picture_lands_ready_to_draw() {
     let dir = fixture();
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" width="200" height="100"><rect width="200" height="100"/></svg>"#;
     fs::write(dir.path().join("drawing.svg"), svg).unwrap();
     let mut app = app(&dir);
-    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(|| {})));
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(|| {})));
     app.select_id("f:drawing.svg");
-    app.settle_preview();
-    app.preview_image.as_ref().unwrap().wait().unwrap();
 
-    assert!(app.land_preview(), "the finished picture asks for a redraw");
+    assert!(
+        app.settle_preview(),
+        "landing the picture asks for a redraw"
+    );
+    let image = app.preview_image.as_ref().expect("the picture landed");
+    assert!(image.is_ready(), "and it is ready for that frame to draw");
     assert!(
         !app.land_preview(),
         "a ready picture doesn't keep asking for frames"
@@ -381,7 +382,7 @@ fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     fs::write(dir.path().join("broken.png"), b"\x89PNG\r\n\x1a\n").unwrap();
     let mut app = app(&dir);
     let (wake_tx, _) = std::sync::mpsc::channel();
-    app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(move || {
         let _ = wake_tx.send(());
     })));
     app.select_id("f:broken.png");
