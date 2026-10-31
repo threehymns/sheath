@@ -1,11 +1,13 @@
+mod disk;
+
+use disk::{Readback, Stamp, stamp_of};
 use kdl::KdlDocument;
 use notify::Watcher;
-use rune::Waker;
+use rune::{Latest, Waker};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
-use std::time::SystemTime;
 
 pub const CONFIG: &str = "config.kdl";
 
@@ -203,20 +205,6 @@ fn excerpt(input: &str, line: usize, column: usize, length: usize) -> String {
     out
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-struct Stamp {
-    modified: Option<SystemTime>,
-    len: u64,
-}
-
-fn stamp_of(path: &Path) -> Option<Stamp> {
-    let meta = fs::metadata(path).ok()?;
-    Some(Stamp {
-        modified: meta.modified().ok(),
-        len: meta.len(),
-    })
-}
-
 struct Loaded {
     doc: Option<KdlDocument>,
     problem: Option<Problem>,
@@ -228,6 +216,12 @@ pub struct Store {
     files: BTreeMap<&'static str, Loaded>,
     changes: Option<Receiver<()>>,
     _watcher: Option<notify::RecommendedWatcher>,
+    /// Reads run on a worker, so `poll` never touches the disk; the newest request wins.
+    reads: Latest<Vec<Readback>>,
+    /// Counts writes, so a read that started before one can't put the text it replaced back.
+    writes: u64,
+    /// The `writes` count when the pending read was asked for.
+    read_writes: u64,
     pub write_error: Option<String>,
 }
 
@@ -256,6 +250,9 @@ impl Store {
             files,
             changes: None,
             _watcher: None,
+            reads: Latest::default(),
+            writes: 0,
+            read_writes: 0,
             write_error: None,
         }
     }
@@ -327,6 +324,8 @@ impl Store {
             return Err(err);
         }
         self.write_error = None;
+        // A read that started before this write must not put the text it replaced back.
+        self.writes += 1;
         if let Some(file) = self.files.get_mut(name) {
             file.doc = Some(doc);
             file.stamp = stamp_of(&path);
@@ -341,6 +340,7 @@ impl Store {
             return;
         };
         let _ = fs::create_dir_all(&dir);
+        self.reads.set_waker(wake.clone());
         let (tx, rx) = mpsc::channel();
         let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
             let Ok(event) = event else {
@@ -367,24 +367,51 @@ impl Store {
         self._watcher = Some(watcher);
     }
 
-    fn reload(&mut self, name: &'static str) -> bool {
-        let Some(path) = self.path(name) else {
-            return false;
-        };
-        let stamp = stamp_of(&path);
-        if self.files.get(name).is_some_and(|file| file.stamp == stamp) {
-            return false;
+    /// Asks a worker to read both files, so a change the watcher reports lands in a later poll.
+    fn ask(&mut self) {
+        let wanted: Vec<(&'static str, PathBuf)> = [CONFIG, KEYBINDS]
+            .into_iter()
+            .filter_map(|name| self.path(name).map(|path| (name, path)))
+            .collect();
+        if wanted.is_empty() {
+            return;
         }
-        self.read(name);
-        true
+        self.read_writes = self.writes;
+        self.reads.request((), move |()| disk::read_all(wanted));
     }
 
+    /// Installs what a worker read, skipping a file that is unchanged since the last read.
+    fn land(&mut self, reads: Vec<Readback>) -> bool {
+        let mut changed = false;
+        for back in reads {
+            if self
+                .files
+                .get(back.name)
+                .is_some_and(|file| file.stamp == back.stamp)
+            {
+                continue;
+            }
+            self.install(back);
+            changed = true;
+        }
+        changed
+    }
+
+    /// The startup read: `Store::at` may block, since no window is waiting on it yet.
     fn read(&mut self, name: &'static str) {
-        let Some(path) = self.path(name) else {
-            return;
-        };
-        let stamp = stamp_of(&path);
-        let (doc, problem) = match fs::read_to_string(&path) {
+        if let Some(path) = self.path(name) {
+            self.install(disk::read(name, path));
+        }
+    }
+
+    fn install(&mut self, back: Readback) {
+        let Readback {
+            name,
+            path,
+            stamp,
+            text,
+        } = back;
+        let (doc, problem) = match text {
             Ok(text) => match text.parse::<KdlDocument>() {
                 Ok(doc) => (Some(doc), None),
                 // Keep the last document that parsed; writing it back would discard the user's
@@ -413,28 +440,33 @@ impl Store {
     }
 
     pub fn poll(&mut self) -> bool {
-        let Some(changes) = &self.changes else {
-            return false;
-        };
+        let mut changed = false;
+        if let Some(reads) = self.reads.take() {
+            // A write since the request already put the newer text in place.
+            if self.read_writes == self.writes {
+                changed = self.land(reads);
+            }
+        }
         let mut fired = false;
-        loop {
-            match changes.try_recv() {
-                Ok(()) => fired = true,
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Disconnected) => {
-                    self.changes = None;
-                    break;
+        let mut lost = false;
+        if let Some(changes) = &self.changes {
+            loop {
+                match changes.try_recv() {
+                    Ok(()) => fired = true,
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) => {
+                        lost = true;
+                        break;
+                    }
                 }
             }
         }
-        if !fired {
-            return false;
+        if lost {
+            self.changes = None;
         }
-        let mut changed = false;
-        for name in [CONFIG, KEYBINDS] {
-            if self.reload(name) {
-                changed = true;
-            }
+        if fired {
+            // The read lands in a later poll, woken by its answer; this one reports no change.
+            self.ask();
         }
         changed
     }
