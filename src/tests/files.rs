@@ -355,7 +355,11 @@ fn a_picture_previews_responsively_in_the_inspector() {
 #[test]
 fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     let dir = fixture();
-    fs::write(dir.path().join("broken.png"), [0x89, b'P', b'N', b'G', 0x00, 0x00]).unwrap();
+    fs::write(
+        dir.path().join("broken.png"),
+        [0x89, b'P', b'N', b'G', 0x00, 0x00],
+    )
+    .unwrap();
     let mut app = app(&dir);
     let (wake_tx, _) = std::sync::mpsc::channel();
     app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
@@ -369,11 +373,15 @@ fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     // After worker processes the broken image, an error message is shown:
     let _ = rt.state.preview_image.as_ref().unwrap().wait();
     rt.frame(1.0);
-    let error_text = rt
-        .elements()
-        .into_iter()
-        .find(|e| e.text.as_deref().is_some_and(|t| t.contains("Could not decode picture")));
-    assert!(error_text.is_some(), "error note is shown for invalid picture");
+    let error_text = rt.elements().into_iter().find(|e| {
+        e.text
+            .as_deref()
+            .is_some_and(|t| t.contains("Could not decode picture"))
+    });
+    assert!(
+        error_text.is_some(),
+        "error note is shown for invalid picture"
+    );
 }
 
 #[cfg(unix)]
