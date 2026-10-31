@@ -30,6 +30,56 @@ fn a_rule_covers_the_folder_and_everything_under_it() {
 }
 
 #[test]
+fn a_double_star_crosses_no_segments_at_all() {
+    // gitignore's rule: `a/**/b` matches `a/b`, so a tree pattern covers its first level too.
+    let rules =
+        rules("folder-rule \"target\" {\n    match path=\"/work/**/target\"\n    layout grid\n}\n");
+    for path in ["/work/target", "/work/a/target", "/work/a/b/target"] {
+        assert_eq!(
+            rules.resolve(Path::new(path), 0).layout,
+            Some(Layout::Grid),
+            "{path} is the target, or sits below it"
+        );
+    }
+    assert_eq!(
+        rules.resolve(Path::new("/work/other"), 0).layout,
+        None,
+        "a path that does not end in target is not covered"
+    );
+}
+
+#[test]
+fn asterisks_that_are_not_a_whole_component_stay_in_one_segment() {
+    // gitignore reads any run of asterisks that is not a whole `**` as a plain `*`.
+    assert!(crate::rules::path_match("/w/x**y", "/w/xay"));
+    assert!(
+        !crate::rules::path_match("/w/x**y", "/w/x/ay"),
+        "a plain `*` stops at a separator"
+    );
+    assert!(crate::rules::path_match("/w/a***", "/w/abc"));
+    assert!(
+        !crate::rules::path_match("/w/a***", "/w/a/b"),
+        "three asterisks are a plain `*`, not a `**`"
+    );
+}
+
+#[test]
+fn a_leading_double_star_matches_at_any_depth() {
+    assert!(crate::rules::path_match(
+        "**/node_modules/**",
+        "/node_modules/x"
+    ));
+    assert!(crate::rules::path_match(
+        "**/node_modules/**",
+        "/a/node_modules/x"
+    ));
+    assert!(!crate::rules::path_match(
+        "**/node_modules/**",
+        "/a/node_modules_old/x"
+    ));
+}
+
+#[test]
 fn matchers_or_together_and_keys_inside_one_and_together() {
     let rules = rules(
         "folder-rule \"either\" {\n\

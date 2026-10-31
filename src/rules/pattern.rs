@@ -6,10 +6,12 @@ pub fn quote(text: &str) -> String {
     kdl::KdlValue::String(text.to_owned()).to_string()
 }
 
-/// Whether `pattern` matches all of `text`. `*` stops at a separator, `**` crosses them, `?` is
-/// one character, and everything else is literal.
+/// Whether `pattern` matches all of `text`, with gitignore's reading of `**`: a run of two
+/// asterisks standing alone between separators crosses any number of segments, none included,
+/// and every other asterisk is a plain `*`, which stops at a separator. `?` is one character and
+/// everything else is literal.
 pub fn glob(pattern: &str, text: &str) -> bool {
-    glob_bytes(pattern.as_bytes(), text.as_bytes())
+    glob_bytes(pattern.as_bytes(), text.as_bytes(), true)
 }
 
 /// A byte that ends one part of a path, whichever platform wrote it: a rule from one machine has
@@ -18,23 +20,31 @@ fn is_separator(byte: u8) -> bool {
     byte == b'/' || byte == b'\\'
 }
 
-fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
+/// `at_boundary` is whether the pattern stands at the start of a segment, which is the only
+/// place a `**` crosses them. Consuming a separator enters the next segment, and that is what
+/// makes `a/**/b` read as "any number of segments, then `b`".
+fn glob_bytes(pattern: &[u8], text: &[u8], at_boundary: bool) -> bool {
     let Some(&first) = pattern.first() else {
         return text.is_empty();
     };
     match first {
-        b'*' if pattern.get(1) == Some(&b'*') => {
-            let mut rest = &pattern[2..];
-            while rest.first() == Some(&b'*') {
-                rest = &rest[1..];
-            }
-            if rest.is_empty() {
-                return true;
-            }
-            (0..=text.len()).any(|at| glob_bytes(rest, &text[at..]))
-        }
         b'*' => {
-            let rest = &pattern[1..];
+            let run = pattern.iter().take_while(|&&byte| byte == b'*').count();
+            let rest = &pattern[run..];
+            // A `**` that is a whole path component means any number of segments. A run of any
+            // other length, and one inside a name, is a plain `*`, as gitignore reads it.
+            let whole = at_boundary && run == 2 && rest.first().is_none_or(|&b| is_separator(b));
+            if whole {
+                // `**/` may cross no segments at all, so the separator after it is optional:
+                // `a/**/b` matches `a/b` as well as `a/x/y/b`.
+                if rest.first() == Some(&b'/') && glob_bytes(&rest[1..], text, true) {
+                    return true;
+                }
+                if rest.is_empty() {
+                    return true;
+                }
+                return (0..=text.len()).any(|at| glob_bytes(rest, &text[at..], false));
+            }
             if rest.is_empty() {
                 return !text.iter().any(|&byte| is_separator(byte));
             }
@@ -42,14 +52,23 @@ fn glob_bytes(pattern: &[u8], text: &[u8]) -> bool {
                 if text[..at].iter().any(|&byte| is_separator(byte)) {
                     break;
                 }
-                if glob_bytes(rest, &text[at..]) {
+                if glob_bytes(rest, &text[at..], false) {
                     return true;
                 }
             }
             false
         }
-        b'?' => !text.is_empty() && !is_separator(text[0]) && glob_bytes(&pattern[1..], &text[1..]),
-        literal => !text.is_empty() && text[0] == literal && glob_bytes(&pattern[1..], &text[1..]),
+        b'?' => {
+            !text.is_empty()
+                && !is_separator(text[0])
+                && glob_bytes(&pattern[1..], &text[1..], false)
+        }
+        separator if is_separator(separator) => {
+            text.first() == Some(&separator) && glob_bytes(&pattern[1..], &text[1..], true)
+        }
+        literal => {
+            !text.is_empty() && text[0] == literal && glob_bytes(&pattern[1..], &text[1..], false)
+        }
     }
 }
 
