@@ -53,11 +53,14 @@ unsupported by this backend.
 | Open a folder or file | Double-click, or Return |
 | Jump to a name | Type its first letters; repeat a letter to cycle matches |
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
+| Go to a folder by path | Cmd/Ctrl+L |
 | Search this folder | The search field, or / to focus it; Escape clears it |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
+| New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
+| Copy path | Shift+Cmd/Ctrl+C |
 | Command bar | Cmd/Ctrl+P |
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places |
@@ -84,13 +87,16 @@ settings {
     show-hidden #false
     inspector #true
     grid #false
+    folders-first #true
+    confirm-trash #true
     scroll-inertia #true
     overscroll #true
 }
 ```
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
-bar of the header's height, and is also the toolbar's layout button. `scroll-inertia` lets every
+bar of the header's height, and is also the toolbar's layout button. `folders-first` keeps folders
+above files in either layout, and `confirm-trash` asks before trashing. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 
@@ -159,8 +165,9 @@ keybinds {
 An empty chord clears the shortcut. Chords are `ctrl`, `alt`, `shift` and `super`, then a key
 name, written the way Rune's shortcuts read them, so the file can be edited by hand. The
 command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forward`,
-`enclosing-folder`,
-`refresh`, `new-folder`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`, `cut`, `paste`,
+`enclosing-folder`, `go-to-folder`,
+`refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
+`copy-path`, `cut`, `paste`,
 `duplicate`, `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in
 Settings > Keybinds is easier, and it refuses a chord another command already uses.
