@@ -117,3 +117,36 @@ fn a_second_read_of_the_same_problem_does_not_stack_a_toast() {
         "one toast per file, however often it is read"
     );
 }
+
+#[test]
+fn a_break_keeps_the_settings_the_file_last_gave() {
+    let dir = fixture();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    grid #true\n}\n").unwrap();
+    let (mut app, _config) = app_in_config_dir(&dir);
+    assert!(app.config.grid, "the file's grid setting is in force");
+
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    app.store.watch(wake);
+    fs::write(&path, "settings {\n    grid #true\n").unwrap();
+    let mut reported = false;
+    for _ in 0..100 {
+        if app.store.poll() {
+            reported = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(reported, "the watcher reported the change");
+    app.apply_config();
+
+    assert!(
+        app.config.grid,
+        "a break keeps the values the file last gave, not the defaults"
+    );
+    assert!(
+        app.store.error(config::CONFIG).is_some(),
+        "and the file is still reported as unreadable"
+    );
+    assert_eq!(app.notices.len(), 1, "the toast says which file it is");
+}
