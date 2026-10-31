@@ -213,6 +213,103 @@ fn dropping_a_folder_on_a_section_adds_it_as_a_place() {
 }
 
 #[test]
+fn dropping_between_places_inserts_there_with_a_preview() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let inbox = dir.path().join("inbox");
+    fs::create_dir(&inbox).unwrap();
+    let second = dir.path().join("second");
+    fs::create_dir(&second).unwrap();
+    let alpha = dir.path().join("alpha");
+    let alpha_id = format!("folder:{}", alpha.display());
+    let second_id = format!("folder:{}", second.display());
+    let file = state.path().join("places.kdl");
+    write_places(
+        &file,
+        &[
+            (alpha_id.clone(), alpha.display().to_string()),
+            (second_id.clone(), second.display().to_string()),
+        ],
+        "",
+    );
+
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let (alpha_row, _) = rt
+        .presented(&format!("place-{alpha_id}"))
+        .expect("the first place is on screen");
+    let (second_row, _) = rt
+        .presented(&format!("place-{second_id}"))
+        .expect("the second place is on screen");
+    // The two point gap between the rows, where an item dropped lands in the order.
+    let (x, y) = (alpha_row[0] + 40.0, alpha_row[1] + alpha_row[3] + 1.0);
+
+    let (x0, y0) = rt.find("f:inbox").expect("the folder row is on screen");
+    rt.pointer_down(x0, y0);
+    rt.frame(0.05);
+    rt.pointer_move(x, y);
+    rt.frame(0.05);
+    rt.frame(0.05);
+
+    assert_eq!(
+        rt.state.place_insert(),
+        Some((Section::Favourites, 1)),
+        "the pointer sits between the first and second place"
+    );
+    let (line, _) = rt
+        .presented("place-insert")
+        .expect("the insertion line marks where the rows would land");
+    assert!(
+        line[3] <= 2.5,
+        "the line takes up no room of its own: {line:?}"
+    );
+    assert!(
+        rt.find("drag-badge").is_some(),
+        "the item itself previews under the pointer"
+    );
+    let (still, _) = rt
+        .presented(&format!("place-{second_id}"))
+        .expect("the second place is still drawn");
+    assert!(
+        (still[1] - second_row[1]).abs() < 0.5,
+        "the rows stay where they are: {still:?} from {second_row:?}"
+    );
+
+    rt.pointer_up(x, y);
+    rt.frame(0.1);
+
+    let inbox_id = format!("folder:{}", inbox.display());
+    let shown: Vec<&str> = rt
+        .state
+        .places
+        .places(Section::Favourites)
+        .iter()
+        .map(|place| place.id.as_str())
+        .take(3)
+        .collect();
+    assert_eq!(
+        shown,
+        [alpha_id.as_str(), inbox_id.as_str(), second_id.as_str()],
+        "the drop inserted the folder between the two places"
+    );
+    let text = fs::read_to_string(&file).unwrap();
+    let inbox_at = text
+        .find(&crate::rules::quote(&inbox_id))
+        .expect("the file names the new place");
+    let second_at = text
+        .find(&crate::rules::quote(&second_id))
+        .expect("the second place is still in the file");
+    assert!(
+        inbox_at < second_at,
+        "the file holds the new place before the second: {text}"
+    );
+    assert!(inbox.is_dir(), "the drop did not move the folder");
+}
+
+#[test]
 fn a_file_place_opens_its_folder_with_the_file_selected() {
     let dir = fixture();
     let state = tempfile::tempdir().unwrap();

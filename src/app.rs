@@ -26,7 +26,7 @@ mod sheets;
 mod watch;
 
 pub use commands::{Palette, SettingsTab};
-pub use drag::{FileDrag, list_drag};
+pub use drag::{FileDrag, PlaceAt, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
@@ -69,6 +69,10 @@ pub const ROW_HEIGHT: f32 = 30.0;
 /// The space between two sidebar rows, from `SidebarSection`'s own gap. The place drag turns a
 /// pointer's travel into rows with it.
 pub const PLACE_ROW_GAP: f32 = 2.0;
+
+/// A sidebar row's height, from the kit. The insertion preview moves the rows under it by this
+/// plus the gap, exactly one row.
+pub const PLACE_ROW_HEIGHT: f32 = rune_kit::shell::ROW_HEIGHT;
 
 /// The browser.
 pub struct App {
@@ -166,8 +170,8 @@ pub struct App {
     /// The wheel's inertia, the overscroll past the ends, and the drag that pushes the list.
     scroll: Scroll,
     /// The sidebar places' rects in window points and their folders, from the last layout,
-    /// keyed by place id, for a dragged row to be dropped on one.
-    pub places_at: BTreeMap<String, ([f32; 4], PathBuf)>,
+    /// keyed by place id, for a dragged row to be dropped on one or between two.
+    pub places_at: BTreeMap<String, PlaceAt>,
     /// Each sidebar section's rect in window points, from the last layout. A row dropped
     /// there — its heading, or the space between its rows — is added to it as a place.
     pub sections_at: BTreeMap<Section, [f32; 4]>,

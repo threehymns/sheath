@@ -60,7 +60,7 @@ unsupported by this backend.
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Command bar | Cmd/Ctrl+P |
 | Reorder places | Drag a place in the sidebar |
-| Add to the sidebar | Drag a folder or file from the list onto a section |
+| Add to the sidebar | Drag a folder or file from the list between sidebar places |
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 
@@ -197,8 +197,10 @@ A place is its `id`, never its position: `home`, `desktop`, `documents`, `downlo
 `pictures`, `root` and `temp` follow the machine (`path` overrides where one opens),
 `folder:<path>` is a folder of your own, and `file:<path>` is one of your files, which opens
 its folder with the file selected. `name` overrides the label; a missing one is the folder's or
-file's own name. Dragging a folder or file from the list onto a section's heading adds it
-there without moving anything. `volume:<id>` is left for drives a later release detects, and a
+file's own name. Dragging a folder or file from the list onto a place moves it inside that
+folder; dropping it between places inserts it there in the section, without moving anything
+and with a preview of the landing spot. `volume:<id>` is left for drives a later release
+detects, and a
 place whose folder is not there — an unmounted drive, a deleted folder — keeps its row in the
 file and comes back with the folder. Built-in places the file leaves out are added at the end of their
 section, and top-level nodes the app does not know are written back untouched. Like

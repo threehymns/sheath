@@ -68,18 +68,32 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
                 ),
         );
     }
-    // What a dragged selection is and where it is, following the pointer.
-    if let Some((label, (x, y))) = s.drag_badge() {
+    // Where a dragged row would land among the sidebar's places: the gap the section opened,
+    // marked by a line, and the item itself following the pointer.
+    if let Some(line) = s.place_insert_line() {
+        layers.push(
+            el().key("place-insert")
+                .absolute(line[0], line[1])
+                .w(line[2])
+                .h(line[3])
+                .radius(1.0)
+                .fill(k.c.text_accent),
+        );
+    }
+    if let Some(preview) = s.drag_preview() {
         layers.push(
             el().key("drag-badge")
-                .absolute(x + 14.0, y + 14.0)
+                .absolute(preview.at.0 + 14.0, preview.at.1 + 14.0)
                 .radius(6.0)
                 .px(10.0)
                 .py(6.0)
+                .gap(6.0)
+                .center_y()
                 .fill(k.c.layer_02)
                 .border(1.0, k.c.border_muted)
+                .child(icon(preview.icon, 14.0).color(k.c.icon_muted))
                 .child(
-                    text(label)
+                    text(preview.label)
                         .font(k.ty.caption())
                         .color(k.c.text_base)
                         .max_lines(1),

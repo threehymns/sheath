@@ -214,9 +214,15 @@ fn a_drag_onto_a_sidebar_place_moves_the_selection_there() {
     fs::create_dir(&destination).unwrap();
     // A place stands in for the sidebar rows, below them where nothing else is drawn.
     let rect = [20.0, 620.0, 180.0, 40.0];
-    rt.state
-        .places_at
-        .insert("test-place".to_owned(), (rect, destination.clone()));
+    rt.state.places_at.insert(
+        "test-place".to_owned(),
+        crate::app::PlaceAt {
+            rect,
+            path: destination.clone(),
+            section: crate::places::Section::Favourites,
+            index: 0,
+        },
+    );
 
     click(&mut rt, "f:file2.txt");
     let (x0, y0) = rt.find("f:file2.txt").expect("the row is on screen");

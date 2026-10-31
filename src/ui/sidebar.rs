@@ -1,7 +1,7 @@
 //! The sidebar: the places the app can jump to, dragged into the order the user wants, and
 //! the drop targets a dragged row can land on.
 
-use crate::app::App;
+use crate::app::{App, PlaceAt};
 use crate::places::{Place, Section};
 use rune::El;
 use rune_kit::shell::Reorder;
@@ -26,6 +26,8 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
         .filter(|place| place.is_available())
         .collect();
     let count = shown.len();
+    // A file drag between the rows is marked by a line drawn over them: the rows keep their
+    // places, so aiming at an insertion shifts nothing.
     let mut rows = SidebarSection::new(section.title());
     for (index, place) in shown.into_iter().enumerate() {
         rows = rows.row(place_row(s, k, section, index, count, place));
@@ -80,7 +82,15 @@ fn place_row(
         .build(k)
         .key(format!("place-{id}"))
         .on_layout(move |s: &mut App, rect| {
-            s.places_at.insert(id.clone(), (rect, target.clone()));
+            s.places_at.insert(
+                id.clone(),
+                PlaceAt {
+                    rect,
+                    path: target.clone(),
+                    section,
+                    index,
+                },
+            );
         })
 }
 

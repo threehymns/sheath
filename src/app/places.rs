@@ -16,15 +16,16 @@ impl App {
         }
     }
 
-    /// Adds the rows `ids` to `section` as places, the way a drop on its heading does. Nothing
-    /// moves on disk, and a path that is already a place anywhere is left alone.
-    pub fn add_places(&mut self, section: Section, ids: &[String]) {
+    /// Inserts the rows `ids` at `index` in `section` as places, the way a drop between two
+    /// places does. Nothing moves on disk, and a path that is already a place anywhere is left
+    /// alone.
+    pub fn add_places(&mut self, section: Section, index: usize, ids: &[String]) {
         let paths: Vec<PathBuf> = ids
             .iter()
             .filter_map(|id| self.entries.iter().find(|entry| &entry.id == id))
             .map(|entry| entry.path.clone())
             .collect();
-        if self.places.add(section, &paths) {
+        if self.places.insert(section, index, &paths) {
             self.places.save();
         }
     }

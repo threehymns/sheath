@@ -288,26 +288,44 @@ impl Places {
         section.list(self)
     }
 
-    /// Adds `paths` to the end of `section` as places, the way a drop from the list does.
-    /// Nothing moves on disk, and a path that is already a place in either section is left
-    /// alone. True when something was added.
-    pub fn add(&mut self, section: Section, paths: &[PathBuf]) -> bool {
-        let mut added = false;
+    /// Inserts `paths` at `index` among the section's rows on screen, the way a drop between
+    /// two places does. Nothing moves on disk, and a path that is already a place in either
+    /// section is left alone. True when something was inserted.
+    pub fn insert(&mut self, section: Section, index: usize, paths: &[PathBuf]) -> bool {
+        let mut fresh = Vec::new();
         for path in paths {
-            if !path.exists() || self.holds(path) {
+            if !path.exists()
+                || self.holds(path)
+                || fresh.iter().any(|place: &Place| place.path == *path)
+            {
                 continue;
             }
             let id = place_id(path);
-            let place = Place {
+            fresh.push(Place {
                 name: label_for(path),
                 icon: icon_for(&id),
                 id,
                 path: path.clone(),
-            };
-            section.list_mut(self).push(place);
-            added = true;
+            });
         }
-        added
+        if fresh.is_empty() {
+            return false;
+        }
+        // `index` counts the rows on screen: land before the row there, or after the last one.
+        let at = {
+            let list = section.list(self);
+            list.iter()
+                .enumerate()
+                .filter(|(_, place)| place.is_available())
+                .map(|(at, _)| at)
+                .nth(index)
+                .unwrap_or(list.len())
+        };
+        let list = section.list_mut(self);
+        for (offset, place) in fresh.into_iter().enumerate() {
+            list.insert(at + offset, place);
+        }
+        true
     }
 
     /// Whether `path` is already a place, in either section.

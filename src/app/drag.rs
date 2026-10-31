@@ -2,10 +2,15 @@
 //! scrolling a drag held at an edge causes. The selection box is `marquee`.
 
 use super::marquee::Marquee;
-use crate::app::App;
+use crate::app::{App, PLACE_ROW_GAP, PLACE_ROW_HEIGHT};
 use crate::places::Section;
-use rune::{Drag, Mods, Phase, Tx};
+use rune::{Drag, Icon, Mods, Phase, Tx};
+use rune_kit::glyphs;
 use std::path::{Path, PathBuf};
+
+/// How much of a place row's top and bottom is a gap rather than its body: the body takes the
+/// drop as a move into the folder, and the edges let it land between places.
+const PLACE_INSIDE_BAND: f32 = 6.0;
 
 /// How far the pointer travels before a press in the list becomes a selection box.
 const DRAG_START: f32 = 3.0;
@@ -36,9 +41,26 @@ pub struct FileDrag {
     /// The sidebar place under the pointer, if it can take the drop.
     pub place: Option<PathBuf>,
     pub place_id: Option<String>,
-    /// The sidebar section under the pointer, when the drop adds the rows to it rather than
-    /// moving them: its heading, or the space around its rows.
-    pub section: Option<Section>,
+    /// Where the rows would be inserted among the places rather than moved: the section and
+    /// the index there. Set between rows, on a row's edge, or on a section's heading.
+    pub insert: Option<(Section, usize)>,
+}
+
+/// A sidebar row as the last layout placed it: the folder a drop moves into, and the place it
+/// holds in its section, for a drag to aim between the rows.
+#[derive(Clone)]
+pub struct PlaceAt {
+    pub rect: [f32; 4],
+    pub path: PathBuf,
+    pub section: Section,
+    pub index: usize,
+}
+
+/// What a drag shows following the pointer: the item it carries, and where it would put it.
+pub struct DragPreview {
+    pub label: String,
+    pub icon: &'static Icon,
+    pub at: (f32, f32),
 }
 
 /// The list's pointer gesture: a press selects as a click does, a drag draws a selection box,
@@ -135,7 +157,7 @@ impl App {
             row: None,
             place: None,
             place_id: None,
-            section: None,
+            insert: None,
         });
         if !pending {
             self.click_row(index, mods, tx);
@@ -183,9 +205,9 @@ impl App {
             if drag.dragging {
                 // A section takes the rows as new places; a place row or a folder row takes
                 // them as files to move.
-                if let Some(section) = drag.section {
+                if let Some((section, index)) = drag.insert {
                     let ids = self.selected_ids();
-                    self.add_places(section, &ids);
+                    self.add_places(section, index, &ids);
                 } else if let Some(destination) = self.drop_target(&drag) {
                     self.move_selection_into(&destination);
                 }
@@ -227,28 +249,35 @@ impl App {
         drag.row = None;
         drag.place = None;
         drag.place_id = None;
-        drag.section = None;
+        drag.insert = None;
         let (x, y) = drag.pointer;
-        // The sidebar sits left of the list, and takes the drop before the rows do.
-        for (id, (rect, path)) in &self.places_at {
-            if !inside(*rect, x, y) {
-                continue;
-            }
-            // A place row is a folder to move into, never the section's "add a place": the
-            // press is over the row, not the space around it. The open folder takes nothing.
-            if *path != self.cwd {
-                drag.place = Some(path.clone());
-                drag.place_id = Some(id.clone());
+        // The sidebar sits left of the list, and takes the drop before the rows do. A place
+        // row's body moves the rows inside its folder; its edges are the gaps around it.
+        if let Some((id, at)) = self.place_at(x, y) {
+            let edge = PLACE_INSIDE_BAND;
+            if (edge..=at.rect[3] - edge).contains(&(y - at.rect[1])) {
+                // The open folder takes nothing: the rows are already inside it.
+                if at.path != self.cwd {
+                    drag.place = Some(at.path.clone());
+                    drag.place_id = Some(id.clone());
+                }
+            } else {
+                let index = if y - at.rect[1] < at.rect[3] * 0.5 {
+                    at.index
+                } else {
+                    at.index + 1
+                };
+                drag.insert = Some((at.section, index));
             }
             return;
         }
-        // Between the rows, or on a section's heading: add the rows to that section. The
-        // sections are part of the sidebar, so a rect left over from before it was collapsed
-        // must not catch a drop in the list.
+        // Between the rows, or on a section's heading: insert the rows there. The sections
+        // are part of the sidebar, so a rect left over from before it was collapsed must not
+        // catch a drop in the list.
         if x < self.rows_view[0] {
             for (section, rect) in &self.sections_at {
                 if inside(*rect, x, y) {
-                    drag.section = Some(*section);
+                    drag.insert = Some((*section, self.insert_at(*section, y)));
                     return;
                 }
             }
@@ -338,20 +367,81 @@ impl App {
             .and_then(|drag| drag.place_id.as_deref())
     }
 
-    /// The rows being dragged, once the pointer has moved far enough, and where the pointer
-    /// is: what the view shows following the pointer.
-    pub fn drag_badge(&self) -> Option<(String, (f32, f32))> {
+    /// The place row under a window point, if one is there.
+    fn place_at(&self, x: f32, y: f32) -> Option<(&String, &PlaceAt)> {
+        self.places_at.iter().find(|(_, at)| inside(at.rect, x, y))
+    }
+
+    /// A section's place rows, in the order they are shown.
+    fn place_rows(&self, section: Section) -> Vec<&PlaceAt> {
+        let mut rows: Vec<&PlaceAt> = self
+            .places_at
+            .values()
+            .filter(|at| at.section == section)
+            .collect();
+        rows.sort_by_key(|at| at.index);
+        rows
+    }
+
+    /// The index a pointer at `y` inserts at: before the first row whose middle is below it.
+    fn insert_at(&self, section: Section, y: f32) -> usize {
+        self.place_rows(section)
+            .iter()
+            .filter(|at| at.rect[1] + at.rect[3] * 0.5 < y)
+            .count()
+    }
+
+    /// The place insertion a file drag is aiming at: the section, and the index the rows would
+    /// land at. The rows from there on step aside to open the gap.
+    pub fn place_insert(&self) -> Option<(Section, usize)> {
+        self.file_drag.as_ref().filter(|drag| drag.dragging)?.insert
+    }
+
+    /// The insertion line's rect in window points, while a file drag would insert places here:
+    /// the top of the row that stepped aside, or just past the section's last row.
+    pub fn place_insert_line(&self) -> Option<[f32; 4]> {
+        let (section, index) = self.place_insert()?;
+        let rows = self.place_rows(section);
+        let (rect, y) = match rows.get(index) {
+            Some(at) => (at.rect, at.rect[1]),
+            None => match rows.last() {
+                Some(at) => (at.rect, at.rect[1] + at.rect[3] + PLACE_ROW_GAP),
+                None => {
+                    let rect = *self.sections_at.get(&section)?;
+                    (rect, rect[1] + PLACE_ROW_HEIGHT + PLACE_ROW_GAP)
+                }
+            },
+        };
+        Some([rect[0], y - 1.0, rect[2], 2.0])
+    }
+
+    /// The rows being dragged and where the pointer is, once the pointer has moved far enough:
+    /// what the view shows following it. A drop between places previews the item itself; one
+    /// on a folder says it is moving there.
+    pub fn drag_preview(&self) -> Option<DragPreview> {
         let drag = self.file_drag.as_ref().filter(|drag| drag.dragging)?;
         let count = self.selection.len();
-        let label = match drag.section {
-            Some(section) if count == 1 => format!("Add to {}", section.title()),
-            Some(section) => format!("Add {count} to {}", section.title()),
-            None => {
-                let noun = if count == 1 { "item" } else { "items" };
-                format!("Move {count} {noun}")
-            }
+        let first = self
+            .selected_ids()
+            .into_iter()
+            .next()
+            .and_then(|id| self.entries.iter().find(|entry| entry.id == id));
+        let icon = match first {
+            Some(entry) if entry.is_dir => &glyphs::FOLDER,
+            _ => &glyphs::FILE,
         };
-        Some((label, drag.pointer))
+        let name = first.map(|entry| entry.name.clone()).unwrap_or_default();
+        let label = match drag.insert {
+            Some((section, _)) if count <= 1 => format!("Add “{name}” to {}", section.title()),
+            Some((section, _)) => format!("Add {count} items to {}", section.title()),
+            None if count == 1 => format!("Move “{name}”"),
+            None => format!("Move {count} items"),
+        };
+        Some(DragPreview {
+            label,
+            icon,
+            at: drag.pointer,
+        })
     }
 
     /// Moves the selection into `destination`, the way a drop does. A refusal keeps everything
