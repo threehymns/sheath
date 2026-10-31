@@ -83,6 +83,15 @@ pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: u
                 .and_then(|rest| rest.parent())
                 .filter(|parent| !parent.as_os_str().is_empty())
                 .map(|parent| parent.to_string_lossy().into_owned());
+            // A name is only unique within its own folder, so a match from below carries the
+            // folder it was found in. Without it two `notes.txt` rows would share one id, and
+            // every action that resolves a row by id would take the first of them. Slashes
+            // become colons, which keeps the id clear of the `/`-separated key paths Rune uses.
+            if let Some(relative) = entry.relative.clone() {
+                let folder = relative.replace(['/', '\\'], ":");
+                entry.id = format!("f:{folder}:{}", entry.name);
+                entry.name_key = format!("name-{}", entry.id);
+            }
             entries.push(entry);
             if entries.len() >= limit {
                 truncated = true;

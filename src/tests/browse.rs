@@ -380,3 +380,37 @@ fn an_empty_folder_offers_the_button_that_fills_it() {
     click(&mut rt, "empty-new-folder");
     assert!(empty.path().join("New Folder").is_dir());
 }
+
+#[test]
+fn a_name_in_two_subfolders_keeps_the_rows_apart() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("one")).unwrap();
+    fs::create_dir_all(dir.path().join("two")).unwrap();
+    fs::write(dir.path().join("one").join("dup.txt"), "one").unwrap();
+    fs::write(dir.path().join("two").join("dup.txt"), "two").unwrap();
+    let mut app = app(&dir);
+
+    app.search = rune::TextEdit::new("dup");
+    app.toggle_search_all();
+    assert_eq!(names(&app).len(), 2, "both matches are listed");
+    let ids: Vec<&str> = app
+        .visible
+        .iter()
+        .map(|&i| app.entries[i].id.as_str())
+        .collect();
+    assert_ne!(
+        ids[0], ids[1],
+        "the same name in two folders gets two ids: {ids:?}"
+    );
+
+    // The second match must resolve to itself, not to the first row of that name.
+    let second = app.visible[1];
+    let id = app.entries[second].id.clone();
+    let path = app.entries[second].path.clone();
+    app.select_id(&id);
+    let selected = app.selected_entry().expect("the match is chosen");
+    assert_eq!(
+        selected.path, path,
+        "the id names the row it was clicked on"
+    );
+}
