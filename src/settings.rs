@@ -10,18 +10,24 @@ pub enum Setting {
     FoldersFirst,
     ConfirmTrash,
     ConfirmDelete,
+    ShowKind,
+    ShowSize,
+    ShowModified,
     ScrollInertia,
     Overscroll,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 8] = [
+    pub const ALL: [Setting; 11] = [
         Setting::ShowHidden,
         Setting::Inspector,
         Setting::GridLayout,
         Setting::FoldersFirst,
         Setting::ConfirmTrash,
         Setting::ConfirmDelete,
+        Setting::ShowKind,
+        Setting::ShowSize,
+        Setting::ShowModified,
         Setting::ScrollInertia,
         Setting::Overscroll,
     ];
@@ -34,6 +40,9 @@ impl Setting {
             Setting::FoldersFirst => "folders-first",
             Setting::ConfirmTrash => "confirm-trash",
             Setting::ConfirmDelete => "confirm-delete",
+            Setting::ShowKind => "show-kind",
+            Setting::ShowSize => "show-size",
+            Setting::ShowModified => "show-modified",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -47,6 +56,9 @@ impl Setting {
             Setting::FoldersFirst => "folders-first",
             Setting::ConfirmTrash => "confirm-trash",
             Setting::ConfirmDelete => "confirm-delete",
+            Setting::ShowKind => "kind-column",
+            Setting::ShowSize => "size-column",
+            Setting::ShowModified => "modified-column",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
         }
@@ -59,6 +71,9 @@ impl Setting {
             | Setting::FoldersFirst
             | Setting::ConfirmTrash
             | Setting::ConfirmDelete
+            | Setting::ShowKind
+            | Setting::ShowSize
+            | Setting::ShowModified
             | Setting::ScrollInertia
             | Setting::Overscroll => true,
         }
@@ -72,8 +87,11 @@ impl Setting {
             Setting::FoldersFirst => 3,
             Setting::ConfirmTrash => 4,
             Setting::ConfirmDelete => 5,
-            Setting::ScrollInertia => 6,
-            Setting::Overscroll => 7,
+            Setting::ShowKind => 6,
+            Setting::ShowSize => 7,
+            Setting::ShowModified => 8,
+            Setting::ScrollInertia => 9,
+            Setting::Overscroll => 10,
         }
     }
 
@@ -91,6 +109,9 @@ impl Setting {
             Setting::FoldersFirst => settings.folders_first,
             Setting::ConfirmTrash => settings.confirm_trash,
             Setting::ConfirmDelete => settings.confirm_delete,
+            Setting::ShowKind => settings.show_kind,
+            Setting::ShowSize => settings.show_size,
+            Setting::ShowModified => settings.show_modified,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
         }
@@ -104,6 +125,9 @@ impl Setting {
             Setting::FoldersFirst => settings.folders_first = on,
             Setting::ConfirmTrash => settings.confirm_trash = on,
             Setting::ConfirmDelete => settings.confirm_delete = on,
+            Setting::ShowKind => settings.show_kind = on,
+            Setting::ShowSize => settings.show_size = on,
+            Setting::ShowModified => settings.show_modified = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
         }
@@ -118,9 +142,12 @@ pub struct Settings {
     pub folders_first: bool,
     pub confirm_trash: bool,
     pub confirm_delete: bool,
+    pub show_kind: bool,
+    pub show_size: bool,
+    pub show_modified: bool,
     pub scroll_inertia: bool,
     pub overscroll: bool,
-    present: [bool; 8],
+    present: [bool; 11],
 }
 
 impl Default for Settings {
@@ -132,9 +159,12 @@ impl Default for Settings {
             folders_first: true,
             confirm_trash: true,
             confirm_delete: true,
+            show_kind: true,
+            show_size: true,
+            show_modified: true,
             scroll_inertia: true,
             overscroll: true,
-            present: [false; 8],
+            present: [false; 11],
         }
     }
 }

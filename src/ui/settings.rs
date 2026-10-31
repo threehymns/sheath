@@ -320,6 +320,52 @@ fn general_settings(s: &App, k: &Kit) -> El {
             ),
         ],
     );
+    let kind_column = Switch::new(s.config.show_kind)
+        .label("Show the Kind column")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_show_kind())
+        .build(k)
+        .key("setting-kind-column");
+    let size_column = Switch::new(s.config.show_size)
+        .label("Show the Size column")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_show_size())
+        .build(k)
+        .key("setting-size-column");
+    let modified_column = Switch::new(s.config.show_modified)
+        .label("Show the Date Modified column")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_show_modified())
+        .build(k)
+        .key("setting-modified-column");
+    let columns = settings_section(
+        k,
+        "settings-columns",
+        "Columns",
+        vec![
+            settings_row(
+                k,
+                &icons::LIST,
+                "Kind column",
+                Some("Show what each row is beside its name."),
+                setting_control(s, k, Setting::ShowKind, kind_column),
+            ),
+            settings_row(
+                k,
+                &icons::INSPECTOR,
+                "Size column",
+                Some("Show each file's size in the list."),
+                setting_control(s, k, Setting::ShowSize, size_column),
+            ),
+            settings_row(
+                k,
+                &icons::REFRESH,
+                "Date Modified column",
+                Some("Show when each row last changed."),
+                setting_control(s, k, Setting::ShowModified, modified_column),
+            ),
+        ],
+    );
     let files = settings_section(
         k,
         "settings-files",
@@ -347,6 +393,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .gap(24.0)
         .child(browser)
         .child(behavior)
+        .child(columns)
         .child(scrolling)
         .child(files);
     if let Some(error) = s.store.error(config::CONFIG) {

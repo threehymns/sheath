@@ -321,6 +321,21 @@ impl App {
         self.remember(Setting::ConfirmTrash, self.config.confirm_trash);
     }
 
+    pub fn toggle_show_kind(&mut self) {
+        self.config.show_kind = !self.config.show_kind;
+        self.remember(Setting::ShowKind, self.config.show_kind);
+    }
+
+    pub fn toggle_show_size(&mut self) {
+        self.config.show_size = !self.config.show_size;
+        self.remember(Setting::ShowSize, self.config.show_size);
+    }
+
+    pub fn toggle_show_modified(&mut self) {
+        self.config.show_modified = !self.config.show_modified;
+        self.remember(Setting::ShowModified, self.config.show_modified);
+    }
+
     pub fn toggle_confirm_delete(&mut self) {
         self.config.confirm_delete = !self.config.confirm_delete;
         self.remember(Setting::ConfirmDelete, self.config.confirm_delete);

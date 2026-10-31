@@ -62,8 +62,9 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
 fn grid_toolbar(s: &App, k: &'static Kit) -> El {
     let style = browser_style(k);
     let (column, direction) = s.sort_column();
-    let sort = |id, title| grid_sort(k, &style, id, title, column, direction);
-    row()
+    let sort =
+        |id: &'static str, title: &'static str| grid_sort(k, &style, id, title, column, direction);
+    let mut bar = row()
         .key("grid-toolbar")
         .role("row")
         .label("Sort")
@@ -78,10 +79,18 @@ fn grid_toolbar(s: &App, k: &'static Kit) -> El {
                 .h(1.0)
                 .fill(style.rule),
         )
-        .child(sort("name", "Name"))
-        .child(sort("kind", "Kind"))
-        .child(sort("size", "Size"))
-        .child(sort("modified", "Date Modified"))
+        .child(sort("name", "Name"));
+    // A hidden column's sort button would sort by something the rows do not show.
+    for (shown, id, title) in [
+        (s.config.show_kind, "kind", "Kind"),
+        (s.config.show_size, "size", "Size"),
+        (s.config.show_modified, "modified", "Date Modified"),
+    ] {
+        if shown {
+            bar = bar.child(sort(id, title));
+        }
+    }
+    bar
 }
 
 fn grid_sort(

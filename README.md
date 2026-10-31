@@ -98,6 +98,9 @@ settings {
     folders-first #true
     confirm-trash #true
     confirm-delete #true
+    show-kind #true
+    show-size #true
+    show-modified #true
     scroll-inertia #true
     overscroll #true
 }
@@ -106,7 +109,8 @@ settings {
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
 bar of the header's height, and is also the toolbar's layout button. `folders-first` keeps folders
 above files in either layout, `confirm-trash` asks before trashing, and `confirm-delete` asks
-before deleting something for good. `scroll-inertia` lets every
+before deleting something for good. `show-kind`, `show-size` and `show-modified` keep or drop
+those columns in the list and their sort buttons above the tiles. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 

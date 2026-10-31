@@ -498,3 +498,24 @@ fn the_behavior_switches_save_their_settings() {
     assert!(!saved.folders_first);
     assert!(!saved.confirm_trash);
 }
+
+#[test]
+fn the_column_switches_take_a_column_out_of_the_list() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    scroll_settings_into_view(&mut rt, "setting-size-column");
+    click(&mut rt, "setting-size-column");
+    assert!(!rt.state.config.show_size, "the switch drops the column");
+    click(&mut rt, "close-settings");
+    rt.frame(0.1);
+
+    assert!(rt.find("size").is_none(), "the Size column left the list");
+    assert!(rt.find("kind").is_some(), "the other columns stayed");
+
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("show-size #false"), "{config}");
+}

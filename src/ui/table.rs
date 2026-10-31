@@ -60,7 +60,7 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
 
 fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
     let (column, direction) = s.sort_column();
-    row()
+    let mut header = row()
         .key("header")
         .role("row")
         .w_full()
@@ -81,8 +81,9 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
             Align::Start,
             column,
             direction,
-        ))
-        .child(header_cell(
+        ));
+    if s.config.show_kind {
+        header = header.child(header_cell(
             k,
             style,
             "kind",
@@ -91,8 +92,10 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
             Align::Start,
             column,
             direction,
-        ))
-        .child(header_cell(
+        ));
+    }
+    if s.config.show_size {
+        header = header.child(header_cell(
             k,
             style,
             "size",
@@ -101,8 +104,10 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
             Align::End,
             column,
             direction,
-        ))
-        .child(header_cell(
+        ));
+    }
+    if s.config.show_modified {
+        header = header.child(header_cell(
             k,
             style,
             "modified",
@@ -111,7 +116,9 @@ fn file_header(s: &App, k: &Kit, style: &TableStyle) -> El {
             Align::Start,
             column,
             direction,
-        ))
+        ));
+    }
+    header
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -255,10 +262,17 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle, now: DateTime
     } else {
         line.hover(style.stripe.mix(style.selected, 0.5))
     };
-    line.child(name_cell(s, i, k, style))
-        .child(kind_cell(s, i, style, s.kind_width))
-        .child(size_cell(s, i, style, s.size_width))
-        .child(modified_cell(s, i, style, s.date_width, now))
+    line = line.child(name_cell(s, i, k, style));
+    if s.config.show_kind {
+        line = line.child(kind_cell(s, i, style, s.kind_width));
+    }
+    if s.config.show_size {
+        line = line.child(size_cell(s, i, style, s.size_width));
+    }
+    if s.config.show_modified {
+        line = line.child(modified_cell(s, i, style, s.date_width, now));
+    }
+    line
 }
 
 fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
