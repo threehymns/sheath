@@ -116,11 +116,11 @@ fn schema(name: &str) -> &'static str {
              `folder-rule \"name\" { match path=\"~/x/**\" layout grid sort name direction descending }`,\n\
              and `entry-rule \"name\" { match path=\"~/x/y\" hidden #true }`.\n\
              A rule takes `match` and `exclude` directives plus the properties its kind allows,\n\
-             and every property also takes `inherit`. See README > Configuration."
+             and every property also takes `inherit`. README: https://raw.githubusercontent.com/threehymns/sheath/main/README.md (section: Configuration)."
         }
         KEYBINDS => {
             "one `keybinds { <command> \"<chord>\" }` node. A chord is ctrl, alt, shift or super\n\
-             then a key name, and an empty chord clears the shortcut. See README > Configuration."
+             then a key name, and an empty chord clears the shortcut. README: https://raw.githubusercontent.com/threehymns/sheath/main/README.md (section: Configuration)."
         }
         _ => "",
     }

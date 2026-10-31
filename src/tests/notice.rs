@@ -150,3 +150,26 @@ fn a_break_keeps_the_settings_the_file_last_gave() {
     );
     assert_eq!(app.notices.len(), 1, "the toast says which file it is");
 }
+
+#[test]
+fn the_report_points_at_a_url_the_reader_can_fetch() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    grid #true\n}\n}\n",
+    )
+    .unwrap();
+    let store = config::Store::at(dir.path().to_path_buf());
+    let report = &store
+        .problem(config::CONFIG)
+        .expect("the file does not parse")
+        .report;
+    assert!(
+        report.contains("https://raw.githubusercontent.com/"),
+        "the schema pointer has to be something the reader can open: {report}"
+    );
+    assert!(
+        report.contains("section: Configuration"),
+        "and say where inside it to look: {report}"
+    );
+}
