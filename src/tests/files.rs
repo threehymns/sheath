@@ -319,6 +319,7 @@ fn a_picture_previews_responsively_in_the_inspector() {
         let _ = wake_tx.send(());
     })));
     app.select_id("f:drawing.svg");
+    app.settle_preview();
     app.preview_image.as_ref().unwrap().wait().unwrap();
 
     let mut rt = runtime(app);
@@ -355,11 +356,8 @@ fn a_picture_previews_responsively_in_the_inspector() {
 #[test]
 fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     let dir = fixture();
-    fs::write(
-        dir.path().join("broken.png"),
-        [0x89, b'P', b'N', b'G', 0x00, 0x00],
-    )
-    .unwrap();
+    // A valid PNG signature with no chunks behind it: sniffed as PNG, then fails to decode.
+    fs::write(dir.path().join("broken.png"), b"\x89PNG\r\n\x1a\n").unwrap();
     let mut app = app(&dir);
     let (wake_tx, _) = std::sync::mpsc::channel();
     app.images = Some(rune::ImageCache::new(std::sync::Arc::new(move || {
@@ -371,7 +369,11 @@ fn a_picture_shows_a_decoding_state_and_handles_decoding_errors() {
     rt.frame(0.0);
 
     // After worker processes the broken image, an error message is shown:
-    let _ = rt.state.preview_image.as_ref().unwrap().wait();
+    rt.state.settle_preview();
+    assert!(
+        rt.state.preview_error.is_some(),
+        "a broken picture reports why it could not decode"
+    );
     rt.frame(1.0);
     let error_text = rt.elements().into_iter().find(|e| {
         e.text

@@ -4,11 +4,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-// Room the inspector gives a picture before it is scaled down to fit.
-const PREVIEW_IMAGE_SIZE: f32 = 420.0;
-
 use super::entry::read_preview;
 use super::paths::open_external;
+use super::preview::{Decoded, Finished, PREVIEW_POINTS, PREVIEW_SCALE};
 
 use super::*;
 
@@ -26,6 +24,8 @@ impl App {
         self.selected = None;
         self.preview = None;
         self.preview_image = None;
+        self.preview_error = None;
+        self.previews.cancel();
         self.folder_size = None;
     }
 
@@ -47,17 +47,72 @@ impl App {
             .entries
             .iter()
             .find(|e| e.id == id)
-            .map(|e| (e.path.clone(), e.is_dir));
+            .map(|e| (e.path.clone(), e.modified, e.is_dir));
         self.preview = match &found {
-            Some((path, is_dir)) => read_preview(path, *is_dir),
+            Some((path, _, is_dir)) => read_preview(path, *is_dir),
             None => None,
         };
-        self.preview_image = match (&self.preview, &self.images, &found) {
-            (Some(Preview::Image), Some(cache), Some((path, _))) => {
-                Some(cache.file(path, PREVIEW_IMAGE_SIZE, 2.0))
+        self.preview_error = None;
+        self.preview_image = match (&self.preview, &found) {
+            (Some(Preview::Image), Some((path, modified, _))) => {
+                self.previews.request(path, *modified)
             }
-            _ => None,
+            _ => {
+                self.previews.cancel();
+                None
+            }
         };
+    }
+
+    // A finished decode, if it is still the picture on screen. Rune turns the RGBA into the
+    // same miped handle it would have produced itself, now from an image the size of the pane.
+    pub(super) fn land_preview(&mut self) -> bool {
+        let Some(finished) = self.previews.take() else {
+            return false;
+        };
+        if self
+            .selected_entry()
+            .is_none_or(|entry| entry.path != finished.key.path)
+        {
+            return false;
+        }
+        let Finished { key, decoded } = finished;
+        match decoded {
+            Decoded::Failed(error) => {
+                self.preview_image = None;
+                self.preview_error = Some(error);
+            }
+            Decoded::Rgba {
+                width,
+                height,
+                pixels,
+            } => {
+                self.preview_error = None;
+                if let Some(cache) = &self.images {
+                    let image = cache.rgba(width, height, pixels);
+                    self.preview_image = Some(image.clone());
+                    self.previews.remember(key, image);
+                }
+            }
+            Decoded::ViaRune(path) => {
+                self.preview_error = None;
+                if let Some(cache) = &self.images {
+                    let image = cache.file(path, PREVIEW_POINTS, PREVIEW_SCALE);
+                    self.preview_image = Some(image.clone());
+                    self.previews.remember(key, image);
+                }
+            }
+        }
+        true
+    }
+
+    /// Wait for the worker, then take its answer. Tests only: a window lands previews in `poll`.
+    #[cfg(test)]
+    pub(crate) fn settle_preview(&mut self) {
+        while self.previews.is_pending() {
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        self.land_preview();
     }
 
     pub fn selected_entry(&self) -> Option<&Entry> {

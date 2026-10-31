@@ -10,6 +10,8 @@ hot = ["rune/hot"]
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+jpeg-decoder = { version = "0.3", default-features = false }
 kdl = { version = "6.7.1", default-features = false }
 notify = "8"
 # Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends.
@@ -19,5 +21,4 @@ rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "1b7871
 trash = "5.2.9"
 
 [dev-dependencies]
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 tempfile = "3"

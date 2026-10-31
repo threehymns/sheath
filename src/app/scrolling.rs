@@ -168,6 +168,7 @@ impl App {
         #[cfg(test)]
         self.settle_scan();
         let mut redraw = self.land_scan();
+        redraw |= self.land_preview();
         if let Some(id) = self.pending_reveal.take() {
             tx.scroll_into_view_in(FILES, id);
         }

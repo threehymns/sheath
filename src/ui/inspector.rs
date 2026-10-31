@@ -336,6 +336,8 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
                         .center()
                         .child(picture),
                 );
+            } else if let Some(err) = s.preview_error.as_deref() {
+                panel = panel.child(note(k, format!("Could not decode picture: {err}")));
             } else if let Some(err) = s.preview_image.as_ref().and_then(|i| i.error()) {
                 panel = panel.child(note(k, format!("Could not decode picture: {err}")));
             } else {

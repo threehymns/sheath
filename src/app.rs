@@ -9,6 +9,7 @@ mod input;
 mod marquee;
 mod paths;
 mod places;
+pub(crate) mod preview;
 mod rules_view;
 mod scan;
 mod scroll;
@@ -91,6 +92,9 @@ pub struct App {
     // Decodes pictures off the frame, so the inspector can draw one instead of its bytes.
     pub images: Option<rune::ImageCache>,
     pub preview_image: Option<rune::Image>,
+    // Why the preview is not a picture, when this app's decoder could not read it.
+    pub preview_error: Option<String>,
+    previews: preview::Previewer,
     // Only a folder on demand: walking a tree costs too much to do for every row.
     pub folder_size: Option<(u64, usize)>,
     // Whether a search reaches the folders below the one on screen.
@@ -229,6 +233,8 @@ impl App {
             preview: None,
             images: None,
             preview_image: None,
+            preview_error: None,
+            previews: preview::Previewer::default(),
             folder_size: None,
             search_all: false,
             search_truncated: false,
@@ -422,6 +428,7 @@ impl App {
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
+    s.previews.set_waker(wake.clone());
     s.images = Some(rune::ImageCache::new(wake.clone()));
     s.scan.set_waker(wake.clone());
     s.store.watch(wake.clone());
