@@ -18,7 +18,8 @@
 //!
 //! A place is its `id`, never its position: the built-in ids (`home`, `desktop`, `documents`,
 //! `downloads`, `pictures`, `root`, `temp`) follow the platform, `folder:<path>` is a folder of
-//! the user's own, and `volume:<id>` is left for drives a later release detects. `path` says
+//! the user's own, `file:<path>` is one of their files, and `volume:<id>` is left for drives a
+//! later release detects. `path` says
 //! where a place opens and is written only where the app cannot derive it; `name` overrides the
 //! label. A built-in the file does not name is added at the end of its section, so a new one in
 //! a later release still turns up. A place whose folder is not there keeps its place in the
@@ -38,7 +39,7 @@ use std::path::{Path, PathBuf};
 const FILE: &str = "places.kdl";
 
 /// The two groups the sidebar draws, in the order it draws them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Section {
     Favourites,
     Locations,
@@ -47,7 +48,7 @@ pub enum Section {
 impl Section {
     pub const ALL: [Section; 2] = [Section::Favourites, Section::Locations];
 
-    /// The section's heading, and the node that holds its places.
+    /// The section's heading, for the view and for the drag's label.
     pub fn title(self) -> &'static str {
         match self {
             Section::Favourites => "Favourites",
@@ -55,7 +56,8 @@ impl Section {
         }
     }
 
-    fn node(self) -> &'static str {
+    /// The stable name the state file's node and the section's element key use.
+    pub fn key(self) -> &'static str {
         match self {
             Section::Favourites => "favourites",
             Section::Locations => "locations",
@@ -89,10 +91,21 @@ pub struct Place {
 }
 
 impl Place {
-    /// Whether the folder is there now. A place whose folder is not — an unmounted drive, a
-    /// folder that was deleted — keeps its place in the file and comes back with the folder.
+    /// Whether the place is there now. One that is not — an unmounted drive, a folder that was
+    /// deleted — keeps its place in the file and comes back with it.
     pub fn is_available(&self) -> bool {
-        self.path.is_dir()
+        self.path.exists()
+    }
+
+    /// The folder a press on this place opens: the folder itself, or the folder holding a file.
+    pub fn folder(&self) -> PathBuf {
+        if self.path.is_dir() {
+            return self.path.clone();
+        }
+        self.path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| self.path.clone())
     }
 }
 
@@ -210,10 +223,12 @@ fn label_for(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// The glyph for a place the app has no icon for. A volume a later release detects reads as a
-/// drive; anything else reads as a folder.
+/// The glyph for a place the app has no icon for. A file reads as a page, a volume a later
+/// release detects as a drive, and anything else as a folder.
 fn icon_for(id: &str) -> &'static Icon {
-    if id.starts_with("volume:") {
+    if id.starts_with("file:") {
+        &glyphs::FILE
+    } else if id.starts_with("volume:") {
         &icons::DRIVE
     } else {
         &glyphs::FOLDER
@@ -271,6 +286,36 @@ impl Places {
     /// One section's places, in display order. Some may not be on screen now.
     pub fn places(&self, section: Section) -> &[Place] {
         section.list(self)
+    }
+
+    /// Adds `paths` to the end of `section` as places, the way a drop from the list does.
+    /// Nothing moves on disk, and a path that is already a place in either section is left
+    /// alone. True when something was added.
+    pub fn add(&mut self, section: Section, paths: &[PathBuf]) -> bool {
+        let mut added = false;
+        for path in paths {
+            if !path.exists() || self.holds(path) {
+                continue;
+            }
+            let id = place_id(path);
+            let place = Place {
+                name: label_for(path),
+                icon: icon_for(&id),
+                id,
+                path: path.clone(),
+            };
+            section.list_mut(self).push(place);
+            added = true;
+        }
+        added
+    }
+
+    /// Whether `path` is already a place, in either section.
+    fn holds(&self, path: &Path) -> bool {
+        Section::ALL
+            .iter()
+            .flat_map(|section| section.list(self))
+            .any(|place| place.path == path)
     }
 
     /// Moves the `from`th place on screen to `to` among the places on screen, as a drop does.
@@ -444,7 +489,7 @@ fn render(places: &Places) -> String {
         doc.nodes_mut().push(node.clone());
     }
     for section in Section::ALL {
-        let mut node = KdlNode::new(section.node());
+        let mut node = KdlNode::new(section.key());
         let mut children = KdlDocument::new();
         for place in section.list(places) {
             children.nodes_mut().push(place_node(place));
@@ -457,6 +502,16 @@ fn render(places: &Places) -> String {
         "// The sidebar's places, in the order they are shown. Sheath owns this file:\n\
          // a place is its id, and `path` and `name` override what the app derives.\n\
          {doc}"
+    )
+}
+
+/// The id a place the user adds gets: its kind and its path, so the same path never becomes two
+/// rows and a file and a folder of one name stay apart.
+fn place_id(path: &Path) -> String {
+    format!(
+        "{}:{}",
+        if path.is_dir() { "folder" } else { "file" },
+        path.display()
     )
 }
 

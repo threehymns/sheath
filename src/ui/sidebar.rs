@@ -11,14 +11,14 @@ pub(super) fn sidebar(s: &App, k: &'static Kit) -> El {
     Sidebar::new()
         .inset(10.0)
         .row_gap(1.0)
-        .section(place_section(s, k, Section::Favourites))
-        .section(place_section(s, k, Section::Locations))
+        .child(place_section(s, k, Section::Favourites))
+        .child(place_section(s, k, Section::Locations))
         .build(k)
 }
 
-/// One section's rows, numbered among themselves: a place is dragged within its own section,
-/// so a row never lands among the other one's.
-fn place_section(s: &App, k: &'static Kit, section: Section) -> SidebarSection {
+/// One section: its heading and rows, numbered among themselves so a place is dragged within
+/// its own section, and its rect, which a row dropped there is added to.
+fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
     let shown: Vec<&Place> = s
         .places
         .places(section)
@@ -30,7 +30,11 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> SidebarSection {
     for (index, place) in shown.into_iter().enumerate() {
         rows = rows.row(place_row(s, k, section, index, count, place));
     }
-    rows
+    rows.build(k)
+        .key(format!("places-{}", section.key()))
+        .on_layout(move |s: &mut App, rect| {
+            s.sections_at.insert(section, rect);
+        })
 }
 
 /// One place in the sidebar: the folder it opens, the order it sits in, and the rect a dragged
@@ -48,6 +52,7 @@ fn place_row(
     let target = place.path.clone();
     let id = place.id.clone();
     let highlight = s.drop_place() == Some(place.id.as_str());
+    let opens = place.folder();
     let (drag, access) = match section {
         Section::Favourites => (
             &s.favourites_drag,
@@ -60,12 +65,12 @@ fn place_row(
     };
     SidebarRow::new(place.name.clone())
         .icon(place.icon)
-        .selected(s.cwd == place.path || highlight)
+        .selected(s.cwd == opens || highlight)
         .on_select(move |s: &mut App, _| {
             // The release that ends a reorder arrives as a press too, and it must not open the
             // folder the row was dragged over.
             if !s.take_place_drag() {
-                s.navigate(path.clone());
+                s.open_place(path.clone());
             }
         })
         .reorder(drag, index, count, access, move |s: &mut App, from, to| {

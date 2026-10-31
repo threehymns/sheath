@@ -164,6 +164,100 @@ fn a_place_that_is_not_on_screen_keeps_its_slot_and_unknown_nodes_survive() {
 }
 
 #[test]
+fn dropping_a_folder_on_a_section_adds_it_as_a_place() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("places.kdl");
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let source = dir.path().join("alpha");
+    click(&mut rt, "f:alpha");
+    let (x0, y0) = rt.find("f:alpha").expect("the folder row is on screen");
+    let (section, _) = rt
+        .presented("places-favourites")
+        .expect("the favourites section is drawn");
+    // The heading band above the rows: a drop there adds, where a drop on a row moves.
+    let (x1, y1) = (section[0] + 40.0, section[1] + 12.0);
+    rt.pointer_down(x0, y0);
+    rt.frame(0.05);
+    rt.pointer_move(x1, y1);
+    rt.frame(0.05);
+    assert_eq!(
+        rt.state.drop_place(),
+        None,
+        "the heading is not one of the place rows"
+    );
+    rt.pointer_up(x1, y1);
+    rt.frame(0.1);
+
+    assert!(source.is_dir(), "the drop did not move the folder");
+    assert!(
+        rt.state
+            .places
+            .places(Section::Favourites)
+            .iter()
+            .any(|place| place.path == source),
+        "the folder is a favourite now"
+    );
+    let text = fs::read_to_string(&file).expect("the drop wrote the state file");
+    assert!(
+        text.contains(&crate::rules::quote(&format!(
+            "folder:{}",
+            source.display()
+        ))),
+        "the file names the folder: {text}"
+    );
+}
+
+#[test]
+fn a_file_place_opens_its_folder_with_the_file_selected() {
+    let dir = fixture();
+    let state = tempfile::tempdir().unwrap();
+    let file = state.path().join("places.kdl");
+    let mut app = app(&dir);
+    app.places = Places::at(file.clone());
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let notes = dir.path().join("notes.md");
+    let (x0, y0) = rt.find("f:notes.md").expect("the file row is on screen");
+    let (section, _) = rt
+        .presented("places-favourites")
+        .expect("the favourites section is drawn");
+    let (x1, y1) = (section[0] + 40.0, section[1] + 12.0);
+    rt.pointer_down(x0, y0);
+    rt.frame(0.05);
+    rt.pointer_move(x1, y1);
+    rt.frame(0.05);
+    rt.pointer_up(x1, y1);
+    rt.frame(0.1);
+    assert!(notes.is_file(), "the file did not move");
+
+    // Pick another row, so the file being selected afterwards says the place did it.
+    click(&mut rt, "f:file2.txt");
+    let key = format!("place-file:{}", notes.display());
+    let (x, y) = rt.find(&key).expect("the file is a place now");
+    rt.pointer_down(x, y);
+    rt.pointer_up(x, y);
+    rt.frame(0.1);
+    rt.frame(0.1);
+
+    assert_eq!(
+        rt.state.cwd.as_path(),
+        dir.path(),
+        "the place opened the folder holding the file"
+    );
+    assert_eq!(
+        rt.state.selected.as_deref(),
+        Some("f:notes.md"),
+        "the file is selected"
+    );
+}
+
+#[test]
 fn a_place_from_a_later_release_keeps_its_id_and_label() {
     let state = tempfile::tempdir().unwrap();
     let file = state.path().join("places.kdl");

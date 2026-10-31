@@ -14,7 +14,9 @@ mod entry;
 mod files;
 mod grid;
 mod input;
+mod marquee;
 mod paths;
+mod places;
 mod rules_view;
 mod scan;
 mod scroll;
@@ -24,11 +26,12 @@ mod sheets;
 mod watch;
 
 pub use commands::{Palette, SettingsTab};
-pub use drag::{FileDrag, Marquee, list_drag};
+pub use drag::{FileDrag, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
 pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 pub use input::{list_key, on_key};
+pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};
 pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
 pub use scrolling::poll;
@@ -165,6 +168,9 @@ pub struct App {
     /// The sidebar places' rects in window points and their folders, from the last layout,
     /// keyed by place id, for a dragged row to be dropped on one.
     pub places_at: BTreeMap<String, ([f32; 4], PathBuf)>,
+    /// Each sidebar section's rect in window points, from the last layout. A row dropped
+    /// there — its heading, or the space between its rows — is added to it as a place.
+    pub sections_at: BTreeMap<Section, [f32; 4]>,
     /// The Size and Date columns' widths, which header dragging changes.
     pub size_width: f32,
     pub date_width: f32,
@@ -278,6 +284,7 @@ impl App {
             rows_view: [0.0; 4],
             scroll: Scroll::default(),
             places_at: BTreeMap::new(),
+            sections_at: BTreeMap::new(),
             size_width: 92.0,
             date_width: 158.0,
             scan: Latest::default(),
@@ -423,20 +430,6 @@ impl App {
                 show_hidden: None,
             },
         );
-    }
-
-    /// Moves a place within its section, the way a drop does, and writes the order down. `from`
-    /// and `to` count the rows on screen; a place that is not there now keeps its slot in the
-    /// file, so a folder that comes back comes back where it was left.
-    pub fn move_place(&mut self, section: Section, from: usize, to: usize) {
-        if self.places.reorder(section, from, to) {
-            self.places.save();
-        }
-    }
-
-    /// Whether the press now arriving ends a place reorder, which must not also open a folder.
-    pub fn take_place_drag(&mut self) -> bool {
-        std::mem::take(&mut self.place_dragged)
     }
 
     /// Saves one setting, leaving every other node in the file as it was.
