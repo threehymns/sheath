@@ -166,6 +166,45 @@ fn trash_sheet(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>) {
         .build(k, layers);
 }
 
+/// The sidebar place menu a right-click opens: open the place, show it in its folder, or take
+/// it out of the sidebar.
+pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
+    let Some(menu) = &s.place_menu else {
+        return;
+    };
+    let Some(place) = s.places.get(&menu.id) else {
+        return;
+    };
+    let name = place.name.clone();
+    let icon = if place.path.is_dir() {
+        &glyphs::FOLDER_OPEN
+    } else {
+        &glyphs::FILE
+    };
+    let can_reveal = place.path.parent().is_some();
+    context_menu("place-menu", el(), Some(menu.press))
+        .min_width(220.0)
+        .item(
+            MenuItem::new(format!("Open “{name}”"))
+                .icon(icon)
+                .on_select(|s: &mut App| s.open_menu_place()),
+        )
+        .item(
+            MenuItem::new("Show in Folder")
+                .icon(&glyphs::FOLDER)
+                .disabled(!can_reveal)
+                .on_select(|s: &mut App| s.reveal_menu_place()),
+        )
+        .separator()
+        .item(
+            MenuItem::new("Remove from Sidebar")
+                .icon(&theme::icons::TRASH)
+                .on_select(|s: &mut App| s.remove_menu_place()),
+        )
+        .on_close(|s: &mut App| s.close_place_menu())
+        .build(k, layers);
+}
+
 pub(super) fn error_text(k: &Kit, error: &str) -> El {
     text(error.to_owned())
         .font(k.ty.caption())

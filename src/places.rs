@@ -23,12 +23,16 @@
 //! where a place opens and is written only where the app cannot derive it; `name` overrides the
 //! label. A built-in the file does not name is added at the end of its section, so a new one in
 //! a later release still turns up. A place whose folder is not there keeps its place in the
-//! file and comes back with the folder. Top-level nodes the app does not know are copied back
-//! untouched, so a newer release's state survives an older one's reorder.
+//! file and comes back with the folder. A place taken out of the sidebar keeps its row too,
+//! with `hidden #true`, so adding the folder again brings back the same row. Top-level nodes
+//! the app does not know are copied back untouched, so a newer release's state survives an
+//! older one's reorder.
 
-use crate::app::{home_dir, root_dir};
+mod builtin;
+
 use crate::config;
 use crate::icons;
+use builtin::{BUILTINS, builtin};
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use rune::Icon;
 use rune_kit::glyphs;
@@ -88,13 +92,16 @@ pub struct Place {
     pub name: String,
     pub icon: &'static Icon,
     pub path: PathBuf,
+    /// Taken out of the sidebar, but kept in the file so it can come back as the same row.
+    pub hidden: bool,
 }
 
 impl Place {
-    /// Whether the place is there now. One that is not — an unmounted drive, a folder that was
-    /// deleted — keeps its place in the file and comes back with it.
+    /// Whether the place is on screen now. One that is hidden, or whose folder is gone — an
+    /// unmounted drive, a deleted folder — keeps its place in the file and comes back as the
+    /// same row.
     pub fn is_available(&self) -> bool {
-        self.path.exists()
+        !self.hidden && self.path.exists()
     }
 
     /// The folder a press on this place opens: the folder itself, or the folder holding a file.
@@ -107,112 +114,6 @@ impl Place {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.path.clone())
     }
-}
-
-/// Where a built-in place opens on this platform.
-enum Anchor {
-    /// The home folder itself.
-    Home,
-    /// A folder under home, named the way the platform names it.
-    UnderHome(&'static str),
-    /// The root of the file system.
-    Root,
-    /// The system's temporary folder.
-    Temp,
-}
-
-struct Builtin {
-    id: &'static str,
-    name: &'static str,
-    icon: &'static Icon,
-    section: Section,
-    anchor: Anchor,
-}
-
-/// The places every launch knows about, in their starting order. The file names the ones the
-/// user keeps and where they moved them; anything it leaves out is added at the end of its
-/// section, so a place a later release adds still turns up.
-const BUILTINS: [Builtin; 7] = [
-    Builtin {
-        id: "home",
-        name: "Home",
-        icon: &icons::HOUSE,
-        section: Section::Favourites,
-        anchor: Anchor::Home,
-    },
-    Builtin {
-        id: "desktop",
-        name: "Desktop",
-        icon: &icons::DESKTOP,
-        section: Section::Favourites,
-        anchor: Anchor::UnderHome("Desktop"),
-    },
-    Builtin {
-        id: "documents",
-        name: "Documents",
-        icon: &icons::DOCUMENTS,
-        section: Section::Favourites,
-        anchor: Anchor::UnderHome("Documents"),
-    },
-    Builtin {
-        id: "downloads",
-        name: "Downloads",
-        icon: &icons::DOWNLOADS,
-        section: Section::Favourites,
-        anchor: Anchor::UnderHome("Downloads"),
-    },
-    Builtin {
-        id: "pictures",
-        name: "Pictures",
-        icon: &icons::PICTURES,
-        section: Section::Favourites,
-        anchor: Anchor::UnderHome("Pictures"),
-    },
-    Builtin {
-        id: "root",
-        name: "Computer",
-        icon: &icons::DRIVE,
-        section: Section::Locations,
-        anchor: Anchor::Root,
-    },
-    Builtin {
-        id: "temp",
-        name: "Temporary",
-        icon: &glyphs::FOLDER,
-        section: Section::Locations,
-        anchor: Anchor::Temp,
-    },
-];
-
-impl Builtin {
-    fn path(&self) -> Option<PathBuf> {
-        match self.anchor {
-            Anchor::Home => home_dir(),
-            Anchor::UnderHome(folder) => home_dir().map(|home| home.join(folder)),
-            Anchor::Root => Some(root_dir()),
-            Anchor::Temp => Some(std::env::temp_dir()),
-        }
-    }
-
-    /// Whether the folder is there to show. The temporary folder is hidden when it is the root
-    /// the root place already opens.
-    fn exists(&self) -> bool {
-        self.path().is_some_and(|path| path.is_dir())
-            && !(self.id == "temp" && self.path() == Some(root_dir()))
-    }
-
-    fn place(&self) -> Option<Place> {
-        Some(Place {
-            id: self.id.to_owned(),
-            name: self.name.to_owned(),
-            icon: self.icon,
-            path: self.path()?,
-        })
-    }
-}
-
-fn builtin(id: &str) -> Option<&'static Builtin> {
-    BUILTINS.iter().find(|builtin| builtin.id == id)
 }
 
 /// The label for a place the app has no name for: the folder's own name.
@@ -288,25 +189,64 @@ impl Places {
         section.list(self)
     }
 
+    /// The place `id` names, in either section.
+    pub fn get(&self, id: &str) -> Option<&Place> {
+        Section::ALL
+            .iter()
+            .flat_map(|section| section.list(self))
+            .find(|place| place.id == id)
+    }
+
+    /// Takes `id` out of the sidebar. The row stays in the file, hidden, so it comes back as
+    /// the same row rather than a second one for the same folder. True when a shown place was
+    /// hidden.
+    pub fn remove(&mut self, id: &str) -> bool {
+        for section in Section::ALL {
+            if let Some(place) = section
+                .list_mut(self)
+                .iter_mut()
+                .find(|place| place.id == id)
+            {
+                if place.hidden {
+                    return false;
+                }
+                place.hidden = true;
+                return true;
+            }
+        }
+        false
+    }
+
     /// Inserts `paths` at `index` among the section's rows on screen, the way a drop between
-    /// two places does. Nothing moves on disk, and a path that is already a place in either
-    /// section is left alone. True when something was inserted.
+    /// two places does. Nothing moves on disk; a path that is already shown in either section
+    /// is left alone, and one that was removed comes back as the same row. True when something
+    /// was inserted.
     pub fn insert(&mut self, section: Section, index: usize, paths: &[PathBuf]) -> bool {
         let mut fresh = Vec::new();
         for path in paths {
-            if !path.exists()
-                || self.holds(path)
-                || fresh.iter().any(|place: &Place| place.path == *path)
-            {
+            if !path.exists() || fresh.iter().any(|place: &Place| place.path == *path) {
                 continue;
             }
-            let id = place_id(path);
-            fresh.push(Place {
-                name: label_for(path),
-                icon: icon_for(&id),
-                id,
-                path: path.clone(),
-            });
+            match self.find_path(path).cloned() {
+                // Already in the sidebar: leave it where it is.
+                Some(place) if !place.hidden => continue,
+                // It was taken out before: its row comes back where it was dropped.
+                Some(mut place) => {
+                    self.take(&place.id);
+                    place.hidden = false;
+                    fresh.push(place);
+                }
+                None => {
+                    let id = place_id(path);
+                    fresh.push(Place {
+                        name: label_for(path),
+                        icon: icon_for(&id),
+                        id,
+                        path: path.clone(),
+                        hidden: false,
+                    });
+                }
+            }
         }
         if fresh.is_empty() {
             return false;
@@ -328,12 +268,23 @@ impl Places {
         true
     }
 
-    /// Whether `path` is already a place, in either section.
-    fn holds(&self, path: &Path) -> bool {
+    /// The place `path` points at, in either section, shown or not.
+    fn find_path(&self, path: &Path) -> Option<&Place> {
         Section::ALL
             .iter()
             .flat_map(|section| section.list(self))
-            .any(|place| place.path == path)
+            .find(|place| place.path == path)
+    }
+
+    /// Removes `id` from whichever section holds it, and hands it back.
+    fn take(&mut self, id: &str) -> Option<Place> {
+        for section in Section::ALL {
+            let list = section.list_mut(self);
+            if let Some(at) = list.iter().position(|place| place.id == id) {
+                return Some(list.remove(at));
+            }
+        }
+        None
     }
 
     /// Moves the `from`th place on screen to `to` among the places on screen, as a drop does.
@@ -421,6 +372,7 @@ struct Stored {
     id: String,
     path: Option<PathBuf>,
     name: Option<String>,
+    hidden: bool,
 }
 
 impl Stored {
@@ -432,6 +384,7 @@ impl Stored {
                 name: self.name.unwrap_or_else(|| builtin.name.to_owned()),
                 icon: builtin.icon,
                 path,
+                hidden: self.hidden,
             });
         }
         // A `folder:` place, a `volume:` one a later release detects, or an id this release
@@ -442,6 +395,7 @@ impl Stored {
             icon: icon_for(&self.id),
             id: self.id,
             path,
+            hidden: self.hidden,
         })
     }
 }
@@ -479,6 +433,7 @@ fn stored(node: &KdlNode) -> Vec<Stored> {
             let id = child.get(0).and_then(|entry| entry.as_string())?;
             let mut path = None;
             let mut name = None;
+            let mut hidden = false;
             for entry in child.entries() {
                 let Some(key) = entry.name().map(|name| name.value()) else {
                     continue;
@@ -487,6 +442,7 @@ fn stored(node: &KdlNode) -> Vec<Stored> {
                 match key {
                     "path" => path = value.map(PathBuf::from),
                     "name" => name = value,
+                    "hidden" => hidden = entry.value().as_bool().unwrap_or(false),
                     _ => {}
                 }
             }
@@ -494,6 +450,7 @@ fn stored(node: &KdlNode) -> Vec<Stored> {
                 id: id.to_owned(),
                 path,
                 name,
+                hidden,
             })
         })
         .collect()
@@ -548,6 +505,9 @@ fn place_node(place: &Place) -> KdlNode {
     }
     if builtin.is_none_or(|builtin| builtin.name != place.name.as_str()) {
         node.push(KdlEntry::new_prop("name", place.name.clone()));
+    }
+    if place.hidden {
+        node.push(KdlEntry::new_prop("hidden", true));
     }
     node
 }

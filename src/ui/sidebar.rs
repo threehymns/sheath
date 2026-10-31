@@ -3,7 +3,7 @@
 
 use crate::app::{App, PlaceAt};
 use crate::places::{Place, Section};
-use rune::El;
+use rune::{El, Tx};
 use rune_kit::shell::Reorder;
 use rune_kit::{Kit, Sidebar, SidebarRow, SidebarSection};
 
@@ -53,6 +53,7 @@ fn place_row(
     let path = place.path.clone();
     let target = place.path.clone();
     let id = place.id.clone();
+    let menu_id = place.id.clone();
     let highlight = s.drop_place() == Some(place.id.as_str());
     let opens = place.folder();
     let (drag, access) = match section {
@@ -81,6 +82,9 @@ fn place_row(
         })
         .build(k)
         .key(format!("place-{id}"))
+        .on_secondary_press(move |s: &mut App, press, _: &mut Tx| {
+            s.open_place_menu(menu_id.clone(), press);
+        })
         .on_layout(move |s: &mut App, rect| {
             s.places_at.insert(
                 id.clone(),

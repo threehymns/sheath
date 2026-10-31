@@ -33,6 +33,7 @@ pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WI
 pub use input::{list_key, on_key};
 pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};
+pub use places::PlaceMenu;
 pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
@@ -114,6 +115,8 @@ pub struct App {
     pub sheet: Option<Sheet>,
     /// Where the row menu opened, from the right-click that opened it.
     pub menu: Option<PointerPress>,
+    /// The sidebar place menu, while it's up, and the press that opened it.
+    pub place_menu: Option<PlaceMenu>,
     /// The settings panel's open category, while the panel is up.
     pub settings: Option<SettingsTab>,
     /// The command bar, while it's up.
@@ -262,6 +265,7 @@ impl App {
             error: None,
             sheet: None,
             menu: None,
+            place_menu: None,
             settings: None,
             palette: None,
             config,

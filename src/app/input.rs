@@ -38,9 +38,9 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    // The sheet, the row menu and the settings own the keyboard while open: their fields and
+    // The sheet, the menus and the settings own the keyboard while open: their fields and
     // rows handle Return, Escape, the arrows and the focus trap.
-    if s.sheet.is_some() || s.menu.is_some() || s.settings.is_some() {
+    if s.sheet.is_some() || s.menu.is_some() || s.place_menu.is_some() || s.settings.is_some() {
         return false;
     }
     let mods = event.mods;

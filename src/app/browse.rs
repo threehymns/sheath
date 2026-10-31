@@ -22,6 +22,7 @@ impl App {
         self.visit = Default::default();
         self.scroll.stop();
         self.menu = None;
+        self.place_menu = None;
         self.marquee = None;
         self.file_drag = None;
         self.clear_typeahead();

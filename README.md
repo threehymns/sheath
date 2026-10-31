@@ -61,6 +61,7 @@ unsupported by this backend.
 | Command bar | Cmd/Ctrl+P |
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places |
+| Place menu | Right-click a place in the sidebar |
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |
 
@@ -200,9 +201,10 @@ its folder with the file selected. `name` overrides the label; a missing one is 
 file's own name. Dragging a folder or file from the list onto a place moves it inside that
 folder; dropping it between places inserts it there in the section, without moving anything
 and with a preview of the landing spot. `volume:<id>` is left for drives a later release
-detects, and a
-place whose folder is not there — an unmounted drive, a deleted folder — keeps its row in the
-file and comes back with the folder. Built-in places the file leaves out are added at the end of their
+detects, and a place whose folder is not there — an unmounted drive, a deleted folder — keeps
+its row in the file and comes back with the folder. Right-clicking a place opens its menu: open
+it, show it in its folder, or remove it. A removed place keeps its row in the file with
+`hidden #true`, and dragging its folder back restores that same row. Built-in places the file leaves out are added at the end of their
 section, and top-level nodes the app does not know are written back untouched. Like
 `views.kdl`, the file is machine-owned and safe to delete: the sidebar goes back to its
 built-in places.
