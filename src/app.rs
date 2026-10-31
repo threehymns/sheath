@@ -166,16 +166,17 @@ impl App {
         app
     }
 
-    pub fn open(path: PathBuf) -> App {
-        App::open_in(path, Session::load())
-    }
-
     fn open_in(path: PathBuf, session: Session) -> App {
         let store = Store::open();
         let config = Settings::from_doc(store.doc(config::CONFIG));
         let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
         let mut app = App::blank(config, store, keybinds);
         app.session = session;
+        if let Some([kind, size, date]) = app.session.columns() {
+            app.kind_width = kind.clamp(80.0, 320.0);
+            app.size_width = size.clamp(64.0, 320.0);
+            app.date_width = date.clamp(100.0, 420.0);
+        }
         app.views = Views::load();
         app.places = Places::load();
         app.reload_rules();

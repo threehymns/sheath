@@ -202,9 +202,16 @@ fn column_resize(id: &'static str, title: &'static str, width: f32, rule: rune::
         .on_drag(
             move |s: &mut App, drag: &mut Drag, _: &mut Tx| match drag.phase {
                 Phase::Down => drag.data = width,
-                Phase::Move | Phase::Up => {
+                Phase::Move => {
                     if !drag.cancelled() {
                         s.resize_column(id, drag.data + drag.dx);
+                    }
+                }
+                // The width is written once the drag ends, not on every frame of it.
+                Phase::Up => {
+                    if !drag.cancelled() {
+                        s.resize_column(id, drag.data + drag.dx);
+                        s.remember_columns();
                     }
                 }
             },

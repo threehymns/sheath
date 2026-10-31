@@ -422,6 +422,12 @@ impl App {
             "modified" => self.date_width = 158.0,
             _ => {}
         }
+        self.remember_columns();
+    }
+
+    pub fn remember_columns(&mut self) {
+        self.session
+            .remember_columns([self.kind_width, self.size_width, self.date_width]);
     }
 
     pub fn phrase_for_count(&self) -> String {

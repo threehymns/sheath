@@ -3,9 +3,7 @@ use std::process::Command;
 
 // The folder and file named on the command line, or nothing when it names no place to open.
 pub(super) fn start_location() -> Option<(PathBuf, Option<String>)> {
-    let arg = rune::extra_args()
-        .into_iter()
-        .find(|a| !a.starts_with('-'))?;
+    let arg = rune::extra_args().iter().find(|a| !a.starts_with('-'))?;
     let path = absolute(PathBuf::from(arg));
     if path.is_file() {
         let parent = path

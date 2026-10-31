@@ -11,6 +11,8 @@ const FILE: &str = "session.kdl";
 pub struct Session {
     path: Option<PathBuf>,
     folder: Option<PathBuf>,
+    // Kind, size and date column widths, in points.
+    columns: Option<[f32; 3]>,
 }
 
 impl Session {
@@ -24,17 +26,23 @@ impl Session {
     pub fn at(path: PathBuf) -> Session {
         let mut session = Session {
             path: Some(path.clone()),
-            folder: None,
+            ..Session::default()
         };
         let Ok(text) = std::fs::read_to_string(&path) else {
             return session;
         };
-        session.folder = parse(&text);
+        let (folder, columns) = parse(&text);
+        session.folder = folder;
+        session.columns = columns;
         session
     }
 
     pub fn folder(&self) -> Option<&Path> {
         self.folder.as_deref()
+    }
+
+    pub fn columns(&self) -> Option<[f32; 3]> {
+        self.columns
     }
 
     /// Remembers a folder, skipping the write when the file already says so.
@@ -43,30 +51,68 @@ impl Session {
             return;
         }
         self.folder = Some(folder.to_path_buf());
+        self.save();
+    }
+
+    /// Remembers the column widths after a resize, not on every frame of one.
+    pub fn remember_columns(&mut self, columns: [f32; 3]) {
+        if self.columns == Some(columns) {
+            return;
+        }
+        self.columns = Some(columns);
+        self.save();
+    }
+
+    fn save(&mut self) {
         let Some(path) = self.path.clone() else {
             return;
         };
-        let _ = config::write_atomic(&path, &render(folder));
+        let _ = config::write_atomic(&path, &render(self.folder.as_deref(), self.columns));
     }
 }
 
-fn render(folder: &Path) -> String {
+fn render(folder: Option<&Path>, columns: Option<[f32; 3]>) -> String {
     let mut doc = KdlDocument::new();
-    let mut node = KdlNode::new("folder");
-    node.push(KdlEntry::new(folder.to_string_lossy().into_owned()));
-    doc.nodes_mut().push(node);
+    if let Some(folder) = folder {
+        let mut node = KdlNode::new("folder");
+        node.push(KdlEntry::new(folder.to_string_lossy().into_owned()));
+        doc.nodes_mut().push(node);
+    }
+    if let Some([kind, size, date]) = columns {
+        let mut node = KdlNode::new("columns");
+        node.push(KdlEntry::new_prop("kind", kind as f64));
+        node.push(KdlEntry::new_prop("size", size as f64));
+        node.push(KdlEntry::new_prop("date", date as f64));
+        doc.nodes_mut().push(node);
+    }
     doc.autoformat();
-    format!("// The folder the window was last in. Sheath owns this file.\n{doc}")
+    format!("// What the window was last showing. Sheath owns this file.\n{doc}")
 }
 
-fn parse(text: &str) -> Option<PathBuf> {
-    let doc: KdlDocument = text.parse().ok()?;
-    doc.nodes()
+fn parse(text: &str) -> (Option<PathBuf>, Option<[f32; 3]>) {
+    let Ok(doc) = text.parse::<KdlDocument>() else {
+        return (None, None);
+    };
+    let folder = doc
+        .nodes()
         .iter()
         .find(|node| node.name().value() == "folder")
         .and_then(|node| node.get(0))
         .and_then(|entry| entry.as_string())
-        .map(PathBuf::from)
+        .map(PathBuf::from);
+    let columns = doc
+        .nodes()
+        .iter()
+        .find(|node| node.name().value() == "columns")
+        .and_then(|node| {
+            let read = |name: &str| node.get(name).and_then(|entry| entry.as_float());
+            Some([
+                read("kind")? as f32,
+                read("size")? as f32,
+                read("date")? as f32,
+            ])
+        });
+    (folder, columns)
 }
 
 #[cfg(test)]
@@ -82,6 +128,20 @@ mod tests {
 
         session.remember(dir.path());
         assert_eq!(Session::at(path).folder(), Some(dir.path()));
+    }
+
+    #[test]
+    fn the_column_widths_survive_a_reload() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(FILE);
+        let mut session = Session::at(path.clone());
+
+        session.remember_columns([150.0, 92.0, 158.0]);
+        session.remember(dir.path());
+
+        let loaded = Session::at(path);
+        assert_eq!(loaded.columns(), Some([150.0, 92.0, 158.0]));
+        assert_eq!(loaded.folder(), Some(dir.path()));
     }
 
     #[test]
