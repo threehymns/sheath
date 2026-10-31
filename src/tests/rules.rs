@@ -1,0 +1,577 @@
+//! Rules: the matchers, the order they apply in, the layout they resolve to, and the saves that
+//! keep the file they live in intact.
+
+use super::helpers::*;
+use crate::app::Layout;
+use crate::config::{self, Store};
+use crate::rules::Rules;
+use crate::settings::{Setting, Settings};
+use rune_kit::SortDir;
+use std::fs;
+use std::path::Path;
+
+fn rules(text: &str) -> Rules {
+    let doc: kdl::KdlDocument = text.parse().expect("the test's KDL parses");
+    Rules::parse(&doc).expect("the test's rules parse")
+}
+
+#[test]
+fn a_rule_covers_the_folder_and_everything_under_it() {
+    let rules = rules("folder-rule \"tree\" {\n    match path=\"/work/**\"\n    layout grid\n}\n");
+    for path in ["/work", "/work/projects", "/work/projects/deep"] {
+        assert_eq!(
+            rules.resolve(Path::new(path), 0).layout,
+            Some(Layout::Grid),
+            "{path} is under the tree"
+        );
+    }
+    assert_eq!(rules.resolve(Path::new("/workshop"), 0).layout, None);
+    assert_eq!(rules.resolve(Path::new("/elsewhere"), 0).layout, None);
+}
+
+#[test]
+fn a_double_star_crosses_no_segments_at_all() {
+    // gitignore's rule: `a/**/b` matches `a/b`, so a tree pattern covers its first level too.
+    let rules =
+        rules("folder-rule \"target\" {\n    match path=\"/work/**/target\"\n    layout grid\n}\n");
+    for path in ["/work/target", "/work/a/target", "/work/a/b/target"] {
+        assert_eq!(
+            rules.resolve(Path::new(path), 0).layout,
+            Some(Layout::Grid),
+            "{path} is the target, or sits below it"
+        );
+    }
+    assert_eq!(
+        rules.resolve(Path::new("/work/other"), 0).layout,
+        None,
+        "a path that does not end in target is not covered"
+    );
+}
+
+#[test]
+fn asterisks_that_are_not_a_whole_component_stay_in_one_segment() {
+    // gitignore reads any run of asterisks that is not a whole `**` as a plain `*`.
+    assert!(crate::rules::path_match("/w/x**y", "/w/xay"));
+    assert!(
+        !crate::rules::path_match("/w/x**y", "/w/x/ay"),
+        "a plain `*` stops at a separator"
+    );
+    assert!(crate::rules::path_match("/w/a***", "/w/abc"));
+    assert!(
+        !crate::rules::path_match("/w/a***", "/w/a/b"),
+        "three asterisks are a plain `*`, not a `**`"
+    );
+}
+
+#[test]
+fn a_leading_double_star_matches_at_any_depth() {
+    assert!(crate::rules::path_match(
+        "**/node_modules/**",
+        "/node_modules/x"
+    ));
+    assert!(crate::rules::path_match(
+        "**/node_modules/**",
+        "/a/node_modules/x"
+    ));
+    assert!(!crate::rules::path_match(
+        "**/node_modules/**",
+        "/a/node_modules_old/x"
+    ));
+}
+
+#[test]
+fn a_store_with_no_config_folder_refuses_the_write_and_says_so() {
+    let mut store = Store::none();
+    assert!(
+        store.edit(config::CONFIG, |_| {}).is_err(),
+        "a store with nowhere to write refuses rather than reporting a save"
+    );
+    assert!(
+        store.write_error.is_some(),
+        "and leaves the reason where the panels show it"
+    );
+}
+
+#[test]
+fn saving_a_rule_with_no_config_folder_reports_it() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.save_layout_rule();
+    assert!(
+        app.store.write_error.is_some(),
+        "the save says why it could not write"
+    );
+    assert!(
+        app.rules.rules.is_empty(),
+        "and no rule is claimed as written"
+    );
+}
+
+#[test]
+fn matchers_or_together_and_keys_inside_one_and_together() {
+    let rules = rules(
+        "folder-rule \"either\" {\n\
+         \x20   match path=\"/a\"\n\
+         \x20   match path=\"/b\"\n\
+         \x20   layout grid\n\
+         }\n\
+         folder-rule \"both\" {\n\
+         \x20   match path=\"/c\" min-items=3\n\
+         \x20   layout list\n\
+         }\n",
+    );
+    assert_eq!(rules.resolve(Path::new("/a"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/b"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/c"), 3).layout, Some(Layout::List));
+    assert_eq!(
+        rules.resolve(Path::new("/c"), 2).layout,
+        None,
+        "the count has to hold too"
+    );
+}
+
+#[test]
+fn an_exclude_vetoes_a_rule_that_would_otherwise_match() {
+    let rules = rules(
+        "folder-rule \"all but one\" {\n\
+         \x20   match path=\"/w/**\"\n\
+         \x20   exclude path=\"/w/skip\"\n\
+         \x20   layout grid\n\
+         }\n",
+    );
+    assert_eq!(rules.resolve(Path::new("/w"), 0).layout, Some(Layout::Grid));
+    assert_eq!(rules.resolve(Path::new("/w/skip"), 0).layout, None);
+}
+
+#[test]
+fn a_later_rule_wins_property_by_property_and_inherit_undoes_it() {
+    let rules = rules(
+        "folder-rule \"base\" {\n\
+         \x20   match path=\"/w\"\n\
+         \x20   layout grid\n\
+         \x20   sort modified\n\
+         \x20   direction descending\n\
+         }\n\
+         folder-rule \"narrow\" {\n\
+         \x20   match path=\"/w\"\n\
+         \x20   sort inherit\n\
+         \x20   layout list\n\
+         }\n",
+    );
+    let resolved = rules.resolve(Path::new("/w"), 0);
+    assert_eq!(resolved.layout, Some(Layout::List));
+    assert_eq!(resolved.sort, None, "inherit cleared what the base set");
+    assert_eq!(resolved.direction, Some(SortDir::Descending));
+}
+
+#[test]
+fn an_entry_rule_speaks_for_one_row() {
+    let rules = rules(
+        "entry-rule \"config\" {\n\
+         \x20   match path=\"/home/u/.config\"\n\
+         \x20   hidden #false\n\
+         }\n\
+         entry-rule \"junk\" {\n\
+         \x20   match name=\"*.log\"\n\
+         \x20   hidden #true\n\
+         }\n",
+    );
+    let config_entry = crate::rules::EntryRef {
+        path: "/home/u/.config",
+        name: ".config",
+        is_dir: true,
+    };
+    assert_eq!(rules.hidden(&config_entry), Some(false));
+    let junk = crate::rules::EntryRef {
+        path: "/home/u/a.log",
+        name: "a.log",
+        is_dir: false,
+    };
+    assert_eq!(rules.hidden(&junk), Some(true));
+    let other = crate::rules::EntryRef {
+        path: "/home/u/a.txt",
+        name: "a.txt",
+        is_dir: false,
+    };
+    assert_eq!(rules.hidden(&other), None);
+}
+
+#[test]
+fn an_unknown_property_names_the_ones_that_work() {
+    let doc: kdl::KdlDocument = "folder-rule \"x\" {\n    icon \"rust\"\n}\n"
+        .parse()
+        .unwrap();
+    let error = Rules::parse(&doc).expect_err("icon is not in the schema yet");
+    assert!(error.contains("unknown property `icon`"), "{error}");
+    assert!(error.contains("layout"), "{error}");
+    assert!(error.contains("show-hidden"), "{error}");
+}
+
+#[test]
+fn saving_a_setting_keeps_comments_and_the_rest_of_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(
+        &path,
+        "// my settings\nsettings {\n    // keep me\n    show-hidden #false\n}\n\n\
+         // the tree\nfolder-rule \"tree\" {\n    match path=\"/w/**\"\n    layout grid\n}\n",
+    )
+    .unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let mut settings = Settings::defaults();
+    settings.show_hidden = true;
+    store
+        .edit(config::CONFIG, |doc| {
+            settings.write(doc, Setting::ShowHidden)
+        })
+        .expect("the store writes");
+
+    let text = fs::read_to_string(&path).unwrap();
+    assert!(text.contains("// my settings"), "{text}");
+    assert!(text.contains("// keep me"), "{text}");
+    assert!(text.contains("// the tree"), "{text}");
+    assert!(text.contains("show-hidden #true"), "{text}");
+    assert!(text.contains("folder-rule"), "{text}");
+}
+
+#[test]
+fn a_file_that_does_not_parse_is_never_written_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    show-hidden #true\n").unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let problem = store
+        .problem(config::CONFIG)
+        .expect("the file does not parse");
+    assert!(
+        problem.detail.starts_with("line "),
+        "the error names the place: {}",
+        problem.detail
+    );
+    assert!(
+        problem.report.contains(&path.display().to_string()),
+        "and the report names the file: {}",
+        problem.report
+    );
+    assert!(
+        store
+            .edit(config::CONFIG, |doc| doc.nodes_mut().clear())
+            .is_err(),
+        "the store refuses to write a document it could not read"
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        "settings {\n    show-hidden #true\n",
+        "the file is untouched"
+    );
+}
+
+#[test]
+fn a_folder_rule_decides_the_layout_a_folder_opens_in() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    assert!(app.is_grid(), "the rule opened the folder in the grid");
+}
+
+#[test]
+fn an_entry_rule_reveals_a_hidden_folder() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "entry-rule \"secret\" {{\n    match path=\"{}\"\n    hidden #false\n}}\n",
+            dir.path().join(".secret").display()
+        ),
+    )
+    .unwrap();
+
+    let (app, _path) = app_in_config_dir(&dir);
+    assert!(
+        names(&app).contains(&".secret"),
+        "the entry rule shows a dot folder: {:?}",
+        names(&app)
+    );
+    assert!(
+        names(&app).contains(&"file2.txt"),
+        "the rest of the folder is unchanged"
+    );
+}
+
+#[test]
+fn the_store_notices_a_file_changed_by_someone_else() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    show-hidden #false\n}\n").unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    store.watch(wake);
+    fs::write(&path, "settings {\n    show-hidden #true\n}\n").unwrap();
+
+    let mut changed = false;
+    for _ in 0..100 {
+        if store.poll() {
+            changed = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(changed, "the watcher reported the change");
+    assert!(
+        Settings::from_doc(store.doc(config::CONFIG)).show_hidden,
+        "the changed setting is read"
+    );
+}
+
+#[test]
+fn a_file_that_breaks_after_it_loaded_is_never_written_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("config.kdl");
+    fs::write(&path, "settings {\n    show-hidden #false\n}\n").unwrap();
+
+    let mut store = Store::at(dir.path().to_path_buf());
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    store.watch(wake);
+    let broken = "settings {\n    show-hidden #true\n";
+    fs::write(&path, broken).unwrap();
+
+    for _ in 0..100 {
+        if store.poll() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+
+    assert!(
+        store.error(config::CONFIG).is_some(),
+        "the text that does not parse is reported"
+    );
+    assert!(
+        !store.writable(config::CONFIG),
+        "a file that does not parse is read only"
+    );
+    assert!(
+        store.edit(config::CONFIG, |_| {}).is_err(),
+        "the save is refused"
+    );
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        broken,
+        "the half-finished edit is still on disk"
+    );
+}
+
+/// The atomic save writes `.config.kdl.tmp` first, so a folder in its place makes the write
+/// fail without touching the file the store holds.
+#[test]
+fn a_failed_write_is_the_stores_error_not_a_rule_error() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    grid #false\n}\n",
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    fs::create_dir(dir.path().join(".config.kdl.tmp")).unwrap();
+
+    app.save_layout_rule();
+    assert!(
+        app.store.write_error.is_some(),
+        "the store says why it failed"
+    );
+    assert!(
+        app.rule_error.is_none(),
+        "a write failure is not a file that does not parse: {:?}",
+        app.rule_error
+    );
+    assert!(app.rules.rules.is_empty(), "nothing reached the file");
+}
+
+#[test]
+fn a_failed_rule_edit_is_the_stores_error_too() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    fs::create_dir(dir.path().join(".config.kdl.tmp")).unwrap();
+
+    app.open_rule_edit(0);
+    app.save_rule_edit();
+    assert!(
+        app.store.write_error.is_some(),
+        "the store says why it failed"
+    );
+    assert!(
+        app.rule_error.is_none(),
+        "a write failure is not a file that does not parse: {:?}",
+        app.rule_error
+    );
+    assert_eq!(app.rules.rules.len(), 1, "the rule is still listed");
+    assert!(
+        app.rule_edit.is_some(),
+        "the form and its unsaved draft stay open"
+    );
+}
+
+#[test]
+fn a_rule_name_with_a_quote_or_backslash_survives_the_save() {
+    let dir = fixture();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    app.save_layout_rule();
+    assert_eq!(app.rules.rules.len(), 1, "the tab wrote a rule");
+    app.open_rule_edit(0);
+    app.rule_fields_mut()
+        .get_mut("name")
+        .expect("the name field")
+        .text = "odd \"name\" \\ here".to_owned();
+    app.apply_rule_fields();
+    app.save_rule_edit();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    let doc: kdl::KdlDocument = text.parse().expect("the file still parses");
+    let name = doc.nodes()[0].get(0).and_then(|entry| entry.as_string());
+    assert_eq!(name, Some("odd \"name\" \\ here"), "{text}");
+    assert_eq!(app.rules.rules.len(), 1, "the rule reads back: {text}");
+}
+
+#[test]
+fn saving_the_layout_as_a_rule_writes_one_that_applies() {
+    let dir = fixture();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    app.layout = Layout::Grid;
+    app.save_layout_rule();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(
+        text.contains("folder-rule {"),
+        "the rule is unnamed: {text}"
+    );
+    assert!(text.contains("layout grid"), "{text}");
+    assert!(!app.rules.rules.is_empty(), "the rule is live");
+    assert!(app.is_grid());
+}
+
+/// A file whose last node does not end in a newline: the rule still starts on its own line,
+/// so the file the next launch reads parses.
+#[test]
+fn a_rule_after_a_final_node_without_a_newline_keeps_the_file_parsing() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    grid #false\n}",
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+
+    app.save_layout_rule();
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    text.parse::<kdl::KdlDocument>()
+        .unwrap_or_else(|err| panic!("{err}\n{text}"));
+    assert_eq!(app.rules.rules.len(), 1, "the rule reads back: {text}");
+}
+
+#[test]
+fn pinning_an_entry_writes_an_entry_rule_that_applies() {
+    let dir = fixture();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    app.select_id("f:.secret");
+    app.pin_entry(false);
+    app.reload();
+
+    let text = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(text.contains("entry-rule {"), "the rule is unnamed: {text}");
+    assert!(text.contains("hidden #false"), "{text}");
+    assert!(names(&app).contains(&".secret"), "the pinned entry shows");
+}
+
+#[test]
+fn a_toolbar_change_in_a_ruled_folder_lasts_for_the_visit() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+
+    let (mut app, _path) = app_in_config_dir(&dir);
+    assert!(app.is_grid());
+    app.toggle_layout();
+    assert!(!app.is_grid(), "the toolbar overrides for the visit");
+
+    let here = app.cwd.clone();
+    let other = dir.path().join("alpha");
+    app.navigate(other);
+    app.back();
+    assert!(app.cwd == here);
+    assert!(app.is_grid(), "the rule wins again on the next visit");
+}
+
+#[test]
+fn resetting_a_setting_leaves_a_ruled_folder_alone() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        format!(
+            "folder-rule \"here\" {{\n    match path=\"{}\"\n    layout grid\n}}\n",
+            dir.path().display()
+        ),
+    )
+    .unwrap();
+
+    let (mut app, _path) = app_in_config_dir(&dir);
+    assert!(app.is_grid());
+    app.reset_setting(Setting::ScrollInertia);
+    assert!(
+        app.is_grid(),
+        "the rule still decides the layout after a reset"
+    );
+}
+
+#[test]
+fn an_entry_rule_cannot_name_a_count() {
+    let doc: kdl::KdlDocument = "entry-rule \"x\" {\n    match min-items=3\n    hidden #true\n}\n"
+        .parse()
+        .unwrap();
+    let error = Rules::parse(&doc).expect_err("min-items is a folder matcher");
+    assert!(error.contains("min-items"), "{error}");
+    assert!(error.contains("folder rules"), "{error}");
+}
+
+#[test]
+fn a_rule_reads_back_from_the_text_the_editor_writes() {
+    let rules = rules(
+        "folder-rule \"tree\" {\n    match path=\"/w/**\" min-items=2\n    layout grid\n    sort modified\n    direction descending\n    show-hidden #true\n}\n\
+         entry-rule \"logs\" {\n    match name=\"*.log\" kind=\"file\" extension=\"log\"\n    exclude path=\"/w/keep.log\"\n    hidden #false\n}\n",
+    );
+    let text: String = rules.rules.iter().map(|rule| rule.to_kdl()).collect();
+    let doc: kdl::KdlDocument = text.parse().unwrap_or_else(|err| panic!("{err}\n{text}"));
+    let again = Rules::parse(&doc).expect("the editor's text parses");
+
+    assert_eq!(again.rules.len(), 2);
+    assert_eq!(again.rules[0].props.layout, rules.rules[0].props.layout);
+    assert_eq!(again.rules[1].matches[0].name.as_deref(), Some("*.log"));
+    assert_eq!(
+        again.rules[1].excludes[0].path.as_deref(),
+        Some("/w/keep.log")
+    );
+}

@@ -164,6 +164,24 @@ fn the_general_category_toggles_what_the_browser_shows() {
 }
 
 #[test]
+fn the_grid_switch_writes_the_global_setting() {
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "setting-grid");
+    assert!(rt.state.is_grid(), "the switch shows the tiles");
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("grid #true"), "{config}");
+    assert!(
+        !dir.path().join("views.kdl").exists(),
+        "the setting is global, not this folder's"
+    );
+}
+
+#[test]
 fn saved_settings_load_at_launch() {
     let dir = fixture();
     let path = dir.path().join("config.kdl");
@@ -173,8 +191,7 @@ fn saved_settings_load_at_launch() {
     )
     .unwrap();
 
-    let saved = Settings::at(path);
-    assert_eq!(saved.error, None);
+    let saved = saved_settings(&dir);
     assert!(saved.show_hidden);
     assert!(!saved.inspector);
 
@@ -197,8 +214,7 @@ fn saved_scroll_settings_load_at_launch() {
     )
     .unwrap();
 
-    let saved = Settings::at(path);
-    assert_eq!(saved.error, None);
+    let saved = saved_settings(&dir);
     assert!(saved.scroll_inertia);
     assert!(saved.overscroll);
     assert!(!saved.show_hidden, "the rest keep their defaults");
@@ -242,15 +258,21 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
     let path = dir.path().join("config.kdl");
     fs::write(&path, "settings { show-hidden #true").unwrap();
 
-    let saved = Settings::at(path);
+    let store = crate::config::Store::at(dir.path().to_path_buf());
+    let problem = store
+        .problem(crate::config::CONFIG)
+        .expect("the file does not parse");
     assert!(
-        saved
-            .error
-            .as_deref()
-            .is_some_and(|e| e.contains("Couldn’t read")),
-        "{:?}",
-        saved.error
+        problem.detail.starts_with("line "),
+        "the error names the place: {}",
+        problem.detail
     );
+    assert!(
+        problem.report.contains(&path.display().to_string()),
+        "and the report names the file: {}",
+        problem.report
+    );
+    let saved = Settings::from_doc(store.doc(crate::config::CONFIG));
     assert!(!saved.show_hidden);
     assert!(saved.inspector);
     assert!(saved.scroll_inertia);
@@ -260,7 +282,7 @@ fn a_broken_config_file_keeps_the_defaults_and_says_so() {
 #[test]
 fn recording_a_chord_in_the_settings_binds_and_saves_it() {
     let dir = fixture();
-    let (app, path) = app_in_config_dir(&dir);
+    let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     rt.frame(0.0);
 
@@ -286,7 +308,7 @@ fn recording_a_chord_in_the_settings_binds_and_saves_it() {
 
     let f5: rune::Shortcut = "f5".parse().unwrap();
     assert_eq!(rt.state.keybinds.chord(Action::Rename), Some(&f5));
-    let saved = Keybinds::at(path);
+    let saved = saved_keybinds(&dir);
     assert_eq!(saved.chord(Action::Rename), Some(&f5), "the file has it");
 }
 
@@ -315,7 +337,7 @@ fn the_recorder_shows_the_bound_chord_as_a_keycap() {
 #[test]
 fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
     let dir = fixture();
-    let (app, path) = app_in_config_dir(&dir);
+    let (app, _path) = app_in_config_dir(&dir);
     let mut rt = runtime(app);
     rt.frame(0.0);
 
@@ -332,7 +354,7 @@ fn the_recorder_cancels_with_escape_and_clears_with_backspace() {
     press(&mut rt, PhysicalKeyCode::Backspace);
     assert_eq!(rt.state.keybinds.chord(Action::Rename), None);
     assert_eq!(
-        Keybinds::at(path).chord(Action::Rename),
+        saved_keybinds(&dir).chord(Action::Rename),
         None,
         "the file has the cleared chord"
     );
@@ -408,7 +430,7 @@ fn resetting_a_keybind_takes_its_line_out_of_the_file() {
         !text.contains("rename"),
         "the line is out of the file: {text}"
     );
-    assert!(!Keybinds::at(path).is_custom(Action::Rename));
+    assert!(!saved_keybinds(&dir).is_custom(Action::Rename));
 }
 
 /// A setting the config file names can be reset, which takes its key out rather than writing

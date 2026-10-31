@@ -66,13 +66,47 @@ impl App {
     /// Steps the list's momentum and overscroll once per frame, asking for the next frame while
     /// either still moves. True when the rows moved, so the view draws them where they are.
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
+        // A file the app did not write changed on disk: re-read it and apply what it says.
+        let mut redraw = false;
+        if self.store.poll() {
+            self.apply_config();
+            redraw = true;
+        }
+        // A toast is up: keep frames coming, so it leaves on time rather than at the next event.
+        if !self.notices.is_empty() {
+            self.notices.retain(|notice| !notice.expired());
+            redraw = true;
+        }
+        // The rule form's Save follows the draft one frame behind a keystroke: typing lands at
+        // once, so the catch-up here is a commit of its own, which can animate. Every other
+        // control settles the form in the commit its press causes.
+        if let Some(edit) = self.rule_edit.as_mut() {
+            let dirty = edit.dirty();
+            if edit.shown_dirty != dirty {
+                edit.shown_dirty = dirty;
+                redraw = true;
+            }
+        }
+        // A command asked for a rule: wait one frame so the tab's rows are laid out, then put
+        // the rule just under the viewport's top.
+        if let Some((key, wait)) = self.rule_reveal.clone() {
+            if wait == 0 {
+                self.rule_reveal = None;
+                if self.settings == Some(SettingsTab::Rules) {
+                    tx.scroll_key_to(key, 8.0);
+                }
+            } else {
+                self.rule_reveal = Some((key, wait - 1));
+                redraw = true;
+            }
+        }
         let limits = self.limits();
         self.scroll.observe(self.told_offset());
         let dt = self.scroll.frame(t);
         let push = self.drag_push(dt);
         let nudged = self.scroll.nudge(push, limits.max);
         let stepped = self.scroll.step(limits);
-        let redraw = nudged.redraw || stepped.redraw;
+        let redraw = redraw || nudged.redraw || stepped.redraw;
         self.apply(nudged, tx);
         self.apply(stepped, tx);
         self.follow_drag();

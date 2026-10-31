@@ -6,6 +6,9 @@ mod grid;
 mod inspector;
 mod palette;
 mod path_bar;
+mod rule_editor;
+mod rule_picker;
+mod rules;
 mod settings;
 mod sidebar;
 mod table;
@@ -86,6 +89,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     if s.palette.is_some() {
         palette_layer(s, k, &mut layers);
     }
+    if s.rule_picker.is_some() {
+        rule_picker::rule_picker_layer(s, k, &mut layers);
+    }
     if let Some(at) = s.menu {
         row_menu(s, k, at, &mut layers);
     }
@@ -94,6 +100,28 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     }
     if s.settings.is_some() {
         settings_layer(s, k, &mut layers);
+    }
+    // A config file the app cannot read says so in the corner: which file, where it stopped, and
+    // a Copy that hands over the whole report.
+    if !s.notices.is_empty() {
+        let mut region = rune_kit::ToastRegion::new();
+        for (index, notice) in s.notices.iter().enumerate() {
+            let mut toast = rune_kit::Toast::new(notice.key(), notice.title.clone())
+                .description(notice.detail.clone());
+            toast = toast.action(
+                k,
+                if notice.copied {
+                    "Copied"
+                } else {
+                    "Copy details"
+                },
+                !notice.copied,
+                move |s: &mut App, tx: &mut rune::Tx| s.copy_notice(index, tx),
+            );
+            toast = toast.on_close(move |s: &mut App| s.dismiss_notice(index));
+            region = region.toast(toast.build(k));
+        }
+        layers.push(region.build(k));
     }
     rune_kit::root(shell, layers)
 }
@@ -166,20 +194,20 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .build(k)
         .key("toggle-hidden");
 
-    let (view_icon, view_label) = if s.is_grid() {
-        (&icons::LIST, "List View")
+    let (layout_icon, layout_label) = if s.is_grid() {
+        (&icons::LIST, "List Layout")
     } else {
-        (&icons::GRID, "Grid View")
+        (&icons::GRID, "Grid Layout")
     };
-    let view = IconButton::new(view_icon)
+    let layout = IconButton::new(layout_icon)
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Regular)
-        .label(view_label)
-        .help(view_label)
+        .label(layout_label)
+        .help(layout_label)
         .expanded(s.is_grid())
-        .on_press(|s: &mut App| s.toggle_view())
+        .on_press(|s: &mut App| s.toggle_layout())
         .build(k)
-        .key("toggle-view");
+        .key("toggle-layout");
 
     let inspector = IconButton::new(&icons::INSPECTOR)
         .variant(IconButtonVariant::GhostMuted)
@@ -208,7 +236,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .center(search)
         .trailing(new_folder)
         .trailing(hidden)
-        .trailing(view)
+        .trailing(layout)
         .trailing(inspector)
         .trailing(settings)
 }

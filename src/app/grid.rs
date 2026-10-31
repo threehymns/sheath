@@ -1,4 +1,4 @@
-//! The grid view's geometry: how many tiles fit across, which tile a point or cell holds, and
+//! The grid layout's geometry: how many tiles fit across, which tile a point or cell holds, and
 //! how a keyboard move or a box maps to tiles rather than rows.
 
 use crate::app::{App, ROW_HEIGHT};
@@ -13,21 +13,21 @@ pub const GRID_ROW_HEIGHT: f32 = TILE_HEIGHT + TILE_GAP;
 
 /// How the list shows the folder: one row per item, or a wall of tiles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum ViewMode {
+pub enum Layout {
     #[default]
     List,
     Grid,
 }
 
-impl ViewMode {
+impl Layout {
     pub fn is_grid(self) -> bool {
-        matches!(self, ViewMode::Grid)
+        matches!(self, Layout::Grid)
     }
 }
 
 impl App {
     pub fn is_grid(&self) -> bool {
-        self.view.is_grid()
+        self.layout.is_grid()
     }
 
     /// How many tiles fit across the list's viewport. Before layout has spoken, one does.

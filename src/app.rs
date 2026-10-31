@@ -15,6 +15,7 @@ mod files;
 mod grid;
 mod input;
 mod paths;
+mod rules_view;
 mod scroll;
 mod scrolling;
 mod selection;
@@ -24,9 +25,10 @@ pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, Marquee, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
-pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH, ViewMode};
+pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 pub use input::{list_key, on_key};
 pub use paths::{home_dir, root_dir};
+pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, rule_key};
 pub use scrolling::poll;
 pub use sheets::{Sheet, SheetKind};
 
@@ -36,12 +38,16 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::Instant;
 
-use rune::{PointerPress, ScrollPos, TextEdit};
+use rune::{PointerPress, ScrollPos, TextEdit, Tx, Waker};
 use rune_kit::{PaneState, SortDir};
 
+use crate::config::{self, Store};
 use crate::keybinds::{Action, Keybinds};
+use crate::notice::Notice;
 use crate::recorder::Recorder;
+use crate::rules::{Resolved, Rules, SortKey};
 use crate::settings::Settings;
+use crate::views::Views;
 
 use paths::start_location;
 use scroll::Scroll;
@@ -65,7 +71,7 @@ pub struct App {
     /// The column the list sorts by, and which way.
     pub sort: (String, SortDir),
     /// Whether the folder is a table of rows or a grid of tiles.
-    pub view: ViewMode,
+    pub layout: Layout,
     /// The drag box, while the pointer is down in the list's empty space.
     pub marquee: Option<Marquee>,
     /// The rows being dragged toward a folder, while the pointer is down on a row.
@@ -90,11 +96,40 @@ pub struct App {
     pub settings: Option<SettingsTab>,
     /// The command bar, while it's up.
     pub palette: Option<Palette>,
-    /// The settings saved in `config.kdl`: hidden files and the inspector.
+    /// The global settings from `config.kdl`: hidden files, the inspector, and the scrolling.
     pub config: Settings,
+    /// The parsed rules from `config.kdl`, in file order.
+    pub rules: Rules,
+    /// Why the rules could not be read, for the Rules tab.
+    pub rule_error: Option<String>,
+    /// The rule drag in the tab's list: the row in hand, the place it would land in, and how
+    /// far the rows have moved aside for it.
+    pub rule_drag: RuleDrag,
+    /// The rule picker's highlighted row, while it is up.
+    pub rule_picker: Option<usize>,
+    /// The key of the rule the tab should scroll to once its row is laid out, and the frames
+    /// left to wait.
+    pub rule_reveal: Option<(String, u8)>,
+    /// What a command asked about that no rule matches, so the tab can say so.
+    pub rule_query: Option<String>,
+    /// The rule open in the tab's editor, while the form is up.
+    pub rule_edit: Option<RuleEdit>,
+    /// The rule whose delete is waiting on a second press, while the row asks.
+    pub rule_delete_ask: Option<usize>,
+    /// Whether the rule press in flight became a drag, so its release does not open the form.
+    pub rule_dragged: bool,
+    /// A presentation the user chose for this visit, over what the rules say. Cleared on every
+    /// navigation, so a rule wins again the next time the folder opens.
+    pub visit: Resolved,
+    /// What each folder was left showing, in the state directory.
+    pub views: Views,
+    /// What the corner is saying about a config file the app cannot read.
+    pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
     /// One recorder per action, holding what its field is listening for and any refusal.
     pub recorders: BTreeMap<Action, Recorder>,
+    /// The config folder's documents and the watcher that keeps them current.
+    pub store: Store,
     /// Where the list's viewport is scrolled to and how far it can go, told by its
     /// `El::on_scroll_offset` in the frame that scrolled it. The wheel starts from this rather
     /// than from the rows' rects: those are reported a frame late, and only once they have
@@ -124,30 +159,39 @@ impl App {
         app
     }
 
-    /// Opens `path` with a fresh one-entry history and the saved settings.
+    /// Opens `path` with the saved settings, rules, and remembered state.
     pub fn open(path: PathBuf) -> App {
-        App::open_with(path, Settings::load())
-    }
-
-    /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
-    /// that keep them out of the real config folder).
-    pub fn open_with(path: PathBuf, config: Settings) -> App {
-        let mut app = App::blank(config);
+        let store = Store::open();
+        let config = Settings::from_doc(store.doc(config::CONFIG));
+        let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
+        let mut app = App::blank(config, store, keybinds);
+        app.views = Views::load();
+        app.reload_rules();
         app.history.push(path.clone());
         app.at = 0;
         app.enter(path);
         app
     }
 
-    fn blank(config: Settings) -> App {
-        let keybinds = Keybinds::load();
+    /// Opens `path` with `config`, for a launch that already knows its settings (and for tests
+    /// that keep them out of the real config folder).
+    #[cfg(test)]
+    pub fn open_with(path: PathBuf, config: Settings) -> App {
+        let mut app = App::blank(config, Store::none(), Keybinds::defaults());
+        app.history.push(path.clone());
+        app.at = 0;
+        app.enter(path);
+        app
+    }
+
+    fn blank(config: Settings, store: Store, keybinds: Keybinds) -> App {
         let recorders = Keybinds::recorders();
         let mut inspector = PaneState::new(286.0).range(232.0, 420.0);
         inspector.set_open(config.inspector);
-        let view = if config.grid {
-            ViewMode::Grid
+        let layout = if config.grid {
+            Layout::Grid
         } else {
-            ViewMode::List
+            Layout::List
         };
         App {
             cwd: PathBuf::new(),
@@ -157,7 +201,7 @@ impl App {
             selected: None,
             anchor: None,
             sort: ("name".to_owned(), SortDir::Ascending),
-            view,
+            layout,
             marquee: None,
             file_drag: None,
             clipboard: None,
@@ -176,8 +220,21 @@ impl App {
             settings: None,
             palette: None,
             config,
+            rules: Rules::default(),
+            rule_error: None,
+            rule_drag: RuleDrag::default(),
+            rule_picker: None,
+            rule_reveal: None,
+            rule_query: None,
+            rule_edit: None,
+            rule_delete_ask: None,
+            rule_dragged: false,
+            visit: Resolved::default(),
+            views: Views::default(),
+            notices: Vec::new(),
             keybinds,
             recorders,
+            store,
             scroll_told: Rc::new(Cell::new(ScrollPos::default())),
             rows_view: [0.0; 4],
             scroll: Scroll::default(),
@@ -186,4 +243,155 @@ impl App {
             date_width: 158.0,
         }
     }
+
+    /// Reads the rules out of the config document, keeping the last good ones when the file no
+    /// longer parses, then says in the corner what could not be read.
+    pub fn reload_rules(&mut self) {
+        if let Some(error) = self.store.error(config::CONFIG) {
+            self.rule_error = Some(error.to_owned());
+        }
+        let outcome = self.store.doc(config::CONFIG).map(Rules::parse);
+        match outcome {
+            Some(Ok(rules)) => {
+                self.rules = rules;
+                if self.store.error(config::CONFIG).is_none() {
+                    self.rule_error = None;
+                }
+            }
+            Some(Err(error)) => self.rule_error = Some(error),
+            None => {}
+        }
+        self.raise_config_notices();
+    }
+
+    /// Says, in the corner, which config file the app cannot read and where it stopped. A file
+    /// already up is refreshed rather than stacked, and one that parses again takes its toast
+    /// away.
+    pub fn raise_config_notices(&mut self) {
+        let mut found = Vec::new();
+        for name in [config::CONFIG, config::KEYBINDS] {
+            if let Some(problem) = self.store.problem(name) {
+                found.push(Notice::new(
+                    name,
+                    format!("{name} does not parse"),
+                    problem.detail.clone(),
+                    problem.report.clone(),
+                ));
+            }
+        }
+        if let Some(error) = self.rule_error.clone() {
+            let report = config::schema_problem(
+                config::CONFIG,
+                self.store.path(config::CONFIG).as_deref(),
+                &error,
+            );
+            found.push(Notice::new(
+                config::CONFIG,
+                format!("{} has a rule it cannot read", config::CONFIG),
+                error,
+                report,
+            ));
+        }
+        self.notices
+            .retain(|notice| found.iter().any(|problem| problem.file == notice.file));
+        for notice in found {
+            match self.notices.iter_mut().find(|up| up.file == notice.file) {
+                Some(up) if up.report != notice.report => *up = notice,
+                Some(_) => {}
+                None => self.notices.push(notice),
+            }
+        }
+    }
+
+    /// Puts a notice's report on the clipboard, whole, so the problem can be pasted wherever it
+    /// will be fixed, and leaves the toast saying so.
+    pub fn copy_notice(&mut self, index: usize, tx: &mut Tx) {
+        let Some(notice) = self.notices.get_mut(index) else {
+            return;
+        };
+        tx.copy(notice.clipboard());
+        notice.copied = true;
+        notice.shown = Instant::now();
+    }
+
+    /// Takes one toast away, for its close button.
+    pub fn dismiss_notice(&mut self, index: usize) {
+        if index < self.notices.len() {
+            self.notices.remove(index);
+        }
+    }
+
+    /// Applies a change made to the config folder from outside: the settings, the keybinds, the
+    /// rules, and whatever the open folder now resolves to.
+    pub fn apply_config(&mut self) {
+        // The form names its rule by position in the file. A file that changed on disk may
+        // hold a different rule there, so the draft would land on the wrong node.
+        if self.rule_edit.is_some() {
+            self.rule_edit = None;
+            self.rule_query = Some(
+                "The config file changed on disk, so the rule editor closed. Open the rule \
+                 again to keep editing."
+                    .to_owned(),
+            );
+        }
+        // The question names a rule by the same position, so it is stale for the same reason.
+        self.rule_delete_ask = None;
+        self.config = Settings::from_doc(self.store.doc(config::CONFIG));
+        self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
+        self.recorders = Keybinds::recorders();
+        self.inspector.set_open(self.config.inspector);
+        self.reload_rules();
+        self.reload();
+    }
+
+    /// The presentation the folder resolves to, before this visit's override.
+    pub fn rule_presentation(&self) -> Resolved {
+        self.rules.resolve(&self.cwd, self.entries.len())
+    }
+
+    /// Applies the visit's override, then the rules, then what the folder was left showing,
+    /// and last the global defaults.
+    fn apply_rules(&mut self) {
+        let rule = self.rule_presentation();
+        let remembered = self.views.get(&self.cwd);
+        let resolved = self.visit.or(rule).or(remembered);
+        self.layout = resolved.layout.unwrap_or(if self.config.grid {
+            Layout::Grid
+        } else {
+            Layout::List
+        });
+        let sort = resolved.sort.unwrap_or(SortKey::Name);
+        self.sort = (
+            sort.as_str().to_owned(),
+            resolved.direction.unwrap_or(SortDir::Ascending),
+        );
+        self.show_hidden = resolved.show_hidden.unwrap_or(self.config.show_hidden);
+    }
+
+    /// Records what this folder is showing, which is what it opens with next time.
+    fn remember_presentation(&mut self) {
+        let sort = SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name);
+        self.views.set(
+            &self.cwd,
+            Resolved {
+                layout: Some(self.layout),
+                sort: Some(sort),
+                direction: Some(self.sort.1),
+                show_hidden: None,
+            },
+        );
+    }
+
+    /// Saves one setting, leaving every other node in the file as it was.
+    fn save_setting(&mut self, changed: crate::settings::Setting) {
+        let _ = self
+            .store
+            .edit(config::CONFIG, |doc| self.config.write(doc, changed));
+    }
+}
+
+/// `AppSpec::setup`: hands the config folder's watcher the waker the event loop gave the app,
+/// so a change made in a text editor reaches the open window.
+pub fn setup(s: &mut App, wake: Waker) {
+    s.store.watch(wake);
 }

@@ -2,6 +2,7 @@
 //! navigation walks.
 
 use crate::app::App;
+use crate::rules::SortKey;
 use crate::settings::Setting;
 use rune_kit::SortDir;
 use std::collections::BTreeSet;
@@ -16,6 +17,7 @@ impl App {
     /// Shows `path` without touching history.
     pub(super) fn enter(&mut self, path: PathBuf) {
         self.cwd = path;
+        self.visit = Default::default();
         self.scroll.stop();
         self.menu = None;
         self.marquee = None;
@@ -80,6 +82,7 @@ impl App {
     pub fn reload(&mut self) {
         let keep = self.selected.clone();
         self.read_dir();
+        self.apply_rules();
         self.sort_entries();
         self.apply_filter();
         match keep {
@@ -123,16 +126,33 @@ impl App {
         });
     }
 
+    /// Whether the rules or the folder's own policy hide `entry`: an entry rule's `hidden`
+    /// first, then the dot-name, which only counts while hidden files are off. The row menu
+    /// reads the same answer the filter does.
+    pub fn entry_hidden(&self, entry: &Entry) -> bool {
+        let path = entry.path.to_string_lossy();
+        let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
+            path: &path,
+            name: &entry.name,
+            is_dir: entry.is_dir,
+        });
+        rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
+    }
+
     /// Rebuilds the rows that pass the hidden-file and search filters.
     pub fn apply_filter(&mut self) {
         // Different rows: what the old ones were coasting toward no longer means anything.
         self.scroll.stop();
         let query = self.search.text.trim().to_lowercase();
+        let hidden: Vec<bool> = self
+            .entries
+            .iter()
+            .map(|entry| self.entry_hidden(entry))
+            .collect();
         self.visible = (0..self.entries.len())
             .filter(|&i| {
                 let entry = &self.entries[i];
-                (self.show_hidden || !entry.hidden())
-                    && (query.is_empty() || entry.name.to_lowercase().contains(&query))
+                !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
             })
             .collect();
         // The hidden and filtered rows drop out of the selection with the row itself.
@@ -161,28 +181,68 @@ impl App {
     }
 
     pub fn toggle_hidden(&mut self) {
-        self.show_hidden = !self.show_hidden;
+        let on = !self.show_hidden;
+        self.show_hidden = on;
+        // A rule that speaks for this folder holds it for the visit; otherwise the switch is
+        // the global setting it has always been.
+        if self.rule_presentation().show_hidden.is_some() {
+            self.visit.show_hidden = Some(on);
+        } else {
+            self.config.show_hidden = on;
+            self.remember(Setting::ShowHidden, on);
+        }
         self.apply_filter();
-        self.remember(Setting::ShowHidden);
+    }
+
+    /// The settings panel's Show hidden files switch: turns the global setting over, then
+    /// resolves the open folder again, so a rule or a remembered visit keeps its say.
+    pub fn toggle_hidden_setting(&mut self) {
+        // The switch turns the setting over, not what the folder resolved to: a rule or a
+        // remembered visit may be what is on screen, and that is not what gets saved.
+        self.config.show_hidden = !self.config.show_hidden;
+        self.remember(Setting::ShowHidden, self.config.show_hidden);
+        self.apply_rules();
+        self.apply_filter();
     }
 
     /// Switches between the table of rows and the grid of tiles, and remembers the choice.
-    pub fn toggle_view(&mut self) {
-        self.view = if self.is_grid() {
-            ViewMode::List
+    pub fn toggle_layout(&mut self) {
+        self.layout = if self.is_grid() {
+            Layout::List
         } else {
-            ViewMode::Grid
+            Layout::Grid
         };
-        // The two views measure their content differently, so what the old one was coasting
+        // The two layouts measure their content differently, so what the old one was coasting
         // toward means nothing in the new one.
         self.scroll.stop();
-        self.remember(Setting::GridView);
+        // A rule for this folder keeps its say after the visit: the change shows now, and the
+        // rule wins again the next time the folder opens.
+        if self.rule_presentation().layout.is_some() {
+            self.visit.layout = Some(self.layout);
+        } else {
+            self.remember_presentation();
+        }
+    }
+
+    /// The settings panel's Grid layout switch: turns the global setting over, then resolves the
+    /// open folder again, so a rule or what the folder was left showing keeps its say.
+    pub fn toggle_grid_setting(&mut self) {
+        let before = self.layout;
+        // The switch turns the setting over, not what the folder resolved to: a rule or a
+        // remembered visit may be what is on screen, and that is not what gets saved.
+        self.config.grid = !self.config.grid;
+        self.remember(Setting::GridLayout, self.config.grid);
+        // A rule or a remembered visit still outranks the global default.
+        self.apply_rules();
+        if self.layout != before {
+            self.scroll.stop();
+        }
     }
 
     /// Shows or hides the inspector, and remembers the choice.
     pub fn toggle_inspector(&mut self) {
         self.inspector.toggle();
-        self.remember(Setting::Inspector);
+        self.remember(Setting::Inspector, self.inspector.is_open());
     }
 
     /// Keeps the list coasting after the wheel, or stops it doing so, and remembers the choice.
@@ -191,7 +251,7 @@ impl App {
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }
-        self.remember(Setting::ScrollInertia);
+        self.remember(Setting::ScrollInertia, self.config.scroll_inertia);
     }
 
     /// Lets the list be pulled past its ends, or not, and remembers the choice.
@@ -200,33 +260,29 @@ impl App {
         if !self.config.overscroll {
             self.scroll.stop_bounce();
         }
-        self.remember(Setting::Overscroll);
+        self.remember(Setting::Overscroll, self.config.overscroll);
     }
 
-    /// Saves the browser's view settings into `config.kdl`, naming `changed` in it.
-    fn remember(&mut self, changed: Setting) {
-        self.config.remember(
-            changed,
-            self.show_hidden,
-            self.inspector.is_open(),
-            self.is_grid(),
-            self.config.scroll_inertia,
-            self.config.overscroll,
-        );
+    /// Saves one setting into `config.kdl`, naming it there from now on. Only that setting is
+    /// recorded: what the open folder shows may be a rule's or a remembered visit's doing, and
+    /// that must not become the global default for the folders those leave alone.
+    fn remember(&mut self, changed: Setting, on: bool) {
+        self.config.remember(changed, on);
+        self.save_setting(changed);
     }
 
     /// Takes a setting out of `config.kdl`, so the next launch uses the default, and uses it
     /// now too.
     pub fn reset_setting(&mut self, setting: Setting) {
         self.config.reset(setting);
-        self.show_hidden = self.config.show_hidden;
+        let _ = self.store.edit(crate::config::CONFIG, |doc| {
+            crate::settings::Settings::clear(doc, setting)
+        });
+        // A rule or a remembered visit still outranks the global default, so the open folder
+        // is resolved again rather than forced back to the setting just reset.
+        self.apply_rules();
         self.apply_filter();
         self.inspector.set_open(self.config.inspector);
-        self.view = if self.config.grid {
-            ViewMode::Grid
-        } else {
-            ViewMode::List
-        };
         if !self.config.scroll_inertia {
             self.scroll.stop_coast();
         }
@@ -247,6 +303,13 @@ impl App {
         } else {
             (column.to_owned(), SortDir::Ascending)
         };
+        let rule = self.rule_presentation();
+        if rule.sort.is_some() || rule.direction.is_some() {
+            self.visit.sort = Some(SortKey::from_column(column).unwrap_or(SortKey::Name));
+            self.visit.direction = Some(self.sort.1);
+        } else {
+            self.remember_presentation();
+        }
         self.sort_entries();
         self.apply_filter();
     }
@@ -278,7 +341,7 @@ impl App {
         let total = self
             .entries
             .iter()
-            .filter(|entry| self.show_hidden || !entry.hidden())
+            .filter(|entry| !self.entry_hidden(entry))
             .count();
         let noun = if shown == 1 { "item" } else { "items" };
         if self.search.text.trim().is_empty() {

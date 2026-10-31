@@ -38,6 +38,13 @@ pub static DRIVE: Icon = Icon {
     body: r#"<rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor"/><path d="M2 9.5h12" stroke="currentColor"/><circle cx="11.25" cy="6.25" r=".75" fill="currentColor"/>"#,
 };
 
+/// A drag handle: two columns of three dots, the grip a row that can be moved carries.
+pub static GRIP: Icon = Icon {
+    name: "sheath-grip",
+    view: 16.0,
+    body: r#"<circle cx="6" cy="4" r="1" fill="currentColor"/><circle cx="10" cy="4" r="1" fill="currentColor"/><circle cx="6" cy="8" r="1" fill="currentColor"/><circle cx="10" cy="8" r="1" fill="currentColor"/><circle cx="6" cy="12" r="1" fill="currentColor"/><circle cx="10" cy="12" r="1" fill="currentColor"/>"#,
+};
+
 pub static UNDO: Icon = Icon {
     name: "sheath-undo",
     view: 16.0,

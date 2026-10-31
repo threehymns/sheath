@@ -2,44 +2,30 @@
 //! Done in the dialog's corner.
 
 use crate::app::{App, SettingsTab};
+use crate::config;
 use crate::corner::CornerControl;
 use crate::icons;
-use crate::keybinds::{Action, Keybinds};
-use crate::settings::{Setting, Settings};
-use rune::{El, Icon, ScrollSpec, Tx, col, el, icon, row, text};
+use crate::keybinds::Action;
+use crate::settings::Setting;
+use rune::{El, Icon, ScrollSpec, Tx, col, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
     shortcut_error_message,
 };
+
 use rune_theme_opencode as theme;
 use std::path::PathBuf;
 
 use super::dialogs::error_text;
 use super::palette::action_icon;
 
-/// Hex's settings metrics: a 220 pt navigation rail, a 32 pt page gutter, cards hanging 16 pt
-/// past it so their rows' text lands on the gutter, and 48 pt rows.
-const SETTINGS_RAIL: f32 = 220.0;
+mod card;
+mod metrics;
 
-const SETTINGS_GUTTER: f32 = 32.0;
+pub(super) use card::settings_section_action;
+pub(super) use metrics::*;
 
-const SETTINGS_ROW_INSET: f32 = 16.0;
-
-const SETTINGS_ROW_HEIGHT: f32 = 48.0;
-
-/// The dialog's radius, rounder than the kit's own so the panel inside it keeps a visible curve.
-const SETTINGS_RADIUS: f32 = 16.0;
-
-/// How far the panel is set in from the dialog's edges, which is how much comes off the radius so
-/// the two corners stay concentric.
-const SETTINGS_INSET: f32 = 8.0;
-
-/// Done, in the dialog's top-right corner: the panel is cut away around it, so it is on the
-/// dialog's surface rather than in the pane.
-const DONE_SIZE: (f32, f32) = (76.0, 26.0);
-
-/// Panel left around Done's left and bottom edges.
-const DONE_GAP: f32 = 8.0;
+use card::{settings_row, settings_section};
 
 /// Settings after Hex's, as a modal: a dialog over the browser holding navigation on its
 /// background and the chosen page in a raised panel beside it, with Done in the dialog's
@@ -104,6 +90,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .child(version);
     let body = match tab {
         SettingsTab::General => general_settings(s, k),
+        SettingsTab::Rules => super::rules::rules_settings(s, k),
         SettingsTab::Keybinds => keybinds_settings(s, k),
     };
     // Concentric with the dialog's corners: the same 8 pt inset taken off the radius.
@@ -144,7 +131,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 ),
         );
     let done = CornerControl {
-        dialog_width: 880.0,
+        dialog_width: SETTINGS_DIALOG_WIDTH,
         dialog_radius: SETTINGS_RADIUS,
         inset: SETTINGS_INSET,
         size: DONE_SIZE,
@@ -160,8 +147,10 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .fill(k.c.bg_deep)
             .border(1.0, k.c.border_muted)
             .clip_rounded(SETTINGS_RADIUS)
-            // A modal, so Escape closes it and focus stays inside while it is up.
-            .modal(true, |s: &mut App| s.close_settings())
+            // A modal, so Escape closes it and focus stays inside while it is up; the Rules
+            // tab's open form takes the key first, so Escape closes the form rather than the
+            // panel behind it.
+            .modal(true, |s: &mut App| s.dismiss_settings())
             .on_press(|_: &mut App| {})
             .child(sidebar)
             .child(panel)
@@ -194,6 +183,11 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
             .items_center()
             .child(dialog),
     );
+    // The rule form's open menu is mounted after the panel, so it paints above the card its
+    // field hangs from.
+    if tab == SettingsTab::Rules {
+        super::rule_editor::rule_editor_layers(s, k, layers);
+    }
 }
 
 /// The pane's title (Hex's pane header). Done is in the dialog's corner, so nothing sits in the
@@ -216,90 +210,22 @@ fn settings_header(k: &Kit, tab: SettingsTab) -> El {
         )
 }
 
-/// A titled group of rows in a raised card, after Hex: the label sits on the page's text edge
-/// and the card hangs [`SETTINGS_ROW_INSET`] past it, so the rows' text lines up with it.
-fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
-    let mut card = k.elevate(
-        col()
-            .key(format!("{key}-card"))
-            .w_full()
-            .radius(k.radius.lg)
-            .fill(k.c.bg_base),
-        &k.elevation.raised,
-    );
-    for (index, row) in rows.into_iter().enumerate() {
-        if index > 0 {
-            card = card.child(settings_rule(k));
-        }
-        card = card.child(row);
-    }
-    col()
-        .key(key)
-        .w_full()
-        .gap(8.0)
-        .child(
-            text(title)
-                .key("settings-section-label")
-                .font(k.ty.ui_medium.lh(16.0))
-                .color(k.c.text_muted)
-                .mx(SETTINGS_ROW_INSET),
-        )
-        .child(card)
-}
-
-/// A hairline between two rows, inset from the card's edges.
-fn settings_rule(k: &Kit) -> El {
-    row()
-        .w_full()
-        .px(SETTINGS_ROW_INSET)
-        .child(el().h(1.0).grow(1.0).fill(k.c.border_muted))
-}
-
-/// One setting: an icon, the label and its explanation, and the control at the row's end.
-fn settings_row(
-    k: &Kit,
-    glyph: &'static Icon,
-    label: &str,
-    description: Option<&str>,
-    control: El,
-) -> El {
-    let mut labels = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .gap(2.0)
-        .child(text(label).font(k.ty.ui).color(k.c.text_base).truncate());
-    if let Some(description) = description {
-        labels = labels.child(
-            text(description.to_owned())
-                .font(k.ty.caption())
-                .color(k.c.text_muted)
-                .wrap(),
-        );
-    }
-    row()
-        .w_full()
-        .min_h(SETTINGS_ROW_HEIGHT)
-        .px(SETTINGS_ROW_INSET)
-        .py(8.0)
-        .gap(12.0)
-        .center_y()
-        .child(icon(glyph, 16.0).color(k.c.icon_muted))
-        .child(labels)
-        .child(control)
-}
-
 fn tab_icon(tab: SettingsTab) -> &'static Icon {
     match tab {
         SettingsTab::General => &theme::icons::SETTINGS_GEAR,
+        SettingsTab::Rules => &theme::icons::EDIT,
         SettingsTab::Keybinds => &glyphs::KEYBOARD,
     }
 }
 
 fn general_settings(s: &App, k: &Kit) -> El {
-    let hidden = Switch::new(s.show_hidden)
+    // These switches edit the fallbacks, so they read the settings the file holds, not what the
+    // open folder resolved to: a rule or a remembered visit may decide this folder, and the
+    // fallback those leave alone must still be visible and settable here.
+    let hidden = Switch::new(s.config.show_hidden)
         .label("Show hidden files")
         .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_hidden())
+        .on_toggle(|s: &mut App| s.toggle_hidden_setting())
         .build(k)
         .key("setting-hidden");
     let inspector = Switch::new(s.inspector.is_open())
@@ -308,10 +234,10 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_inspector())
         .build(k)
         .key("setting-inspector");
-    let grid = Switch::new(s.is_grid())
-        .label("Grid view")
+    let grid = Switch::new(s.config.grid)
+        .label("Grid layout")
         .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_view())
+        .on_toggle(|s: &mut App| s.toggle_grid_setting())
         .build(k)
         .key("setting-grid");
     let inertia = Switch::new(s.config.scroll_inertia)
@@ -348,9 +274,9 @@ fn general_settings(s: &App, k: &Kit) -> El {
             settings_row(
                 k,
                 &icons::GRID,
-                "Grid view",
+                "Grid layout",
                 Some("Show the folder as tiles instead of a table of rows."),
-                setting_control(s, k, Setting::GridView, grid),
+                setting_control(s, k, Setting::GridLayout, grid),
             ),
         ],
     );
@@ -384,14 +310,14 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 k,
                 &glyphs::KEYBOARD,
                 "Keybinds",
-                Keybinds::file(),
+                s.store.path(config::KEYBINDS),
                 "copy-keybinds-path",
             ),
             file_path_row(
                 k,
                 &theme::icons::SETTINGS_GEAR,
                 "Settings",
-                Settings::file(),
+                s.store.path(config::CONFIG),
                 "copy-settings-path",
             ),
         ],
@@ -403,7 +329,10 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .child(browser)
         .child(scrolling)
         .child(files);
-    if let Some(error) = &s.config.error {
+    if let Some(error) = s.store.error(config::CONFIG) {
+        page = page.child(error_text(k, error));
+    }
+    if let Some(error) = &s.store.write_error {
         page = page.child(error_text(k, error));
     }
     page
@@ -423,7 +352,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
             binding_control(s, k, action, recorder_field(s, k, action)),
         ));
     }
-    let saved = match Keybinds::file() {
+    let saved = match s.store.path(config::KEYBINDS) {
         Some(path) => format!(
             "Click a shortcut and press the keys to use instead. Backspace clears it, Escape \
              cancels while recording. Saved in {}.",
@@ -446,7 +375,7 @@ fn keybinds_settings(s: &App, k: &Kit) -> El {
                 .mx(SETTINGS_ROW_INSET)
                 .wrap(),
         );
-    if let Some(error) = &s.keybinds.error {
+    if let Some(error) = s.store.error(config::KEYBINDS) {
         page = page.child(error_text(k, error));
     }
     page

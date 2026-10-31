@@ -8,9 +8,12 @@ mod format;
 mod icons;
 mod keybinds;
 mod keycaps;
+mod notice;
 mod recorder;
+mod rules;
 mod settings;
 mod ui;
+mod views;
 
 #[cfg(test)]
 mod tests;
@@ -25,6 +28,7 @@ fn main() {
         families: rune_theme_opencode::FAMILIES,
         on_key: Some(app::on_key),
         poll: Some(app::poll),
+        setup: Some(app::setup),
         scenes: &[
             ("settings", |s: &mut app::App| {
                 s.open_tab(app::SettingsTab::General)

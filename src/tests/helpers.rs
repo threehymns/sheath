@@ -36,24 +36,48 @@ pub(super) fn populate(dir: &TempDir) {
 }
 
 pub(super) fn app(dir: &TempDir) -> App {
-    let mut app = App::open(dir.path().to_path_buf());
-    // The defaults, not whatever the machine running the tests has saved.
+    // The test-only opener takes the defaults instead of whatever the machine running the tests
+    // has saved, and reads no remembered folder state.
+    let mut app = App::open_with(dir.path().to_path_buf(), Settings::defaults());
+    app.store = crate::config::Store::none();
     app.keybinds = Keybinds::defaults();
     app.recorders = Keybinds::recorders();
-    app.config = Settings::defaults();
-    // Opening applied whatever the machine saved, so the list view is put back by hand.
-    app.view = crate::app::ViewMode::List;
+    app.inspector.set_open(app.config.inspector);
+    app.views = crate::views::Views::default();
+    app.rules = crate::rules::Rules::default();
+    app.rule_error = None;
+    // The store and the remembered state are the test's now, so the folder is resolved again.
+    app.reload();
     app
 }
 
-/// An app whose keybinds and settings save into `dir`, so a test never touches the real config.
+/// An app whose keybinds, settings, rules, and remembered state live in `dir`, so a test never
+/// touches the real config folder.
 pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     let path = dir.path().join("keybinds.kdl");
     let mut app = app(dir);
-    app.keybinds = Keybinds::at(path.clone());
+    app.store = crate::config::Store::at(dir.path().to_path_buf());
+    app.keybinds = Keybinds::from_doc(app.store.doc(crate::config::KEYBINDS));
     app.recorders = Keybinds::recorders();
-    app.config = Settings::at(dir.path().join("config.kdl"));
+    app.config = Settings::from_doc(app.store.doc(crate::config::CONFIG));
+    // The config just replaced the defaults the pane was opened with, so it has its say too.
+    app.inspector.set_open(app.config.inspector);
+    app.views = crate::views::Views::at(dir.path().join("views.kdl"));
+    app.reload_rules();
+    app.reload();
     (app, path)
+}
+
+/// The settings a fresh read of `dir` finds, as the next launch would.
+pub(super) fn saved_settings(dir: &TempDir) -> Settings {
+    let store = crate::config::Store::at(dir.path().to_path_buf());
+    Settings::from_doc(store.doc(crate::config::CONFIG))
+}
+
+/// The keybinds a fresh read of `dir` finds, as the next launch would.
+pub(super) fn saved_keybinds(dir: &TempDir) -> Keybinds {
+    let store = crate::config::Store::at(dir.path().to_path_buf());
+    Keybinds::from_doc(store.doc(crate::config::KEYBINDS))
 }
 
 pub(super) fn names(app: &App) -> Vec<&str> {
@@ -69,6 +93,14 @@ pub(super) fn runtime(app: App) -> Runtime<App> {
     rt.on_key = Some(crate::app::on_key);
     rt.poll = Some(crate::app::poll);
     rt
+}
+
+/// Opens the first rule's editor in the Rules tab: the row a fixture writes is named "here".
+pub(super) fn open_rule_editor(rt: &mut Runtime<App>) {
+    rt.frame(0.0);
+    click(rt, "open-settings");
+    click(rt, "settings-tab-rules");
+    click(rt, "rule-here-0");
 }
 
 pub(super) fn right_click(rt: &mut Runtime<App>, key: &str) {

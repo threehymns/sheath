@@ -10,16 +10,22 @@ use rune::{PhysicalInput, Shortcut, ShortcutError, TextEdit, Tx};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
     General,
+    Rules,
     Keybinds,
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 2] = [SettingsTab::General, SettingsTab::Keybinds];
+    pub const ALL: [SettingsTab; 3] = [
+        SettingsTab::General,
+        SettingsTab::Rules,
+        SettingsTab::Keybinds,
+    ];
 
     /// The stable name the element keys use.
     pub fn id(self) -> &'static str {
         match self {
             SettingsTab::General => "general",
+            SettingsTab::Rules => "rules",
             SettingsTab::Keybinds => "keybinds",
         }
     }
@@ -28,6 +34,7 @@ impl SettingsTab {
     pub fn label(self) -> &'static str {
         match self {
             SettingsTab::General => "General",
+            SettingsTab::Rules => "Rules",
             SettingsTab::Keybinds => "Keybinds",
         }
     }
@@ -123,11 +130,40 @@ impl App {
     }
 
     pub fn open_tab(&mut self, tab: SettingsTab) {
+        self.rule_query = None;
+        self.rule_reveal = None;
+        self.rule_delete_ask = None;
+        if tab != SettingsTab::Rules {
+            self.rule_edit = None;
+        }
         self.settings = Some(tab);
+    }
+
+    /// Escape out of the settings panel. The Rules tab's open form takes it first, so the form
+    /// closes and the panel behind it stays: the work in it is not lost with the panel.
+    pub fn dismiss_settings(&mut self) {
+        if self.settings == Some(SettingsTab::Rules) && self.rule_edit.is_some() {
+            self.discard_rule_edit();
+            return;
+        }
+        self.close_settings();
     }
 
     pub fn close_settings(&mut self) {
         self.settings = None;
+        self.rule_edit = None;
+        self.rule_delete_ask = None;
+        // A drag left half-done would keep its rows shifted the next time the tab opens.
+        self.rule_drag = Default::default();
+        self.rule_query = None;
+        self.rule_reveal = None;
+    }
+
+    /// Opens `config.kdl` in the system's editor, from the Rules tab's error banner.
+    pub fn open_config_in_editor(&mut self) {
+        if let Some(path) = self.store.path(crate::config::CONFIG) {
+            let _ = super::paths::open_external(&path);
+        }
     }
 
     /// A recorder proposed `shortcut` for `action`: refuse a chord another action uses, and
@@ -137,7 +173,11 @@ impl App {
         action: Action,
         shortcut: Option<&Shortcut>,
     ) -> Result<(), ShortcutError> {
-        self.keybinds.set(action, shortcut)
+        self.keybinds.set(action, shortcut)?;
+        let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
+            self.keybinds.write(doc, action)
+        });
+        Ok(())
     }
 
     /// One physical input for the settings recorder listening on `action`: Escape cancels,
@@ -170,6 +210,9 @@ impl App {
     /// the field back to rest.
     pub fn reset_binding(&mut self, action: Action) {
         self.keybinds.reset(action);
+        let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
+            self.keybinds.write(doc, action)
+        });
         self.recorders.insert(action, Recorder::default());
     }
 
@@ -186,6 +229,9 @@ impl App {
                 self.selection_len() > 0
             }
             Action::Paste => self.clipboard.is_some() && self.selection_len() > 0,
+            Action::ShowEntry | Action::HideEntry | Action::ViewEntryRules => {
+                self.selected.is_some()
+            }
             _ => true,
         }
     }
@@ -216,6 +262,12 @@ impl App {
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
+            Action::ViewFolderRules => self.show_folder_rules(),
+            Action::ViewEntryRules => self.show_entry_rules(),
+            Action::SaveLayoutRule => self.save_layout_rule(),
+            Action::ShowEntry => self.pin_entry(false),
+            Action::HideEntry => self.pin_entry(true),
+            Action::PickRule => self.open_rule_picker(),
         }
     }
 }
