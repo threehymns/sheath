@@ -70,9 +70,21 @@ impl Entry {
 
 pub enum Preview {
     Text(String),
+    Image,
     Folder(usize),
     TooLarge,
     Binary,
+}
+
+fn is_image(path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(
+        extension.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" | "svgz" | "avif" | "ico"
+    )
 }
 
 pub(super) fn compare_time(a: Option<SystemTime>, b: Option<SystemTime>) -> Ordering {
@@ -89,6 +101,10 @@ pub(super) fn read_preview(path: &Path, is_dir: bool) -> Option<Preview> {
         return fs::read_dir(path)
             .ok()
             .map(|read| Preview::Folder(read.count()));
+    }
+    // A picture is drawn, not read: its bytes never pass through the text preview.
+    if is_image(path) {
+        return Some(Preview::Image);
     }
     let meta = fs::metadata(path).ok()?;
     if meta.len() > PREVIEW_LIMIT {

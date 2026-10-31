@@ -283,3 +283,27 @@ fn a_folder_size_is_read_on_demand_and_forgotten_with_the_selection() {
         "choosing another row drops the old answer"
     );
 }
+
+#[test]
+fn a_picture_previews_as_a_picture_and_not_as_its_bytes() {
+    let dir = fixture();
+    fs::write(dir.path().join("picture.png"), [0x89, b'P', b'N', b'G']).unwrap();
+    fs::write(dir.path().join("drawing.svg"), "<svg/>").unwrap();
+    let mut app = app(&dir);
+
+    app.select_id("f:picture.png");
+    assert!(
+        matches!(app.preview, Some(crate::app::Preview::Image)),
+        "a PNG is drawn rather than read as text"
+    );
+    app.select_id("f:drawing.svg");
+    assert!(
+        matches!(app.preview, Some(crate::app::Preview::Image)),
+        "so is a vector drawing"
+    );
+    app.select_id("f:notes.md");
+    assert!(
+        matches!(app.preview, Some(crate::app::Preview::Text(_))),
+        "text still previews as text"
+    );
+}

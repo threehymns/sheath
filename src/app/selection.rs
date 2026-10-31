@@ -4,6 +4,9 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+// Room the inspector gives a picture before it is scaled down to fit.
+const PREVIEW_IMAGE_SIZE: f32 = 220.0;
+
 use super::entry::read_preview;
 use super::paths::open_external;
 
@@ -22,6 +25,7 @@ impl App {
         self.anchor = None;
         self.selected = None;
         self.preview = None;
+        self.preview_image = None;
         self.folder_size = None;
     }
 
@@ -44,9 +48,15 @@ impl App {
             .iter()
             .find(|e| e.id == id)
             .map(|e| (e.path.clone(), e.is_dir));
-        self.preview = match found {
-            Some((path, is_dir)) => read_preview(&path, is_dir),
+        self.preview = match &found {
+            Some((path, is_dir)) => read_preview(path, *is_dir),
             None => None,
+        };
+        self.preview_image = match (&self.preview, &self.images, &found) {
+            (Some(Preview::Image), Some(cache), Some((path, _))) => {
+                Some(cache.file(path, PREVIEW_IMAGE_SIZE, 2.0))
+            }
+            _ => None,
         };
     }
 

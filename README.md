@@ -3,7 +3,8 @@
 A file manager built with [Rune](https://github.com/anomalyco/rune) for its
 views, layout, input, animation and rendering. It has a reorderable sidebar of places, a
 breadcrumb path bar, a sortable file list or tile grid, folder and entry rules in its config,
-live search, an inspector with a text preview, and copy, move, rename and trash operations.
+live search that can reach subfolders, an inspector with text and picture previews, and copy,
+move, rename and trash operations.
 
 ## Run
 
@@ -242,5 +243,5 @@ built-in places.
 
 ## Not there yet
 
-No image previews and no per-entry icons or badges. Copy and paste use the app's own clipboard
-rather than the system one.
+No per-entry icons or badges. Copy and paste use the app's own clipboard rather than the system
+one.

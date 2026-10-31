@@ -1,6 +1,6 @@
 use crate::app::{App, Preview};
 use crate::format;
-use rune::{Align, El, Tx, col, el, icon, row, text};
+use rune::{Align, El, SurfaceFit, Tx, col, el, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, file_icon, glyphs};
 
 pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
@@ -314,6 +314,21 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
                             .wrap_anywhere(),
                     ),
             ));
+        }
+        Some(Preview::Image) => {
+            let picture = s.preview_image.as_ref().map(|image| {
+                let ratio = image
+                    .size()
+                    .map(|[width, height]| width as f32 / height.max(1) as f32)
+                    .unwrap_or(1.0);
+                el().key("preview-image")
+                    .w_full()
+                    .max_h(200.0)
+                    .aspect_fit(ratio)
+                    .radius(k.radius.md)
+                    .pixels_fit(image.pixels(), SurfaceFit::Fill)
+            });
+            panel = panel.child(picture.unwrap_or_else(|| note(k, "Decoding the picture…")));
         }
         Some(Preview::Folder(count)) => {
             let label = if *count == 1 {

@@ -85,6 +85,9 @@ pub struct App {
     pub typeahead: String,
     typeahead_at: Option<Instant>,
     pub preview: Option<Preview>,
+    // Decodes pictures off the frame, so the inspector can draw one instead of its bytes.
+    pub images: Option<rune::ImageCache>,
+    pub preview_image: Option<rune::Image>,
     // Only a folder on demand: walking a tree costs too much to do for every row.
     pub folder_size: Option<(u64, usize)>,
     // Whether a search reaches the folders below the one on screen.
@@ -218,6 +221,8 @@ impl App {
             typeahead: String::new(),
             typeahead_at: None,
             preview: None,
+            images: None,
+            preview_image: None,
             folder_size: None,
             search_all: false,
             search_truncated: false,
@@ -410,6 +415,7 @@ impl App {
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
+    s.images = Some(rune::ImageCache::new(wake.clone()));
     s.scan.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);
