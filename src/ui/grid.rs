@@ -1,7 +1,9 @@
 //! The grid layout: a virtualised wall of tiles, one per item, drawn by the app so a press, a
 //! box and a drop read the same state the table's rows do.
 
-use crate::app::{App, GRID_PAD, GRID_ROW_HEIGHT, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
+use crate::app::{
+    App, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
+};
 use rune::{
     Align, Cursor, El, GrowthSpec, ScrollSpec, Spring, Transition, Tx, col, el, icon, row, text,
 };
@@ -37,6 +39,10 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                 .w_full()
                 .grow(1.0)
                 .min_h(0.0)
+                // The tiles sit a touch under the sort bar, so the first row's highlight is not
+                // flush against it. The viewport's own rect moves with it, which is what the
+                // press maths and the box's clip read.
+                .mt(GRID_TOP_MARGIN)
                 .scroll(ScrollSpec {
                     stick_bottom: false,
                 })

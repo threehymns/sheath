@@ -1,7 +1,7 @@
 //! The grid layout: switching to it, clicking and walking its tiles, and remembering the choice.
 
 use super::helpers::*;
-use crate::app::{App, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
+use crate::app::{App, GRID_TOP_MARGIN, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
 use std::fs;
@@ -269,8 +269,18 @@ fn the_grid_toolbar_sorts_from_the_tiles() {
         "the grid offers the sort controls its header used to"
     );
     assert_eq!(
-        rt.state.rows_view[1], list_top,
-        "the sort toolbar is the column header's height"
+        rt.state.rows_view[1],
+        list_top + GRID_TOP_MARGIN,
+        "the grid starts under the sort toolbar's height, plus its top margin"
+    );
+    let (toolbar, _) = rt
+        .presented("grid-toolbar")
+        .expect("the sort toolbar is drawn");
+    let (tile, _) = rt.presented("f:alpha").expect("the first tile is drawn");
+    assert!(
+        (tile[1] - (toolbar[1] + toolbar[3]) - GRID_TOP_MARGIN).abs() < 0.5,
+        "the tiles sit a margin under the sort toolbar: {} below it",
+        tile[1] - (toolbar[1] + toolbar[3])
     );
 
     click(&mut rt, "grid-sort-size");

@@ -29,7 +29,9 @@ pub use commands::{Palette, SettingsTab};
 pub use drag::{FileDrag, PlaceAt, list_drag};
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
-pub use grid::{GRID_PAD, GRID_ROW_HEIGHT, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH};
+pub use grid::{
+    GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
+};
 pub use input::{list_key, on_key};
 pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};

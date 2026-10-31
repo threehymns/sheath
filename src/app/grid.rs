@@ -11,6 +11,10 @@ pub const TILE_GAP: f32 = 8.0;
 pub const GRID_PAD: f32 = 12.0;
 pub const GRID_ROW_HEIGHT: f32 = TILE_HEIGHT + TILE_GAP;
 
+/// The gap between the sort toolbar and the first row of tiles, so a tile's highlight is not
+/// flush against the bar above it.
+pub const GRID_TOP_MARGIN: f32 = 4.0;
+
 /// How the list shows the folder: one row per item, or a wall of tiles.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Layout {
