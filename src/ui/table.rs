@@ -5,7 +5,7 @@ use chrono::{DateTime, Local};
 use rune::{
     Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, row, text,
 };
-use rune_kit::{Kit, SortDir, TableStyle, file_icon, glyphs};
+use rune_kit::{Button, ButtonVariant, ControlSize, Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
 // Header height, shared by the grid's sort toolbar so both layouts start items at the same y.
@@ -411,7 +411,7 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
             "Use New Folder to put something here.",
         )
     };
-    col()
+    let mut state = col()
         .key("empty")
         .w_full()
         .h_full()
@@ -425,5 +425,17 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
                 .font(k.ty.caption())
                 .color(k.c.text_faint)
                 .align(Align::Center),
-        )
+        );
+    // An empty folder's one obvious next step is the button for it.
+    if s.error.is_none() && !searching {
+        state = state.child(
+            Button::new("New Folder")
+                .variant(ButtonVariant::Outline)
+                .control_size(ControlSize::Regular)
+                .on_press_tx(|s: &mut App, tx: &mut Tx| s.new_folder(tx))
+                .build(k)
+                .key("empty-new-folder"),
+        );
+    }
+    state
 }

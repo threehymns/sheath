@@ -63,6 +63,7 @@ unsupported by this backend.
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
 | Delete for good | Shift+Delete (Shift+Cmd+Backspace on macOS) |
+| New folder | Shift+Cmd/Ctrl+N, the toolbar button, or an empty folder's button |
 | New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Make an alias | The row menu, or the command bar: `Make Alias` |

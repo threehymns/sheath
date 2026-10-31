@@ -366,3 +366,17 @@ fn a_search_can_reach_the_folders_below_the_one_on_screen() {
     );
     assert!(!names(&app).contains(&"notes-elsewhere.md"));
 }
+
+#[test]
+fn an_empty_folder_offers_the_button_that_fills_it() {
+    let empty = tempfile::tempdir().unwrap();
+    let mut rt = runtime(app(&empty));
+    rt.frame(0.0);
+
+    assert!(
+        rt.find("empty-new-folder").is_some(),
+        "an empty folder offers New Folder"
+    );
+    click(&mut rt, "empty-new-folder");
+    assert!(empty.path().join("New Folder").is_dir());
+}
