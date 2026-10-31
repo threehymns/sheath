@@ -159,6 +159,7 @@ pub(super) fn palette_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
 pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
     match action {
         Action::CommandBar => &glyphs::KEYBOARD,
+        Action::FocusSearch => &k.glyph.search,
         Action::OpenSettings => &theme::icons::SETTINGS_GEAR,
         Action::Back => &icons::CHEVRON_LEFT,
         Action::Forward => &icons::CHEVRON_RIGHT,

@@ -59,6 +59,11 @@ impl App {
         self.palette = None;
     }
 
+    /// Puts the keyboard in the search field, leaving what is already typed there to edit.
+    pub fn focus_search(&mut self) {
+        self.search.focused = true;
+    }
+
     /// The bar's text field (`TextInput::on_edit`).
     pub fn palette_edit(&mut self) -> &mut TextEdit {
         &mut self
@@ -248,6 +253,7 @@ impl App {
     pub(super) fn perform(&mut self, action: Action, tx: &mut Tx) {
         match action {
             Action::CommandBar => self.open_palette(),
+            Action::FocusSearch => self.focus_search(),
             Action::OpenSettings => self.open_settings(),
             Action::Back => self.back(),
             Action::Forward => self.forward(),

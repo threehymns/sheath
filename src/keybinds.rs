@@ -12,6 +12,7 @@ use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action {
     CommandBar,
+    FocusSearch,
     OpenSettings,
     Back,
     Forward,
@@ -36,8 +37,9 @@ pub enum Action {
 
 impl Action {
     /// Every action, in the order the settings dialog lists them.
-    pub const ALL: [Action; 21] = [
+    pub const ALL: [Action; 22] = [
         Action::CommandBar,
+        Action::FocusSearch,
         Action::OpenSettings,
         Action::Back,
         Action::Forward,
@@ -70,6 +72,7 @@ impl Action {
     pub fn id(self) -> &'static str {
         match self {
             Action::CommandBar => "command-bar",
+            Action::FocusSearch => "focus-search",
             Action::OpenSettings => "open-settings",
             Action::Back => "back",
             Action::Forward => "forward",
@@ -97,6 +100,7 @@ impl Action {
     pub fn label(self) -> &'static str {
         match self {
             Action::CommandBar => "Command Bar",
+            Action::FocusSearch => "Search This Folder",
             Action::OpenSettings => "Settings",
             Action::Back => "Back",
             Action::Forward => "Forward",
@@ -144,6 +148,7 @@ impl Action {
         {
             match self {
                 Action::CommandBar => "ctrl+p",
+                Action::FocusSearch => "/",
                 Action::OpenSettings => "super+comma",
                 Action::Back => "super+bracketleft",
                 Action::Forward => "super+bracketright",
@@ -165,6 +170,7 @@ impl Action {
         {
             match self {
                 Action::CommandBar => "ctrl+p",
+                Action::FocusSearch => "/",
                 Action::OpenSettings => "ctrl+comma",
                 Action::Back => "ctrl+bracketleft",
                 Action::Forward => "ctrl+bracketright",

@@ -53,7 +53,7 @@ unsupported by this backend.
 | Open a folder or file | Double-click, or Return |
 | Jump to a name | Type its first letters; repeat a letter to cycle matches |
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
-| Search this folder | The search field; Escape clears it |
+| Search this folder | The search field, or / to focus it; Escape clears it |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | List or grid | The layout button in the toolbar |
 | Rename / move / trash | F2, Shift+Cmd/Ctrl+M, Cmd/Ctrl+Backspace |
@@ -155,7 +155,8 @@ keybinds {
 
 An empty chord clears the shortcut. Chords are `ctrl`, `alt`, `shift` and `super`, then a key
 name, written the way Rune's shortcuts read them, so the file can be edited by hand. The
-command names are `command-bar`, `open-settings`, `back`, `forward`, `enclosing-folder`,
+command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forward`,
+`enclosing-folder`,
 `refresh`, `new-folder`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`, `cut`, `paste`,
 `duplicate`, `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in

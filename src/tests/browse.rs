@@ -37,6 +37,43 @@ fn searching_filters_the_visible_rows() {
 }
 
 #[test]
+fn the_search_field_shows_clear_only_with_text() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    let empty = rt.elements();
+    assert!(
+        empty
+            .iter()
+            .any(|e| e.key.as_deref() == Some("search-shortcut")),
+        "an empty field shows the chord that focuses it"
+    );
+    assert!(
+        !empty.iter().any(|e| e.path.contains("/search/action")),
+        "an empty field draws no clear button"
+    );
+
+    rt.state.search = rune::TextEdit::new("file");
+    rt.state.apply_filter();
+    rt.invalidate();
+    rt.frame(0.1);
+
+    // The tray the field gave up may still be fading out.
+    let typed: Vec<_> = rt.elements().into_iter().filter(|e| !e.exiting).collect();
+    assert!(
+        !typed
+            .iter()
+            .any(|e| e.key.as_deref() == Some("search-shortcut")),
+        "a field with text hides the chord"
+    );
+    assert!(
+        typed.iter().any(|e| e.path.contains("/search/action")),
+        "a field with text can be cleared"
+    );
+}
+
+#[test]
 fn sorting_by_size_keeps_folders_on_top() {
     let dir = fixture();
     let mut app = app(&dir);

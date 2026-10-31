@@ -31,6 +31,17 @@ fn the_default_shortcuts_run_their_commands() {
 }
 
 #[test]
+fn the_search_shortcut_focuses_the_field() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    let mut tx = Tx::default();
+    let slash = event_for(&app, Action::FocusSearch, Key::Text("/".to_owned()));
+    assert!(crate::app::on_key(&mut app, &slash, &mut tx));
+    assert!(app.search.focused, "the search field takes the keyboard");
+    assert!(app.search.text.is_empty(), "the slash is not typed into it");
+}
+
+#[test]
 fn a_recorded_shortcut_replaces_the_default() {
     let dir = fixture();
     let (mut app, path) = app_in_config_dir(&dir);

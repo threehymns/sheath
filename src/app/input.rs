@@ -46,8 +46,10 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     let mods = event.mods;
     let typing = tx.focused().is_some_and(|key| key.ends_with("input"));
     // The commands that change files wait until no field has the keyboard: a shortcut like F2,
-    // Cmd+C or Delete should type in the search field, not touch what is selected.
+    // Cmd+C or Delete should type in the search field, not touch what is selected. Focusing
+    // the search waits too: "/" is a slash to the field, not a shortcut to run again.
     let guarded = [
+        Action::FocusSearch,
         Action::Rename,
         Action::Move,
         Action::Trash,

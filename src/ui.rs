@@ -154,19 +154,30 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         k,
     )
     .key("nav-up");
-    let search = rune_kit::TextInput::new(&s.search)
+    let mut search = rune_kit::TextInput::new(&s.search)
         .placeholder("Search this folder")
         .leading_icon(k.glyph.search)
-        .clear_button()
         .width(Some(248.0))
         .on_edit(|s: &mut App| &mut s.search)
-        .on_change(|s: &mut App, _| s.apply_filter())
-        .on_action(|s: &mut App, _| {
+        .on_change(|s: &mut App, _| s.apply_filter());
+    if s.search.text.is_empty() {
+        // Nothing to clear yet, so the slot shows the chord that reaches the field instead.
+        let caps = s.keybinds.keycaps(Action::FocusSearch);
+        if !caps.is_empty() {
+            search = search.trailing(crate::keycaps::tray(
+                k,
+                "search-shortcut",
+                &caps,
+                k.c.bg_base,
+            ));
+        }
+    } else {
+        search = search.clear_button().on_action(|s: &mut App, _| {
             s.search.clear();
             s.apply_filter();
-        })
-        .build(k)
-        .key("search");
+        });
+    }
+    let search = search.build(k).key("search");
 
     let new_folder = IconButton::new(&icons::FOLDER_PLUS)
         .variant(IconButtonVariant::GhostMuted)
