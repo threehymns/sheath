@@ -8,6 +8,7 @@ use super::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SheetKind {
     Rename,
+    RenameMany,
     RenamePlace,
     Move,
     Trash,
@@ -68,6 +69,20 @@ fn destination_path(raw: &str, cwd: &Path) -> Result<PathBuf, String> {
 impl App {
     pub fn begin_rename(&mut self) {
         let ids = self.selected_ids();
+        if ids.len() > 1 {
+            // Several rows rename together: one name, numbered in the order they read.
+            let mut edit = TextEdit::new("Item".to_owned());
+            edit.set_selection(0, edit.text.len());
+            edit.focused = true;
+            self.sheet = Some(Sheet {
+                kind: SheetKind::RenameMany,
+                targets: ids,
+                name: String::new(),
+                edit,
+                error: None,
+            });
+            return;
+        }
         let [id] = ids.as_slice() else {
             return;
         };
@@ -189,6 +204,7 @@ impl App {
         };
         let result = match sheet.kind {
             SheetKind::Rename => self.rename_entry(&sheet),
+            SheetKind::RenameMany => self.rename_many(&sheet),
             SheetKind::RenamePlace => self.rename_place_on_disk(&sheet),
             SheetKind::Move => self.move_entries(&sheet),
             SheetKind::Trash => self.trash_entries(&sheet),
@@ -249,6 +265,55 @@ impl App {
         fs::rename(&old_path, &new_path)
             .map_err(|err| format!("Couldn’t rename “{old_name}”: {err}"))?;
         self.pending_select = Some((vec![format!("f:{new_name}")], true));
+        self.reload();
+        self.error = None;
+        Ok(())
+    }
+
+    fn rename_many(&mut self, sheet: &Sheet) -> Result<(), String> {
+        let base = sheet.edit.text.trim().to_owned();
+        validate_name(&base)?;
+        let items: Vec<(PathBuf, String, bool)> = sheet
+            .targets
+            .iter()
+            .filter_map(|id| self.entry_snapshot(id))
+            .collect();
+        if items.is_empty() {
+            return Err("Those items are no longer in this folder.".into());
+        }
+        // Every name is worked out before the disk is touched, so a clash renames nothing.
+        let width = items.len().to_string().len();
+        let mut plan: Vec<(PathBuf, String)> = Vec::new();
+        for (index, (path, name, is_dir)) in items.iter().enumerate() {
+            let extension = if *is_dir {
+                ""
+            } else {
+                name.rfind('.')
+                    .filter(|at| *at > 0)
+                    .map(|at| &name[at..])
+                    .unwrap_or("")
+            };
+            let candidate = format!("{base} {:0width$}{extension}", index + 1);
+            let target = path.with_file_name(&candidate);
+            if target != *path && target.exists() {
+                return Err(format!("An item named “{candidate}” already exists."));
+            }
+            plan.push((path.clone(), candidate));
+        }
+        for (path, candidate) in &plan {
+            fs::rename(path, path.with_file_name(candidate)).map_err(|err| {
+                format!(
+                    "Couldn’t rename “{}”: {err}",
+                    path.file_name()
+                        .map(|name| name.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                )
+            })?;
+        }
+        self.pending_select = Some((
+            plan.iter().map(|(_, name)| format!("f:{name}")).collect(),
+            true,
+        ));
         self.reload();
         self.error = None;
         Ok(())

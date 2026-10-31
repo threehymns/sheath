@@ -203,7 +203,7 @@ impl App {
             Action::Back => self.can_back(),
             Action::Forward => self.can_forward(),
             Action::EnclosingFolder => self.can_up(),
-            Action::Rename => self.selection_len() == 1,
+            Action::Rename => self.selection_len() > 0,
             Action::CopyPath => self.selection_len() > 0,
             Action::Move
             | Action::Trash

@@ -169,28 +169,30 @@ fn the_trash_sheet_covers_the_whole_selection() {
 }
 
 #[test]
-fn renaming_needs_exactly_one_row() {
+fn renaming_needs_a_row_and_batches_a_whole_selection() {
     let dir = fixture();
     let mut rt = runtime(app(&dir));
     rt.frame(0.0);
 
+    assert!(
+        !rt.state.action_enabled(Action::Rename),
+        "there is nothing to rename yet"
+    );
     click(&mut rt, "f:file2.txt");
     click_with(&mut rt, "f:notes.md", shift());
-    assert!(!rt.state.action_enabled(Action::Rename));
-    rt.state.begin_rename();
-    assert!(rt.state.sheet.is_none(), "no rename sheet for a selection");
+    assert!(rt.state.action_enabled(Action::Rename));
 
-    let f2 = KeyEvent {
+    rt.key(KeyEvent {
         key: Key::Function(2),
         mods: Mods::default(),
-    };
-    rt.key(f2);
+    });
     rt.frame(0.1);
-    assert!(rt.state.sheet.is_none(), "F2 leaves a selection alone");
+    assert_eq!(
+        rt.state.sheet.as_ref().map(|s| s.kind),
+        Some(SheetKind::RenameMany),
+        "F2 renames the whole selection together"
+    );
     assert_eq!(rt.state.selection_len(), 3);
-
-    click(&mut rt, "f:file2.txt");
-    assert!(rt.state.action_enabled(Action::Rename));
 }
 
 #[test]
@@ -305,4 +307,32 @@ fn deleting_for_good_asks_first_and_then_leaves_nothing_behind() {
         "deleting a file it can write leaves no error: {:?}",
         app.error
     );
+}
+
+#[test]
+fn renaming_several_rows_numbers_them_in_the_order_they_read() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.select_id("f:file2.txt");
+    app.selection.insert("f:file10.txt".into());
+    app.selection.insert("f:notes.md".into());
+
+    app.begin_rename();
+    assert_eq!(
+        app.sheet.as_ref().map(|s| s.kind),
+        Some(crate::app::SheetKind::RenameMany),
+        "several rows open the batch sheet"
+    );
+    assert_eq!(app.sheet.as_ref().unwrap().edit.text, "Item");
+    app.sheet_edit().text = "Photo".into();
+    app.submit_sheet(&mut rune::Tx::default());
+    app.settle_scan();
+
+    assert!(dir.path().join("Photo 1.txt").exists());
+    assert!(dir.path().join("Photo 2.txt").exists());
+    assert!(
+        dir.path().join("Photo 3.md").exists(),
+        "each row keeps its own extension"
+    );
+    assert_eq!(app.selection_len(), 3, "the renamed rows stay chosen");
 }

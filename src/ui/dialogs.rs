@@ -22,6 +22,18 @@ pub(super) fn sheet_layer(s: &App, sheet: &Sheet, k: &Kit, layers: &mut Vec<El>)
             "Name",
             "Press Return to rename. Escape cancels.",
         ),
+        SheetKind::RenameMany => prompt_sheet(
+            sheet,
+            k,
+            layers,
+            "rename-many",
+            "Rename Items",
+            "Rename the selected items together, in the order they read.",
+            "Rename",
+            "Name",
+            "Each item takes this name and a number, keeping its extension: Item 1.txt, \
+             Item 2.txt. Press Return to rename. Escape cancels.",
+        ),
         SheetKind::RenamePlace => prompt_sheet(
             sheet,
             k,
@@ -336,14 +348,17 @@ pub(super) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
         )
         .separator()
         .item(
-            MenuItem::new("Rename")
-                .icon(&theme::icons::EDIT)
-                .shortcut(s.keybinds.menu_label(Action::Rename))
-                .disabled(many)
-                .on_select(|s: &mut App| {
-                    s.close_menu();
-                    s.begin_rename();
-                }),
+            MenuItem::new(if many {
+                format!("Rename {count} Items…")
+            } else {
+                "Rename".to_owned()
+            })
+            .icon(&theme::icons::EDIT)
+            .shortcut(s.keybinds.menu_label(Action::Rename))
+            .on_select(|s: &mut App| {
+                s.close_menu();
+                s.begin_rename();
+            }),
         )
         .item(
             MenuItem::new(if many {
