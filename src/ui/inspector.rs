@@ -76,25 +76,7 @@ pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
                 ),
         )
         .child(rule(k))
-        .child(
-            col()
-                .key("info")
-                .w_full()
-                .gap(6.0)
-                .child(info_row(
-                    k,
-                    "Size",
-                    if entry.is_dir {
-                        "—".into()
-                    } else {
-                        format::size(entry.size)
-                    },
-                ))
-                .child(info_row(k, "Created", format::full_time(entry.created)))
-                .child(info_row(k, "Modified", format::full_time(entry.modified)))
-                .child(info_row(k, "Permissions", entry.permissions.clone()))
-                .child(info_row_with_help(k, "Where", parent.clone(), parent)),
-        )
+        .child(info_section(s, k, entry, &parent))
         .child(actions(k, entry))
         .child(rule(k))
         .child(preview_section(s, k));
@@ -230,6 +212,50 @@ fn info_row_with_help(k: &Kit, label: &str, value: String, help: String) -> El {
                 .w(66.0),
         )
         .child(value_el)
+}
+
+fn info_section(s: &App, k: &Kit, entry: &crate::app::Entry, parent: &str) -> El {
+    let mut info = col()
+        .key("info")
+        .w_full()
+        .gap(6.0)
+        .child(info_row(k, "Size", size_label(s, entry)))
+        .child(info_row(k, "Created", format::full_time(entry.created)))
+        .child(info_row(k, "Modified", format::full_time(entry.modified)))
+        .child(info_row(k, "Permissions", entry.permissions.clone()))
+        .child(info_row_with_help(
+            k,
+            "Where",
+            parent.to_owned(),
+            parent.to_owned(),
+        ));
+    if entry.is_dir {
+        info = info.child(
+            row().w_full().justify_end().child(
+                Button::new(if s.folder_size.is_some() {
+                    "Recalculate Size"
+                } else {
+                    "Calculate Size"
+                })
+                .variant(ButtonVariant::Outline)
+                .control_size(ControlSize::Small)
+                .on_press(|s: &mut App| s.calculate_folder_size())
+                .build(k)
+                .key("calculate-size"),
+            ),
+        );
+    }
+    info
+}
+
+fn size_label(s: &App, entry: &crate::app::Entry) -> String {
+    if !entry.is_dir {
+        return format::size(entry.size);
+    }
+    match s.folder_size {
+        Some((bytes, items)) => format!("{} · {} items", format::size(bytes), items),
+        None => "—".into(),
+    }
 }
 
 fn actions(k: &Kit, entry: &crate::app::Entry) -> El {

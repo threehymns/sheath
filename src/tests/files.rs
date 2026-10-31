@@ -257,3 +257,29 @@ fn folders_first_can_be_turned_off() {
         "files come first when the setting is off"
     );
 }
+
+#[test]
+fn a_folder_size_is_read_on_demand_and_forgotten_with_the_selection() {
+    let dir = fixture();
+    fs::create_dir(dir.path().join("alpha").join("inner")).unwrap();
+    fs::write(dir.path().join("alpha").join("inner").join("a.txt"), "abc").unwrap();
+    let mut app = app(&dir);
+
+    app.select_id("f:alpha");
+    assert!(
+        app.folder_size.is_none(),
+        "a folder's size is not read up front"
+    );
+    app.calculate_folder_size();
+    assert_eq!(
+        app.folder_size,
+        Some((3, 2)),
+        "the button counts the file below and the folder around it"
+    );
+
+    app.select_id("f:notes.md");
+    assert!(
+        app.folder_size.is_none(),
+        "choosing another row drops the old answer"
+    );
+}

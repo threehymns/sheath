@@ -15,6 +15,7 @@ mod scroll;
 mod scrolling;
 mod selection;
 mod sheets;
+mod size;
 mod watch;
 
 pub use commands::{Palette, SettingsTab};
@@ -84,6 +85,8 @@ pub struct App {
     pub typeahead: String,
     typeahead_at: Option<Instant>,
     pub preview: Option<Preview>,
+    // Only a folder on demand: walking a tree costs too much to do for every row.
+    pub folder_size: Option<(u64, usize)>,
     pub sidebar: PaneState,
     pub inspector: PaneState,
     pub search: TextEdit,
@@ -208,6 +211,7 @@ impl App {
             typeahead: String::new(),
             typeahead_at: None,
             preview: None,
+            folder_size: None,
             sidebar: PaneState::new(212.0).range(176.0, 330.0),
             inspector,
             search: TextEdit::new(""),

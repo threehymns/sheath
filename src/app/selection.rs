@@ -22,10 +22,23 @@ impl App {
         self.anchor = None;
         self.selected = None;
         self.preview = None;
+        self.folder_size = None;
+    }
+
+    pub fn calculate_folder_size(&mut self) {
+        let Some(entry) = self.selected_entry() else {
+            return;
+        };
+        if !entry.is_dir {
+            return;
+        }
+        let path = entry.path.clone();
+        self.folder_size = Some(super::size::folder_size(&path));
     }
 
     pub(super) fn focus_id(&mut self, id: &str) {
         self.selected = Some(id.to_owned());
+        self.folder_size = None;
         let found = self
             .entries
             .iter()
