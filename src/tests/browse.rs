@@ -30,6 +30,7 @@ fn searching_filters_the_visible_rows() {
     let mut app = app(&dir);
     app.search = rune::TextEdit::new("file");
     app.apply_filter();
+    app.settle_find();
     let mut found = names(&app);
     found.sort();
     assert_eq!(found, ["file10.txt", "file2.txt"]);
@@ -56,6 +57,7 @@ fn the_search_field_shows_clear_only_with_text() {
 
     rt.state.search = rune::TextEdit::new("file");
     rt.state.apply_filter();
+    rt.state.settle_find();
     rt.invalidate();
     rt.frame(0.1);
 
@@ -333,6 +335,7 @@ fn a_search_reaches_the_folders_below_the_one_on_screen() {
 
     app.search.text = "notes".into();
     app.apply_filter();
+    app.settle_find();
     let rows: Vec<(&str, Option<&str>)> = app
         .visible
         .iter()
@@ -388,6 +391,7 @@ fn a_name_in_two_subfolders_keeps_the_rows_apart() {
 
     app.search = rune::TextEdit::new("dup");
     app.apply_filter();
+    app.settle_find();
     assert_eq!(names(&app).len(), 2, "both matches are listed");
     let ids: Vec<&str> = app
         .visible

@@ -446,6 +446,7 @@ pub fn setup(s: &mut App, wake: Waker) {
     s.previews
         .attach(std::sync::Arc::new(rune::ImageCache::new(wake.clone())));
     s.scan.set_waker(wake.clone());
+    s.finder.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);
 }

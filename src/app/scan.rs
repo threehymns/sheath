@@ -51,6 +51,7 @@ pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
 // How many matches a search below the folder collects before it stops walking.
 pub(super) const SEARCH_LIMIT: usize = 5_000;
 
+#[derive(Default)]
 pub(super) struct Found {
     pub(super) entries: Vec<Entry>,
     pub(super) truncated: bool,
@@ -58,7 +59,7 @@ pub(super) struct Found {
 
 /// Every entry named like `query`, from `root` and the folders below it. Hidden names stay out of
 /// the walk unless asked for, so a search does not crawl through a dot directory's contents.
-/// The desktop build indexes with fff instead; a browser tab has no filesystem to index.
+/// The desktop build hands the walk to fff instead; a browser tab has no filesystem to index.
 #[cfg(target_arch = "wasm32")]
 pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: usize) -> Found {
     let mut entries = Vec::new();

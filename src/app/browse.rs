@@ -124,6 +124,23 @@ impl App {
         self.apply_scan(scan)
     }
 
+    /// An index built on the worker has landed: the search runs again over it, so the rows the
+    /// keystroke could not answer yet appear.
+    pub(super) fn land_find(&mut self) -> bool {
+        if self.finder.land().is_none() {
+            return false;
+        }
+        if self.parked.is_some() {
+            self.apply_filter();
+        }
+        true
+    }
+
+    /// Whether a search is showing and the folder is still being walked for it.
+    pub fn is_indexing(&self) -> bool {
+        self.parked.is_some() && self.finder.is_building()
+    }
+
     fn apply_scan(&mut self, scan: Scan) -> bool {
         if scan.path != self.cwd {
             return false;
@@ -171,6 +188,15 @@ impl App {
         }
         self.land_scan();
         self.pending_reveal = None;
+    }
+
+    // A search-index walk runs on the pool too, so a test waits for it the same way.
+    #[cfg(test)]
+    pub(crate) fn settle_find(&mut self) {
+        while self.finder.is_building() {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        self.land_find();
     }
 
     // The read sorted as asked; a sort change since then reorders the rows here.
@@ -464,6 +490,9 @@ impl App {
     pub fn phrase_for_count(&self) -> String {
         if self.is_scanning() {
             return "Reading…".into();
+        }
+        if self.is_indexing() {
+            return "Searching…".into();
         }
         let shown = self.visible.len();
         // The walk stopped before the folders ran out, so the count is a floor, not a total.
