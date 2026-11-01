@@ -24,6 +24,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # Every nested cargo and rustc invocation resolves this toolchain by name instead of letting
+      # rustup decide to sync a channel itself. A sync that starts mid-build downloads a toolchain,
+      # then rolls it back, and takes rustc out from under a build script that is still running.
+      RUSTUP_TOOLCHAIN: stable
     steps:
       - uses: actions/checkout@v4
 
@@ -38,8 +43,16 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-
 
-      - name: Add the wasm target
-        run: rustup target add wasm32-unknown-unknown
+      # One install, before anything compiles, with everything the job needs: the minimal profile
+      # (rustc, cargo, std), the wasm target and rust-src, which a nested build asks for. With the
+      # toolchain already current, later rustup calls have nothing to download, so no step can
+      # change the compiler while another is using it. `--no-self-update` keeps rustup out of it.
+      - name: Install the Rust toolchain
+        run: |
+          rustup set auto-self-update disable
+          rustup toolchain install stable --profile minimal --no-self-update \
+            --target wasm32-unknown-unknown --component rust-src
+          rustc --version
 
       # `scripts/web` uses wasm-opt -Oz when it finds one, and wasm-bindgen must match the version
       # the lockfile selects, so both are installed here rather than left to the runner.
