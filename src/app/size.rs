@@ -6,8 +6,8 @@
 //! already running checks the same stop flag at every folder it enters, so moving the selection
 //! off a big tree ends the read instead of letting it finish for nobody.
 
+use crate::vfs as fs;
 use rune::{Latest, Waker};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};

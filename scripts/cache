@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+"""Stamps a web build with a content hash and the caching headers Cloudflare Pages should send.
+
+A year-long `immutable` cache is only safe when the URL changes with the contents, so the hash of
+`app.js`, `app_bg.wasm` and the snippet modules goes into the page as `?v=<hash>` on every
+reference to them, and `_headers` marks those files immutable. `index.html` keeps revalidating,
+so the next deploy is picked up on the next load and pulls the new hash with it.
+
+usage: scripts/cache DIR
+"""
+
+import hashlib
+import re
+import sys
+from pathlib import Path
+
+REFERENCE = re.compile(r"(\./app(?:\.js|_bg\.wasm))(?:\?v=[0-9a-f]+)?")
+HEADERS = """\
+/index.html
+  cache-control: no-cache
+
+/app.js
+  cache-control: public,max-age=31536000,immutable
+
+/app_bg.wasm
+  cache-control: public,max-age=31536000,immutable
+
+/snippets/*
+  cache-control: public,max-age=31536000,immutable
+"""
+
+
+def digest(root: Path) -> str:
+    """A hash of every script and module in the build, so any change gives a new URL."""
+    sha = hashlib.sha256()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in (".js", ".wasm"):
+            continue
+        sha.update(path.relative_to(root).as_posix().encode())
+        sha.update(path.read_bytes())
+    return sha.hexdigest()[:16]
+
+
+def main(argv: list[str]) -> None:
+    if len(argv) != 2:
+        sys.exit("usage: scripts/cache DIR")
+    root = Path(argv[1])
+    page = root / "index.html"
+    text = page.read_text(encoding="utf-8")
+    version = digest(root)
+    text, count = REFERENCE.subn(lambda match: f"{match.group(1)}?v={version}", text)
+    page.write_text(text, encoding="utf-8")
+    (root / "_headers").write_text(HEADERS, encoding="utf-8")
+    print(f"cache: ?v={version} on {count} references; _headers written")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

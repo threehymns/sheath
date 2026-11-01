@@ -77,11 +77,11 @@ pub struct Place {
 
 impl Place {
     pub fn is_available(&self) -> bool {
-        !self.hidden && self.path.exists()
+        !self.hidden && crate::vfs::exists(&self.path)
     }
 
     pub fn folder(&self) -> PathBuf {
-        if self.path.is_dir() {
+        if crate::vfs::is_dir(&self.path) {
             return self.path.clone();
         }
         self.path
@@ -126,7 +126,7 @@ impl Places {
     }
 
     pub fn at(path: PathBuf) -> Places {
-        match std::fs::read_to_string(&path) {
+        match crate::vfs::read_to_string(&path) {
             Ok(text) => match parse(&text) {
                 Ok(parsed) => Places::build(Some(path), parsed),
                 Err(err) => {
@@ -218,7 +218,7 @@ impl Places {
     pub fn insert(&mut self, section: Section, index: usize, paths: &[PathBuf]) -> bool {
         let mut fresh = Vec::new();
         for path in paths {
-            if !path.exists() || fresh.iter().any(|place: &Place| place.path == *path) {
+            if !crate::vfs::exists(path) || fresh.iter().any(|place: &Place| place.path == *path) {
                 continue;
             }
             match self.find_path(path).cloned() {
@@ -456,7 +456,11 @@ fn render(places: &Places) -> String {
 fn place_id(path: &Path) -> String {
     format!(
         "{}:{}",
-        if path.is_dir() { "folder" } else { "file" },
+        if crate::vfs::is_dir(path) {
+            "folder"
+        } else {
+            "file"
+        },
         path.display()
     )
 }

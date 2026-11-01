@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Build the browser bundle with Rune's wasm packager from the Rune checkout Cargo fetched.
+# See "Web build" in README.md.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+
+rune_manifest=$(cargo metadata --format-version 1 |
+  python3 -c 'import json,sys; print(next(p["manifest_path"] for p in json.load(sys.stdin)["packages"] if p["name"] == "rune" and "anomalyco/rune" in (p.get("source") or "")))')
+
+rune_root=$(cd "$(dirname "$rune_manifest")/../.." && pwd)
+builder="$rune_root/scripts/web-build.sh"
+if [[ ! -f $builder ]]; then
+  echo "web: $builder is missing; check the Rune revision in Cargo.toml" >&2
+  exit 1
+fi
+
+# The page in web/ boots the app after OPFS is read; without one, Rune writes its own.
+out=target/web
+opt=1
+dev=0
+watch=0
+pass=()
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  case ${args[i]} in
+    --out|--example)
+      pass+=("${args[i]}")
+      if ((i + 1 < ${#args[@]})); then
+        [[ ${args[i]} == --out ]] && out=${args[i + 1]}
+        pass+=("${args[i + 1]}")
+        i=$((i + 1))
+      fi
+      ;;
+    --dev)
+      dev=1
+      pass+=("${args[i]}")
+      ;;
+    --watch)
+      watch=1
+      pass+=("${args[i]}")
+      ;;
+    --no-opt) opt=0 ;;
+    *) pass+=("${args[i]}") ;;
+  esac
+done
+
+# Rune's release profile already builds small; wasm-opt -Oz then removes roughly 40% of the
+# bytes, so it runs by default. Binaryen may not be installed, but npm and Bun both carry it.
+if ((opt && !dev)); then
+  if ! command -v wasm-opt >/dev/null 2>&1; then
+    runner=
+    if command -v npx >/dev/null 2>&1; then
+      runner="npx --yes wasm-opt"
+    elif command -v bunx >/dev/null 2>&1; then
+      runner="bunx wasm-opt"
+    fi
+    if [[ -n $runner ]]; then
+      mkdir -p target/bin
+      printf '#!/bin/sh\nexec %s "$@"\n' "$runner" > target/bin/wasm-opt
+      chmod +x target/bin/wasm-opt
+      export PATH="$root/target/bin:$PATH"
+    fi
+  fi
+  if command -v wasm-opt >/dev/null 2>&1; then
+    pass+=(--opt)
+  else
+    echo "web: no wasm-opt and neither npx nor bunx is available; the bundle stays unoptimized" >&2
+  fi
+fi
+
+if [[ -f $root/web/index.html ]]; then
+  mkdir -p "$out"
+  cp "$root/web/index.html" "$out/index.html"
+  # Only a watch build writes `.stamp`, so only it marks the page: the page reloads itself by
+  # polling that file, and a normal build should never ask for one that is not there.
+  if ((watch)); then
+    awk '{ print } !done && /<\/title>/ { print "<meta name=\"sheath-watch\" content=\"\">"; done = 1 }' \
+      "$out/index.html" > "$out/index.html.watch"
+    mv "$out/index.html.watch" "$out/index.html"
+  fi
+fi
+
+bash "$builder" sheath --out "$out" ${pass[@]+"${pass[@]}"}
+
+# The shipped folder carries no comments and only the whitespace the page reads. --dev and
+# --watch keep the page readable instead, and --watch never reaches here while its loop runs.
+if ((!dev && !watch)) && [[ -d $out ]]; then
+  python3 "$root/scripts/minify" "$out"
+  python3 "$root/scripts/cache" "$out"
+fi

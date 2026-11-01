@@ -223,7 +223,7 @@ fn column_resize(id: &'static str, title: &'static str, width: f32, rule: rune::
 
 fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
     // One clock reading serves every row; the labels only need the day and the hour.
-    let now = Local::now();
+    let now = crate::clock::now();
     col()
         .key("file-rows")
         .w_full()

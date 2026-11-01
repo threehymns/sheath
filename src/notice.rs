@@ -1,4 +1,5 @@
-use std::time::{Duration, Instant};
+use rune::time::Instant;
+use std::time::Duration;
 
 // Seconds a toast stays up, enough to read it and press Copy.
 pub const SECONDS: u64 = 20;

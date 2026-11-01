@@ -1,42 +1,17 @@
-mod app;
-mod config;
-mod corner;
-mod format;
-mod icons;
-mod keybinds;
-mod keycaps;
-mod notice;
-mod places;
-mod recorder;
-mod rules;
-mod session;
-mod settings;
-mod ui;
-mod views;
-
-#[cfg(test)]
-mod tests;
-
-use rune::AppSpec;
-
+#[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    rune::set_app_id("dev.sheath.Sheath");
-    rune::run(AppSpec {
-        min_size: Some((1000.0, 600.0)),
-        fonts: rune_theme_opencode::FONTS,
-        families: rune_theme_opencode::FAMILIES,
-        on_key: Some(app::on_key),
-        poll: Some(app::poll),
-        setup: Some(app::setup),
-        scenes: &[
-            ("settings", |s: &mut app::App| {
-                s.open_tab(app::SettingsTab::General)
-            }),
-            ("settings-set", |s: &mut app::App| {
-                s.toggle_hidden();
-                s.open_tab(app::SettingsTab::General)
-            }),
-        ],
-        ..AppSpec::new("Sheath", (1180.0, 760.0), app::App::new, ui::view)
-    });
+    sheath::launch();
 }
+
+/// The browser's entry point: read the saved KDL files, then run the window. `wasm-bindgen`
+/// exports it to the page, which awaits it after the module is ready.
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+pub async fn boot() {
+    sheath::hydrate_web().await;
+    sheath::launch();
+}
+
+/// A binary needs a `main` on every target; the page calls `boot` instead.
+#[cfg(target_arch = "wasm32")]
+fn main() {}

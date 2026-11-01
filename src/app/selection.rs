@@ -1,8 +1,9 @@
 use crate::app::App;
+use rune::time::Instant;
 use rune::{Mods, PointerPress, Tx};
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::entry::read_preview;
 use super::paths::open_external;

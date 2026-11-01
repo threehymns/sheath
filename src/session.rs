@@ -28,7 +28,7 @@ impl Session {
             path: Some(path.clone()),
             ..Session::default()
         };
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = crate::vfs::read_to_string(&path) else {
             return session;
         };
         let (folder, columns) = parse(&text);

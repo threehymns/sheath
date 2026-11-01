@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<link rel="icon" href="data:,">
+<title>Sheath</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --deep:#fafafa; --base:#ffffff; --layer1:#fafafa; --layer2:#f2f2f2; --layer3:#eeeeee;
+  --edge:#00000014; --rule:#dbdbdb; --zebra:rgba(22,22,22,.03); --pressed:#00000014;
+  --text:#161616; --muted:#5c5c5c; --faint:#808080;
+  --icon:#3a3a3a; --icon-muted:#808080; --icon-faint:#aeaeae; --accent:#3b5cf6;
+}
+@media (prefers-color-scheme:dark){:root{
+  --deep:#080808; --base:#161616; --layer1:#242424; --layer2:#2e2e2e; --layer3:#3a3a3a;
+  --edge:#ffffff14; --rule:#282828; --zebra:rgba(250,250,250,.035); --pressed:#ffffff1a;
+  --text:#fafafa; --muted:#aeaeae; --faint:#808080;
+  --icon:#dbdbdb; --icon-muted:#808080; --icon-faint:#5c5c5c; --accent:#a2bcff;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none}
+body{background:var(--deep);color:var(--text);font:13px/1.35 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.name:not(.cell),.kind,.date,.t1{translate:0 1px}
+.crumb,.head .cell,.size,.count,.insp b,.insp p,.t05{translate:0 0.5px}
+/* The skeleton covers Rune's canvas, which turns opaque black as soon as the app configures
+   WebGPU, until a frame is on it. It is opaque, and it goes in one step rather than fading: a
+   translucent skeleton composited over the app would double up the 8% fills it shares with the
+   real window (the selected place, the card's edge), so the fake window must never overlap it. */
+#boot{display:flex;width:100%;height:100%;position:relative;z-index:1;background:var(--deep)}
+svg{display:block;flex:none;fill:none;stroke:currentColor}
+svg:not([width]){width:16px;height:16px}
+.i{color:var(--icon-muted)}
+/* Sidebar: 212 wide, list inset 10, rows 28 tall. */
+.rail{width:212px;flex:none;padding:0 10px 10px;min-height:0;overflow:hidden}
+.rail-head{height:48px;display:flex;align-items:center;gap:8px;padding:0 0 0 2px}
+.rail-head b{font-weight:500;color:var(--muted)}
+.toggle{width:24px;height:24px;display:grid;place-items:center;color:var(--icon-muted)}
+.sec{display:flex;flex-direction:column;gap:2px}
+.sec + .sec{margin-top:1px}
+.sec h2{margin:0;height:28px;display:flex;align-items:center;padding:4px 8px 0;font-size:12px;font-weight:500;color:var(--muted)}
+.srow{height:28px;display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:6px;color:var(--muted);font-size:13px;line-height:20px;letter-spacing:0em;white-space:nowrap;overflow:hidden}
+.srow.sel{background:var(--pressed);color:var(--text)}
+.srow.sel .i{color:var(--icon)}
+/* The toolbar band spans the main column; the card and the inspector sit under it. */
+.main-col{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.below{flex:1;min-width:0;min-height:0;display:flex}
+/* Main pane: a bg-base card with a 1 px border-muted edge, 8 of frame along the bottom. */
+.card{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--base);border:1px solid var(--edge);background-clip:padding-box;border-radius:8px;margin:0 0 8px;overflow:hidden}
+.card>*{margin-left:-1px;margin-right:-1px}
+.card>.path{margin-top:-1px}
+.toolbar{position:relative;height:48px;flex:none;display:flex;align-items:center;padding:0 12px}
+.lead{display:flex;align-items:center;gap:4px}
+.tail{margin-left:auto;display:flex;align-items:center;gap:4px}
+.ib{width:24px;height:24px;border-radius:6px;flex:none;display:grid;place-items:center;color:var(--icon-muted);background:none;border:0;padding:0}
+.ib:disabled{opacity:.50}
+.ib.on{background:var(--pressed);color:var(--icon);border:0}
+.ib.sm{width:20px;height:20px;border-radius:4px}
+.search{position:absolute;top:9.5px;left:50%;transform:translateX(-50%);width:248px;height:29px;display:flex;align-items:center;gap:6px;padding:0 8px;border-radius:6px;box-shadow:0 1px 1.5px rgba(0,0,0,.08),inset 0 0 0 1px rgba(0,0,0,.08);background:var(--base);color:var(--faint);font-size:13px;white-space:nowrap;overflow:hidden}
+@media (prefers-color-scheme:dark){
+  .search{box-shadow:0 1px 2px rgba(0,0,0,.4),inset 0 0.5px 0 rgba(255,255,255,.1),inset 0 0 0 0.5px rgba(255,255,255,.12);background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02)) var(--base)}
+}
+.search .i{color:var(--icon-muted)}
+.search .key{position:absolute;right:10px;width:16px;height:16px;flex:none;display:grid;place-items:center;border-radius:3px;font-size:9.5px;line-height:12px;color:var(--text);background:var(--layer1);box-shadow:inset 0 -1.5px 0px #000a,0 1px 0 1px rgba(255,255,255,.075),inset 0 3px 2px #ffffff04,inset 0 -5px 5px #0005,inset 0 1px 0 rgba(255,255,255,.1),0 -0.5px 0 1px #000a}
+/* Path bar: 40 tall, 12 inset, 2 gap. */
+.path{height:40px;flex:none;display:flex;align-items:center;gap:2px;padding:0 12px;font-size:13px;line-height:20px;letter-spacing:0em;white-space:nowrap}
+.path .chev{color:var(--icon-faint);translate: 0.5px 0;}
+.path .crumb{padding:3px 5px;color:var(--muted);border-radius:4px}
+.path .crumb.last{color:var(--text);font-weight:500;padding:0 5px}
+.path .grow{flex:1}
+.path .count{font-size:11px;color:var(--faint);letter-spacing:0.01em}
+.rule{height:1px;flex:none;background:var(--edge)}
+/* Table: 32 header, 28 rows, cell padding 10, columns 150 / 92 / 158. */
+.head{height:32px;flex:none;display:flex;align-items:center;padding:0;font-size:13px;font-weight:500;line-height:19.5px;color:var(--muted);box-shadow:inset 0 -1px 0 var(--rule)}
+.head .cell,.row .cell{display:flex;align-items:center;padding:0 10px;height:100%}
+.head .cell{position:relative}
+.head .cell.line::after{content:"";position:absolute;right:0;top:6px;bottom:6px;width:1px;background:var(--rule)}
+.head .name{flex:1;min-width:0;gap:2px;color:var(--text)}
+.head .sort{transform:rotate(180deg);color:var(--text);translate:0 -.5px}
+.rows{flex:1;min-height:0;overflow:hidden}
+.row{height:30px;display:flex;align-items:center;padding:0;font-size:13px;}
+.row:nth-child(even){background:var(--zebra)}
+.row .cell{min-width:0;white-space:nowrap;overflow:hidden}
+.row .middle{flex:1;gap:8px;overflow:hidden}
+.row .name{color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.head .kind,.row .kind{width:150px;flex:none}
+.row .kind{color:var(--muted)}
+.head .size,.row .size{width:92px;flex:none;justify-content:flex-end}
+.row .size{color:var(--muted);font-size:11.5px;line-height:18px;font-family:monospace;font-variant-numeric:tabular-nums}
+.head .date,.row .date{width:158px;flex:none}
+.row .date{color:var(--muted)}
+.row .folder{color:var(--accent)}
+.row .file{color:var(--icon-muted)}
+/* Inspector: 286 wide on the window's deep background, centered with 20 padding. */
+.insp{width:286px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:0 20px;text-align:center}
+.insp .i{color:var(--icon-faint)}
+.insp b{font-size:13px;font-weight:500;line-height:20px;color:var(--muted)}
+.insp p{margin:0;font-size:11.15px;line-height:16px;color:var(--faint);max-width:240px}
+#boot .error{padding:24px;font-size:16px;color:var(--text)}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <g id="g-house"><path d="M2.5 7.25 8 2.5l5.5 4.75V13.5H2.5V7.25Z" stroke-linejoin="round"/><path d="M6 13.5V9.25h4v4.25" stroke-linejoin="round"/></g>
+  <g id="g-desktop"><rect x="1.75" y="3" width="12.5" height="8" rx="1"/><path d="M6 14h4M8 11v3" stroke-linecap="round"/></g>
+  <g id="g-documents"><path d="M4.5 1.5h5l3 3v10h-8v-13Z" stroke-linejoin="round"/><path d="M9.5 1.5v3h3M6.5 8h4M6.5 10.5h4" stroke-linecap="round"/></g>
+  <g id="g-downloads"><path d="M8 2.5v7.5M5.25 7.5 8 10.25 10.75 7.5M2.5 13.5h11" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-pictures"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><circle stroke="none" cx="5.75" cy="6" r="1" fill="currentColor"/><path d="M2.5 11.5 6 8l2 2 2-2 3.5 3.5" stroke-linejoin="round"/></g>
+  <g id="g-drive"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M2 9.5h12"/><circle stroke="none" cx="11.25" cy="6.25" r=".75" fill="currentColor"/></g>
+  <g id="g-folder"><path d="M1.5 3.5H6L7.5 5H14.5V13.5H1.5V3.5Z" stroke-linejoin="round"/></g>
+  <g id="g-foldersmall"><path d="M1.75 13.25v-10h4.5l1.5 1.5h6.5v8.5h-12.5Z" stroke-linejoin="round"/></g>
+  <g id="g-folder-open"><path d="M1.5 13.5V3.5H6L7.5 5H13.5V7.5" stroke-linejoin="round"/><path d="M1.5 13.5L3.5 7.5H15L13 13.5H1.5Z" stroke-linejoin="round"/></g>
+  <g id="g-folder-plus"><path d="M1.75 13.25v-10h4.5l1.5 1.5h6.5v8.5h-12.5Z" stroke-linejoin="round"/><path d="M8 6.75v3.5M6.25 8.5h3.5" stroke-linecap="round"/></g>
+  <g id="g-file"><path d="M3.5 1.5H9.5L12.5 4.5V14.5H3.5V1.5Z" stroke-linejoin="round"/><path d="M9.5 1.5V4.5H12.5" stroke-linejoin="round"/></g>
+  <g id="g-file-text"><path d="M3.5 1.5H9.5L12.5 4.5V14.5H3.5V1.5Z" stroke-linejoin="round"/><path d="M9.5 1.5V4.5H12.5" stroke-linejoin="round"/><path d="M5.5 8.5H10.5M5.5 10.5H10.5M5.5 12.5H8.5"/></g>
+  <g id="g-left"><path d="M10 3.5 5.5 8l4.5 4.5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-right"><path d="M6 3.5 10.5 8 6 12.5" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-up"><path d="M8 13V3M4 7l4-4 4 4" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-refresh"><path d="M13.25 8A5.25 5.25 0 1 1 11.7 4.3M13.5 2.5v3h-3" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-search"><path d="M14 14L10.3454 10.3454M6.88889 11.7778C9.58889 11.7778 11.7778 9.58889 11.7778 6.88889C11.7778 4.18889 9.58889 2 6.88889 2C4.18889 2 2 4.18889 2 6.88889C2 9.58889 4.18889 11.7778 6.88889 11.7778Z"/></g>
+  <g id="g-eye-off"><path d="m2 2 12 12M6.2 3.7A8 8 0 0 1 8 3.5C12.5 3.5 15 8 15 8a13 13 0 0 1-2.4 2.8M10.3 12.1a8 8 0 0 1-2.3.4C3.5 12.5 1 8 1 8a13 13 0 0 1 2.5-2.9M6.6 6.6a2 2 0 0 0 2.8 2.8" stroke-linecap="round" stroke-linejoin="round"/></g>
+  <g id="g-grid"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></g>
+  <g id="g-inspector"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M9.75 3.5v9"/></g>
+  <g id="g-gear"><path d="M7.99998 1.3335L14 4.66683V11.3335L7.99998 14.6668L2 11.3335V4.66683L7.99998 1.3335Z"/><path d="M9.99998 8.00016C9.99998 9.10476 9.10458 10.0002 7.99998 10.0002C6.89538 10.0002 5.99998 9.10476 5.99998 8.00016C5.99998 6.89556 6.89538 6.00016 7.99998 6.00016C9.10458 6.00016 9.99998 6.89556 9.99998 8.00016Z"/></g>
+  <g id="g-panel"><rect x="2" y="3" width="12" height="10" rx="2" stroke-width="1"/><path d="M6 3.5V12.5" stroke-width="1"/></g>
+
+  <g id="g-chevron-down"><path d="M5 6.5L8 9.5L11 6.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/></g>
+</defs></svg>
+<div id="boot">
+  <aside class="rail">
+    <div class="rail-head">
+      <span class="toggle"><svg><use href="#g-panel"/></svg></span>
+      <b class="t05">Sheath</b>
+    </div>
+    <div class="sec">
+      <h2>Favourites</h2>
+      <div class="srow sel"><svg class="i"><use href="#g-house"/></svg><span class="t05">Home</span></div>
+      <div class="srow"><svg class="i"><use href="#g-desktop"/></svg><span class="t05">Desktop</span></div>
+      <div class="srow"><svg class="i"><use href="#g-documents"/></svg><span class="t05">Documents</span></div>
+      <div class="srow"><svg class="i"><use href="#g-downloads"/></svg><span class="t05">Downloads</span></div>
+      <div class="srow"><svg class="i"><use href="#g-pictures"/></svg><span class="t05">Pictures</span></div>
+    </div>
+    <div class="sec">
+      <h2>Locations</h2>
+      <div class="srow"><svg class="i"><use href="#g-drive"/></svg><span class="t05">Computer</span></div>
+      <div class="srow"><svg class="i"><use href="#g-folder"/></svg><span class="t05">Temporary</span></div>
+    </div>
+  </aside>
+  <div class="main-col">
+  <div class="toolbar">
+    <div class="lead">
+      <button class="ib" disabled><svg><use href="#g-left"/></svg></button>
+      <button class="ib" disabled><svg><use href="#g-right"/></svg></button>
+      <button class="ib"><svg><use href="#g-up"/></svg></button>
+    </div>
+    <div class="search">
+      <svg class="i"><use href="#g-search"/></svg>
+      <span class="t05">Search this folder</span>
+      <span class="key">/</span>
+    </div>
+    <div class="tail">
+      <button class="ib"><svg><use href="#g-folder-open"/></svg></button>
+      <button class="ib"><svg><use href="#g-folder-plus"/></svg></button>
+      <button class="ib"><svg><use href="#g-eye-off"/></svg></button>
+      <button class="ib"><svg><use href="#g-grid"/></svg></button>
+      <button class="ib on"><svg><use href="#g-inspector"/></svg></button>
+      <button class="ib"><svg><use href="#g-gear"/></svg></button>
+    </div>
+  </div>
+  <div class="below">
+  <main class="card">
+    <div class="path">
+      <svg width="14" height="14" viewBox="0 0 16 16" style="color:var(--icon-faint)"><use href="#g-drive"/></svg>
+      <span class="crumb">/</span>
+      <svg class="chev" width="11" height="11" viewBox="0 0 16 16"><use href="#g-right"/></svg>
+      <span class="crumb">home</span>
+      <svg class="chev" width="11" height="11" viewBox="0 0 16 16"><use href="#g-right"/></svg>
+      <span class="crumb last">you</span>
+      <button class="ib sm"><svg><use href="#g-drive"/></svg></button>
+      <div class="grow"></div>
+      <span class="count">6 items</span>
+      <button class="ib sm"><svg><use href="#g-refresh"/></svg></button>
+    </div>
+    <div class="rule"></div>
+    <div class="head">
+      <span class="cell name">Name
+        <svg class="sort" width="14" height="14" viewBox="0 0 16 16"><use href="#g-chevron-down"/></svg>
+      </span>
+      <span class="cell kind line">Kind</span>
+      <span class="cell size line">Size</span>
+      <span class="cell date">Date Modified</span>
+    </div>
+    <div class="rows">
+      <div class="row"><span class="cell middle"><svg class="folder"><use href="#g-folder"/></svg><span class="name">Desktop</span></span><span class="cell kind">Folder</span><span class="cell size">──</span><span class="cell date">Oct 26</span></div>
+      <div class="row"><span class="cell middle"><svg class="folder"><use href="#g-folder"/></svg><span class="name">Documents</span></span><span class="cell kind">Folder</span><span class="cell size">──</span><span class="cell date">Oct 26</span></div>
+      <div class="row"><span class="cell middle"><svg class="folder"><use href="#g-folder"/></svg><span class="name">Downloads</span></span><span class="cell kind">Folder</span><span class="cell size">──</span><span class="cell date">Oct 26</span></div>
+      <div class="row"><span class="cell middle"><svg class="folder"><use href="#g-folder"/></svg><span class="name">Pictures</span></span><span class="cell kind">Folder</span><span class="cell size">──</span><span class="cell date">Oct 26</span></div>
+      <div class="row"><span class="cell middle"><svg class="folder"><use href="#g-folder"/></svg><span class="name">Projects</span></span><span class="cell kind">Folder</span><span class="cell size">──</span><span class="cell date">Oct 26</span></div>
+      <div class="row"><span class="cell middle"><svg class="file"><use href="#g-file-text"/></svg><span class="name">README.md</span></span><span class="cell kind">Markdown document</span><span class="cell size">233 B</span><span class="cell date">Oct 26</span></div>
+    </div>
+  </main>
+  <aside class="insp">
+    <svg class="i" width="40" height="40" viewBox="0 0 16 16"><use href="#g-file"/></svg>
+    <b>No selection</b>
+    <p>Select a file or folder to inspect it.</p>
+  </aside>
+  </div>
+  </div>
+</div>
+<script>
+// Start the wasm download while the HTML is still parsing. The module below hands this same
+// response to wasm-bindgen, which compiles it as it streams in instead of after the page loads.
+window.__wasm = navigator.gpu ? fetch('./app_bg.wasm').catch(() => './app_bg.wasm') : null;
+
+// The app draws its own context menus, and Rune builds its web window with winit's
+// prevent-default off, so a right-click would also open the browser's menu on top of them.
+// Claim the event for the page: the canvas gets the press either way, this only stops Chrome
+// offering its own menu over the app's.
+addEventListener('contextmenu', (event) => event.preventDefault());
+
+// `boot` returns once the app's event loop is spawned, before the GPU has started and drawn
+// anything; the canvas is opaque black until a frame is on it, so the skeleton covers it until
+// then. A canvas has no paint event, but every frame takes its texture through
+// `getCurrentTexture`, so counting its calls counts drawn frames. The first of those can paint
+// translucent colours as if they were opaque, so the skeleton waits for a second one when the
+// app draws it; an idle app draws once, so that wait is short. Without WebGPU, or with an app
+// that never draws, the timeouts here still take the skeleton down.
+window.__painted = new Promise((resolve) => {
+    let frames = 0;
+    let done = false;
+    const reveal = () => {
+        if (done) return;
+        done = true;
+        resolve();
+    };
+    const context = window.GPUCanvasContext?.prototype;
+    if (context && typeof context.getCurrentTexture === 'function') {
+        const acquired = context.getCurrentTexture;
+        context.getCurrentTexture = function (...args) {
+            frames += 1;
+            if (frames === 2) reveal();
+            else if (frames === 1) setTimeout(reveal, 150);
+            return acquired.apply(this, args);
+        };
+    }
+    setTimeout(reveal, 4000);
+});
+</script>
+<script type="module">
+// `scripts/web --watch` marks the page and bumps `.stamp` after each build, which reloads it. A
+// normal build has no marker, so it never asks for a file that is not there.
+if (document.querySelector('meta[name="sheath-watch"]')) {
+    (async () => {
+        const stamp = new URL('.stamp', location.href);
+        let last;
+        try {
+            const probe = await fetch(stamp, { cache: 'no-store' });
+            if (!probe.ok) return;
+            last = await probe.text();
+        } catch {
+            return;
+        }
+        setInterval(async () => {
+            try {
+                const next = await (await fetch(stamp, { cache: 'no-store' })).text();
+                if (next !== last) location.reload();
+                last = next;
+            } catch {}
+        }, 500);
+    })();
+}
+
+import init, { boot } from './app.js';
+const shell = document.querySelector('#boot');
+try {
+    if (!navigator.gpu) throw new Error('WebGPU requires a supported browser and HTTPS.');
+    // `boot` reads the KDL files OPFS kept before the window opens, then runs the app.
+    await init({ module_or_path: window.__wasm ?? './app_bg.wasm' });
+    await boot();
+    // The app's first frames are a few frames after `boot`, so keep the skeleton up until one
+    // has painted, then take it down in one step.
+    await window.__painted;
+    await new Promise(requestAnimationFrame);
+    shell.remove();
+} catch (error) {
+    shell.innerHTML = '';
+    const message = document.createElement('div');
+    message.className = 'error';
+    message.textContent = String(error);
+    shell.append(message);
+    console.error(error);
+}
+</script>
+</html>

@@ -32,7 +32,7 @@ impl Views {
             path: Some(path.clone()),
             ..Views::default()
         };
-        let Ok(text) = std::fs::read_to_string(&path) else {
+        let Ok(text) = crate::vfs::read_to_string(&path) else {
             return views;
         };
         match parse(&text) {

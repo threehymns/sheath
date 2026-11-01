@@ -10,11 +10,10 @@ use super::{rule_insertion, rule_key, rule_positions};
 impl App {
     pub fn short_path(path: &Path) -> String {
         let text = path.to_string_lossy();
-        let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))
-        else {
+        let Some(home) = crate::app::home_dir() else {
             return text.into_owned();
         };
-        let home = home.to_string_lossy();
+        let home = home.to_string_lossy().into_owned();
         let home = home.trim_end_matches(['/', '\\']);
         match text.strip_prefix(home) {
             Some(rest) if rest.is_empty() || rest.starts_with(['/', '\\']) => format!("~{rest}"),

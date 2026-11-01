@@ -78,9 +78,11 @@ pub fn expand_home(pattern: &str) -> String {
     let Some(rest) = pattern.strip_prefix('~') else {
         return pattern.to_owned();
     };
-    let Some(home) = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")) else {
+    let Some(home) = crate::app::home_dir() else {
         return pattern.to_owned();
     };
-    let home = home.to_string_lossy();
-    format!("{}{rest}", home.trim_end_matches(['/', '\\']))
+    format!(
+        "{}{rest}",
+        home.to_string_lossy().trim_end_matches(['/', '\\'])
+    )
 }

@@ -267,7 +267,7 @@ pub(super) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
         return;
     };
     let name = place.name.clone();
-    let icon = if place.path.is_dir() {
+    let icon = if crate::vfs::is_dir(&place.path) {
         &glyphs::FOLDER_OPEN
     } else {
         &glyphs::FILE

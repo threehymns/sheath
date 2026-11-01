@@ -62,6 +62,19 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
         previous = Some(index);
         first = false;
     }
+    #[cfg(target_arch = "wasm32")]
+    {
+        bar = bar.child(
+            IconButton::new(&icons::DRIVE)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label("Open Folder")
+                .help("Open a folder from this computer")
+                .on_press(|_s: &mut App| crate::vfs::pick_folder())
+                .build(k)
+                .key("grant-folder"),
+        );
+    }
     bar = bar
         .child(el().key("path-spacer").grow(1.0))
         .child(

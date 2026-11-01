@@ -1,4 +1,4 @@
-use std::fs::Metadata;
+use crate::vfs::Metadata;
 use std::path::Path;
 use std::time::SystemTime;
 

@@ -1,7 +1,7 @@
 use crate::app::Entry;
+use crate::vfs as fs;
 use rune_kit::SortDir;
 use std::cmp::Ordering;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::entry::compare_time;

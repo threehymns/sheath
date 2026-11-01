@@ -1,6 +1,6 @@
 use crate::app::App;
+use crate::vfs as fs;
 use rune::{TextEdit, Tx};
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use super::*;
@@ -253,7 +253,7 @@ impl App {
             .map(Path::to_path_buf)
             .unwrap_or_else(|| self.cwd.clone());
         let new_path = folder.join(&new_name);
-        if new_path.exists() {
+        if fs::exists(&new_path) {
             let same = fs::canonicalize(&new_path)
                 .ok()
                 .zip(fs::canonicalize(&old_path).ok())
@@ -295,7 +295,7 @@ impl App {
             };
             let candidate = format!("{base} {:0width$}{extension}", index + 1);
             let target = path.with_file_name(&candidate);
-            if target != *path && target.exists() {
+            if target != *path && fs::exists(&target) {
                 return Err(format!("An item named “{candidate}” already exists."));
             }
             plan.push((path.clone(), candidate));
@@ -349,7 +349,7 @@ impl App {
         }
         let destination = fs::canonicalize(destination)
             .map_err(|_| format!("“{}” isn’t a folder.", destination.display()))?;
-        if !destination.is_dir() {
+        if !fs::is_dir(&destination) {
             return Err(format!("“{}” isn’t a folder.", destination.display()));
         }
         let many = items.len() > 1;
@@ -364,7 +364,7 @@ impl App {
                     });
                 }
             }
-            if destination.join(name).exists() {
+            if fs::exists(&destination.join(name)) {
                 return Err(format!(
                     "An item named “{name}” already exists in “{}”.",
                     destination.display()
@@ -398,8 +398,14 @@ impl App {
             });
         }
         for (path, name, _) in &items {
-            trash::delete(path)
-                .map_err(|err| format!("Couldn’t move “{name}” to the Trash: {err}"))?;
+            // A browser tab has no system Trash, so the web build removes the item instead.
+            #[cfg(not(target_arch = "wasm32"))]
+            let removed = trash::delete(path)
+                .map_err(|err| format!("Couldn’t move “{name}” to the Trash: {err}"));
+            #[cfg(target_arch = "wasm32")]
+            let removed =
+                fs::remove_all(path).map_err(|err| format!("Couldn’t delete “{name}”: {err}"));
+            removed?;
         }
         self.reload();
         self.error = None;
@@ -438,7 +444,7 @@ impl App {
 
     fn go_to(&mut self, sheet: &Sheet) -> Result<(), String> {
         let destination = destination_path(&sheet.edit.text, &self.cwd)?;
-        if !destination.is_dir() {
+        if !fs::is_dir(&destination) {
             return Err(format!("“{}” isn’t a folder.", destination.display()));
         }
         self.navigate(destination);

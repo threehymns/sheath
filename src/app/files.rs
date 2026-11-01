@@ -1,6 +1,6 @@
 use crate::app::App;
+use crate::vfs as fs;
 use rune::Tx;
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -17,7 +17,7 @@ fn free_name_with(dir: &Path, name: &str, suffix: &str) -> String {
     };
     let mut candidate = format!("{stem} {suffix}{extension}");
     let mut n = 2;
-    while dir.join(&candidate).exists() {
+    while fs::exists(&dir.join(&candidate)) {
         candidate = format!("{stem} {suffix} {n}{extension}");
         n += 1;
     }
@@ -35,15 +35,23 @@ fn make_link(from: &Path, to: &Path) -> io::Result<()> {
 
 #[cfg(windows)]
 fn make_link(from: &Path, to: &Path) -> io::Result<()> {
-    if from.is_dir() {
+    if fs::is_dir(from) {
         std::os::windows::fs::symlink_dir(from, to)
     } else {
         std::os::windows::fs::symlink_file(from, to)
     }
 }
 
+#[cfg(not(any(unix, windows)))]
+fn make_link(_from: &Path, _to: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "this platform has no links",
+    ))
+}
+
 fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
-    if from.is_dir() {
+    if fs::is_dir(from) {
         fs::create_dir(to)?;
         for entry in fs::read_dir(from)? {
             let entry = entry?;
@@ -59,7 +67,7 @@ impl App {
     pub fn new_file(&mut self, _tx: &mut Tx) {
         let mut name = "New File.txt".to_owned();
         let mut n = 2;
-        while self.cwd.join(&name).exists() {
+        while fs::exists(&self.cwd.join(&name)) {
             name = format!("New File {n}.txt");
             n += 1;
         }
@@ -103,7 +111,7 @@ impl App {
     pub fn new_folder(&mut self, _tx: &mut Tx) {
         let mut name = "New Folder".to_owned();
         let mut n = 2;
-        while self.cwd.join(&name).exists() {
+        while fs::exists(&self.cwd.join(&name)) {
             name = format!("New Folder {n}");
             n += 1;
         }
@@ -165,7 +173,7 @@ impl App {
                     continue;
                 };
                 let target = destination.join(&name);
-                if target.exists() {
+                if fs::exists(&target) {
                     error = Some(format!(
                         "An item named “{name}” already exists in “{}”.",
                         destination.display()

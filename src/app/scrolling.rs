@@ -185,6 +185,19 @@ impl App {
             self.reload();
             redraw = true;
         }
+        // A folder listing, a file read, or the folder picker finished in the browser.
+        if crate::vfs::take_dirty() {
+            self.reload();
+            redraw = true;
+        }
+        if let Some(path) = crate::vfs::take_granted() {
+            self.accept_granted_folder(path);
+            redraw = true;
+        }
+        if let Some(error) = crate::vfs::take_error() {
+            self.error = Some(error);
+            redraw = true;
+        }
         if !self.notices.is_empty() {
             self.notices.retain(|notice| !notice.expired());
             redraw = true;

@@ -2979,6 +2979,7 @@ dependencies = [
  "heif-oxide",
  "image",
  "jpeg-decoder",
+ "js-sys",
  "kdl",
  "notify",
  "rune",
@@ -2986,6 +2987,8 @@ dependencies = [
  "rune-theme-opencode",
  "tempfile",
  "trash",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]

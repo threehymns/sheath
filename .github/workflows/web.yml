@@ -1,0 +1,64 @@
+# Builds the browser bundle on every push and publishes it to Cloudflare Pages from `main`.
+#
+# Every push builds the bundle, so a change that breaks the web target fails on the commit that
+# made it; only `main` publishes. Pages serves the folder over HTTPS, which WebGPU needs, and
+# compresses responses at the edge — app_bg.wasm is 3 MB gzipped against 7.2 MB raw, so that
+# matters for the startup this page is built around.
+#
+# The repository needs two secrets: CLOUDFLARE_API_TOKEN (Pages: Edit) and CLOUDFLARE_ACCOUNT_ID.
+# The project is `sheath`; change --project-name here and on the Cloudflare side together.
+name: Web
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      # Rune comes from a pinned git revision and most of the time goes into compiling it, so the
+      # cargo checkout and the wasm build are cached against the lockfile that selects them.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Add the wasm target
+        run: rustup target add wasm32-unknown-unknown
+
+      # `scripts/web` uses wasm-opt -Oz when it finds one, and wasm-bindgen must match the version
+      # the lockfile selects, so both are installed here rather than left to the runner.
+      - name: Install wasm-bindgen-cli and wasm-opt
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends binaryen
+          version=$(cargo metadata --format-version 1 |
+            python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "wasm-bindgen"))')
+          echo "wasm-bindgen $version"
+          cargo install wasm-bindgen-cli --version "$version" --locked
+
+      - name: Build the web bundle
+        run: scripts/web
+
+      - if: github.ref == 'refs/heads/main'
+        name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy target/web --project-name=sheath --branch=main

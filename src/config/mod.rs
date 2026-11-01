@@ -1,71 +1,98 @@
 mod disk;
 
+use crate::vfs as fs;
 use disk::{Readback, Stamp, stamp_of};
 use kdl::KdlDocument;
+#[cfg(not(target_arch = "wasm32"))]
 use notify::Watcher;
 use rune::{Latest, Waker};
 use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+
+/// The config folder's watcher. A browser tab has no folder to watch, so the store reads its
+/// defaults once and never wakes for a change.
+#[cfg(not(target_arch = "wasm32"))]
+type WatchHandle = notify::RecommendedWatcher;
+#[cfg(target_arch = "wasm32")]
+type WatchHandle = ();
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, TryRecvError};
 
 pub const CONFIG: &str = "config.kdl";
 
 pub const KEYBINDS: &str = "keybinds.kdl";
 
 pub fn dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("SHEATH_CONFIG_DIR") {
-        return Some(PathBuf::from(dir));
-    }
-    #[cfg(target_os = "macos")]
+    #[cfg(target_arch = "wasm32")]
     {
-        std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath"))
+        // A browser tab's config lives in OPFS, read and written through the in-memory tree.
+        Some(crate::vfs::config_dir())
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("Sheath"))
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")))
-            .map(|dir| dir.join("sheath"))
-    }
-    #[cfg(not(any(unix, target_os = "windows")))]
-    {
-        None
+        if let Some(dir) = std::env::var_os("SHEATH_CONFIG_DIR") {
+            return Some(PathBuf::from(dir));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::env::var_os("HOME")
+                .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath"))
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("Sheath"))
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            std::env::var_os("XDG_CONFIG_HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .or_else(|| {
+                    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config"))
+                })
+                .map(|dir| dir.join("sheath"))
+        }
+        #[cfg(not(any(unix, target_os = "windows")))]
+        {
+            None
+        }
     }
 }
 
 pub fn state_dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("SHEATH_STATE_DIR") {
-        return Some(PathBuf::from(dir));
-    }
-    #[cfg(target_os = "macos")]
+    #[cfg(target_arch = "wasm32")]
     {
-        std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath/State"))
+        Some(crate::vfs::state_dir())
     }
-    #[cfg(target_os = "windows")]
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("Sheath"))
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::env::var_os("XDG_STATE_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .or_else(|| {
-                std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
-            })
-            .map(|dir| dir.join("sheath"))
-    }
-    #[cfg(not(any(unix, target_os = "windows")))]
-    {
-        None
+        if let Some(dir) = std::env::var_os("SHEATH_STATE_DIR") {
+            return Some(PathBuf::from(dir));
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::env::var_os("HOME")
+                .map(|home| PathBuf::from(home).join("Library/Application Support/Sheath/State"))
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("Sheath"))
+        }
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            std::env::var_os("XDG_STATE_HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .or_else(|| {
+                    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state"))
+                })
+                .map(|dir| dir.join("sheath"))
+        }
+        #[cfg(not(any(unix, target_os = "windows")))]
+        {
+            None
+        }
     }
 }
 
@@ -215,7 +242,7 @@ pub struct Store {
     dir: Option<PathBuf>,
     files: BTreeMap<&'static str, Loaded>,
     changes: Option<Receiver<()>>,
-    _watcher: Option<notify::RecommendedWatcher>,
+    _watcher: Option<WatchHandle>,
     /// Reads run on a worker, so `poll` never touches the disk; the newest request wins.
     reads: Latest<Vec<Readback>>,
     /// Counts writes, so a read that started before one can't put the text it replaced back.
@@ -336,35 +363,41 @@ impl Store {
 
     /// Re-reads a file when it changes; the watcher reports which file changed, not what changed.
     pub fn watch(&mut self, wake: Waker) {
-        let Some(dir) = self.dir.clone() else {
-            return;
-        };
-        let _ = fs::create_dir_all(&dir);
-        self.reads.set_waker(wake.clone());
-        let (tx, rx) = mpsc::channel();
-        let watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-            let Ok(event) = event else {
+        #[cfg(target_arch = "wasm32")]
+        let _ = wake;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let Some(dir) = self.dir.clone() else {
                 return;
             };
-            let ours = event.paths.iter().any(|path| {
-                path.file_name()
-                    .is_some_and(|name| name == CONFIG || name == KEYBINDS)
-            });
-            if ours && tx.send(()).is_ok() {
-                wake();
+            let _ = fs::create_dir_all(&dir);
+            self.reads.set_waker(wake.clone());
+            let (tx, rx) = mpsc::channel();
+            let watcher =
+                notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
+                    let Ok(event) = event else {
+                        return;
+                    };
+                    let ours = event.paths.iter().any(|path| {
+                        path.file_name()
+                            .is_some_and(|name| name == CONFIG || name == KEYBINDS)
+                    });
+                    if ours && tx.send(()).is_ok() {
+                        wake();
+                    }
+                });
+            let Ok(mut watcher) = watcher else {
+                return;
+            };
+            if watcher
+                .watch(&dir, notify::RecursiveMode::NonRecursive)
+                .is_err()
+            {
+                return;
             }
-        });
-        let Ok(mut watcher) = watcher else {
-            return;
-        };
-        if watcher
-            .watch(&dir, notify::RecursiveMode::NonRecursive)
-            .is_err()
-        {
-            return;
+            self.changes = Some(rx);
+            self._watcher = Some(watcher);
         }
-        self.changes = Some(rx);
-        self._watcher = Some(watcher);
     }
 
     /// Asks a worker to read both files, so a change the watcher reports lands in a later poll.

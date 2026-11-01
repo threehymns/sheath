@@ -24,6 +24,17 @@ pub fn place_rename_edit(s: &mut App) -> &mut TextEdit {
 }
 
 impl App {
+    /// Opens a folder the browser let the user share, adding it to the sidebar.
+    pub fn accept_granted_folder(&mut self, path: PathBuf) {
+        if self
+            .places
+            .insert(Section::Favourites, 0, std::slice::from_ref(&path))
+        {
+            self.places.save();
+        }
+        self.navigate(path);
+    }
+
     pub fn move_place(&mut self, section: Section, from: usize, to: usize) {
         if self.places.reorder(section, from, to) {
             self.places.save();
@@ -51,9 +62,9 @@ impl App {
 
     pub fn open_place(&mut self, path: PathBuf) {
         self.commit_place_rename();
-        if path.is_dir() {
+        if crate::vfs::is_dir(&path) {
             self.navigate(path);
-        } else if path.exists() {
+        } else if crate::vfs::exists(&path) {
             self.reveal_in_folder(path);
         }
     }
@@ -130,16 +141,16 @@ impl App {
             return Ok(());
         }
         let new_path = folder.join(&new_name);
-        if new_path.exists() {
-            let same = std::fs::canonicalize(&new_path)
+        if crate::vfs::exists(&new_path) {
+            let same = crate::vfs::canonicalize(&new_path)
                 .ok()
-                .zip(std::fs::canonicalize(&old_path).ok())
+                .zip(crate::vfs::canonicalize(&old_path).ok())
                 .is_some_and(|(a, b)| a == b);
             if !same {
                 return Err(format!("An item named “{new_name}” already exists here."));
             }
         }
-        std::fs::rename(&old_path, &new_path)
+        crate::vfs::rename(&old_path, &new_path)
             .map_err(|err| format!("Couldn’t rename “{old_name}”: {err}"))?;
         let old_id = id.clone();
         self.places.move_path(&old_path, &new_path);

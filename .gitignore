@@ -1,3 +1,4 @@
 /target
 /artifacts
 *.png
+__pycache__

@@ -214,7 +214,7 @@ impl App {
             | Action::MakeAlias => self.selection_len() > 0,
             Action::Paste => self.clipboard.is_some(),
             Action::SelectAll => !self.visible.is_empty(),
-            Action::OpenTerminal => self.cwd.is_dir(),
+            Action::OpenTerminal => crate::vfs::is_dir(&self.cwd),
             Action::Reveal => self.selected.is_some(),
             Action::DeselectAll | Action::InvertSelection => self.selection_len() > 0,
             Action::ShowEntry | Action::HideEntry | Action::ViewEntryRules => {

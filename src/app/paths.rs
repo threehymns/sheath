@@ -1,11 +1,13 @@
+use crate::vfs;
 use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::process::Command;
 
 // The folder and file named on the command line, or nothing when it names no place to open.
 pub(super) fn start_location() -> Option<(PathBuf, Option<String>)> {
     let arg = rune::extra_args().iter().find(|a| !a.starts_with('-'))?;
     let path = absolute(PathBuf::from(arg));
-    if path.is_file() {
+    if vfs::is_file(&path) {
         let parent = path
             .parent()
             .map(Path::to_path_buf)
@@ -16,33 +18,57 @@ pub(super) fn start_location() -> Option<(PathBuf, Option<String>)> {
             .unwrap_or_default();
         return Some((parent, Some(name)));
     }
-    if path.is_dir() {
+    if vfs::is_dir(&path) {
         return Some((path, None));
     }
     None
 }
 
 pub(super) fn default_location() -> PathBuf {
-    home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| root_dir()))
+    home_dir().unwrap_or_else(cwd)
+}
+
+/// `std::env::current_dir` panics on wasm; the web build's tree hangs from `/`.
+fn cwd() -> PathBuf {
+    #[cfg(target_arch = "wasm32")]
+    {
+        root_dir()
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::current_dir().unwrap_or_else(|_| root_dir())
+    }
 }
 
 fn absolute(path: PathBuf) -> PathBuf {
     if path.is_absolute() {
         path
     } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(&path))
-            .unwrap_or(path)
+        cwd().join(&path)
     }
 }
 
+/// A browser tab's home is the demo folder the web build seeds.
+#[cfg(target_arch = "wasm32")]
+pub fn home_dir() -> Option<PathBuf> {
+    Some(vfs::home())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME")
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
-        .filter(|p| p.is_dir())
+        .filter(|p| vfs::is_dir(p))
 }
 
+/// A browser tab's tree hangs from `/`.
+#[cfg(target_arch = "wasm32")]
+pub fn root_dir() -> PathBuf {
+    PathBuf::from("/")
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub fn root_dir() -> PathBuf {
     #[cfg(unix)]
     {
@@ -56,8 +82,25 @@ pub fn root_dir() -> PathBuf {
     }
 }
 
+/// A browser tab opens nothing outside itself.
+#[cfg(target_arch = "wasm32")]
+pub(super) fn open_terminal(_path: &Path) -> Result<(), String> {
+    Err("A browser tab has no terminal to open.".into())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn open_external(_path: &Path) -> Result<(), String> {
+    Err("A browser tab can’t open files from the demo folder.".into())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(super) fn reveal_external(_path: &Path) -> Result<(), String> {
+    Err("A browser tab has no file manager to reveal in.".into())
+}
+
 /// Opens a terminal with its working folder set here. Linux tries `$TERMINAL`, then the common
 /// emulators; the first one that launches wins.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn open_terminal(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -94,9 +137,14 @@ pub(super) fn open_terminal(path: &Path) -> Result<(), String> {
             failures.join("; ")
         ))
     }
+    #[cfg(not(any(unix, target_os = "windows")))]
+    {
+        let _ = path;
+        Err("This platform has no terminal to open.".into())
+    }
 }
 
-#[cfg(all(unix, not(target_os = "macos")))]
+#[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
 fn terminals() -> Vec<String> {
     let mut out = Vec::new();
     if let Some(program) = std::env::var_os("TERMINAL") {
@@ -120,6 +168,7 @@ fn terminals() -> Vec<String> {
     out
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
     match command.spawn() {
         Ok(mut child) => {
@@ -132,6 +181,7 @@ fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn open_external(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let mut command = Command::new("open");
@@ -158,6 +208,7 @@ pub(super) fn open_external(path: &Path) -> Result<(), String> {
 
 /// Shows the item in the platform's file manager, with the item itself chosen where the platform
 /// can do that.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn reveal_external(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
@@ -174,7 +225,7 @@ pub(super) fn reveal_external(path: &Path) -> Result<(), String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         // A folder opens directly; a file opens the folder that holds it.
-        let target = if path.is_dir() {
+        let target = if vfs::is_dir(path) {
             path.to_path_buf()
         } else {
             path.parent()
@@ -184,5 +235,10 @@ pub(super) fn reveal_external(path: &Path) -> Result<(), String> {
         let mut command = Command::new("xdg-open");
         command.arg(&target);
         spawn_reaped(command, &target.display().to_string())
+    }
+    #[cfg(not(any(unix, target_os = "windows")))]
+    {
+        let _ = path;
+        Err("This platform has no file manager to reveal in.".into())
     }
 }

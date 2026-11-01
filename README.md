@@ -20,6 +20,72 @@ cargo run -- README.md    # start beside a file, with it selected
 Arguments after `--` go to the app; Rune parses its own flags first. The framework is pinned
 to a `dev` commit in `Cargo.toml`, so the first build fetches Rune from git and takes a while.
 
+## Web build
+
+Rune's web target draws the same views in a browser tab through one WebGPU canvas. A tab has no
+filesystem, so the web build browses an in-memory demo folder: opening, renaming, copying,
+moving, creating and deleting work inside the tab, and a reload starts over.
+
+The KDL files are real: `config.kdl`, `keybinds.kdl`, `views.kdl`, `session.kdl` and
+`places.kdl` live in the browser's origin-private file system (OPFS), so settings, shortcuts,
+remembered folders and sidebar places survive a reload of the page. They stay in that browser's
+profile for that origin, not in the config folder the desktop build uses.
+
+The folder button in the path bar opens the browser's folder picker and shares a real folder
+with the tab through the File System Access API, with read-write permission. The folder appears
+in the sidebar under `/granted` and can be browsed, searched, previewed, renamed, copied,
+moved, deleted and written to like the demo tree, and pictures preview there: the browser
+decodes the file (EXIF orientation included) and Rune draws the RGBA. An open folder stays
+shared for the tab's lifetime; grant it again after a reload. Aliases and the system Trash
+need the desktop build.
+
+Opening files with the system, the terminal, the system Trash and folder watching are native
+only; pictures in the demo tree are fetched and decoded by the browser instead of by the app.
+
+Requires the wasm target, Python 3.11+ and the wasm-bindgen CLI matching `Cargo.lock`:
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
+scripts/web
+python3 -m http.server 8000 -d target/web   # or: bun scripts/serve.js
+```
+
+Open <http://localhost:8000> in a browser with WebGPU. `scripts/web` finds the Rune checkout
+Cargo fetched and runs its packager, writing a static bundle to `target/web`; serve the whole
+folder, `snippets/` included. Serve the folder, never `index.html` on its own: the page imports
+`app.js` and fetches `app_bg.wasm` as modules, so a server rooted elsewhere (or one that rewrites
+missing paths to HTML) answers with `text/html` and the browser refuses it as a module.
+
+Release builds are optimized with `wasm-opt -Oz`, which takes `app_bg.wasm` from about 14.8 MB
+to 7.2 MB (4.1 MB to 3.0 MB gzipped). If Binaryen is not on `PATH`, the script uses `npx` or
+`bunx` to fetch it; `--no-opt` skips the pass, and `--dev` never runs it. Rune's `embedded-fonts`
+default is off: it bundles Inter and IBM Plex Mono as fallbacks, but the app registers the theme's
+faces itself, so those 1.3 MB would never be used.
+
+First paint does not wait for the app: the page draws its own shell as soon as the HTML parses
+and starts the wasm download during parsing, and wasm-bindgen compiles the module while it
+streams. The module cannot be split into lazy chunks — a Rust `cdylib` with wasm-bindgen is one
+module, and about 1.9 MB of it is static data (the theme's fonts and glyph tables) that the first
+frame needs anyway. The web build cannot borrow fonts from the OS either: Rune shapes and
+rasterises text itself, its font lookup is empty on `wasm32`, and only the app's registered bytes
+exist in a tab. Cutting transfer size is the lever that works, which is why `bun
+scripts/serve.js` gzips the bundle instead of sending 8.6 MB.
+
+With Bun, the repository's own static server does the same:
+
+```sh
+bun scripts/serve.js            # http://localhost:3000
+PORT=8080 bun scripts/serve.js
+```
+
+`--dev` builds faster and about three times as large, and `--watch` rebuilds and reloads the
+page on a save:
+
+```sh
+scripts/web --dev --watch
+```
+
 ## Live editing
 
 Rune's opt-in `hot` feature patches function bodies into the running window. The feature is

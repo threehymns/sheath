@@ -78,12 +78,22 @@ impl Builtin {
             Anchor::Home => home_dir(),
             Anchor::UnderHome(folder) => home_dir().map(|home| home.join(folder)),
             Anchor::Root => Some(root_dir()),
-            Anchor::Temp => Some(std::env::temp_dir()),
+            // `std::env::temp_dir` panics on wasm; the web build's tree has a `/tmp` instead.
+            Anchor::Temp => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    Some(PathBuf::from("/tmp"))
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    Some(std::env::temp_dir())
+                }
+            }
         }
     }
 
     pub(super) fn exists(&self) -> bool {
-        self.path().is_some_and(|path| path.is_dir())
+        self.path().is_some_and(|path| crate::vfs::is_dir(&path))
             && !(self.id == "temp" && self.path() == Some(root_dir()))
     }
 

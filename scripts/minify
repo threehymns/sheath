@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Minifies the web build's HTML and JSON, dropping the comments written in them.
+
+`scripts/web` runs this over the built folder for a release build; `--dev` and `--watch` skip
+it, so the page those flows serve keeps its comments and indentation. Whitespace is only
+squeezed where the browser does not read it: the contents of <script>, <style>, <pre> and
+<textarea> keep their line breaks (a style loses its /* */ comments and a script its whole-line
+// ones), and JSON is re-serialised without spaces. Strict JSON has no comments, so a .json file
+that does not parse is reported and left as it is.
+
+usage: scripts/minify DIR
+"""
+
+import json
+import re
+import sys
+from pathlib import Path
+
+VERBATIM = re.compile(r"(<(script|style|pre|textarea)\b[^>]*>)(.*?)(</\2\s*>)", re.S | re.I)
+COMMENT = re.compile(r"<!--.*?-->", re.S)
+LINES = re.compile(r"[ \t]*\n[ \t]*")
+
+
+def squeeze(css: str) -> str:
+    """Collapses whitespace runs to one space, leaving quoted strings alone."""
+    out: list[str] = []
+    quote = ""
+    for char in css:
+        if quote:
+            out.append(char)
+            if char == quote:
+                quote = ""
+        elif char in "\"'":
+            quote = char
+            out.append(char)
+        elif char.isspace():
+            if out and out[-1] != " ":
+                out.append(" ")
+        else:
+            out.append(char)
+    return "".join(out)
+
+
+def strip_css(css: str) -> str:
+    # CSS comments cannot nest, and this page writes none inside a string.
+    return squeeze(re.sub(r"/\*.*?\*/", "", css, flags=re.S)).strip()
+
+
+def strip_js(js: str) -> str:
+    """Drops /* */ blocks and whole-line // comments, keeping every line it edits.
+
+    A `//` further into a line may be inside a string or a URL, and a regex cannot tell the two
+    apart, so only comments that start a line go; indentation stays for the same reason (it is
+    meaningful inside a template literal).
+    """
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    js = re.sub(r"(?m)^[ \t]*//.*$", "", js)
+    return re.sub(r"\n{3,}", "\n\n", js).strip("\n")
+
+
+def minify_html(text: str) -> str:
+    blocks: list[str] = []
+
+    def hold(match: re.Match[str]) -> str:
+        tag = match.group(2).lower()
+        inner = match.group(3)
+        if tag == "style":
+            inner = strip_css(inner)
+        elif tag == "script":
+            inner = strip_js(inner)
+        blocks.append(f"{match.group(1)}{inner}{match.group(4)}")
+        return f"\x00{len(blocks) - 1}\x00"
+
+    text = VERBATIM.sub(hold, text)
+    text = COMMENT.sub("", text)
+    # Whitespace between tags carries no meaning once the elements above are held aside.
+    text = re.sub(r">\s+<", "><", text)
+    text = LINES.sub("\n", text)
+    text = re.sub(r"\n{2,}", "\n", text).strip()
+    return re.sub(r"\x00(\d+)\x00", lambda match: blocks[int(match.group(1))], text)
+
+
+def minify_json(text: str) -> str:
+    return json.dumps(json.loads(text), separators=(",", ":"), ensure_ascii=False)
+
+
+def main(argv: list[str]) -> None:
+    if len(argv) != 2:
+        sys.exit("usage: scripts/minify DIR")
+    root = Path(argv[1])
+    saved = 0
+    for path in sorted(root.rglob("*")):
+        suffix = path.suffix.lower()
+        if suffix not in (".html", ".json") or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        try:
+            out = minify_json(text) if suffix == ".json" else minify_html(text)
+        except json.JSONDecodeError as error:
+            print(f"minify: {path}: not JSON ({error}); left as it is", file=sys.stderr)
+            continue
+        before = len(text.encode())
+        after = len(out.encode())
+        if after >= before:
+            continue
+        path.write_text(out, encoding="utf-8")
+        saved += before - after
+        print(f"minify: {path.name} {before:,} → {after:,} bytes")
+    if saved:
+        print(f"minify: {saved:,} bytes smaller")
+
+
+if __name__ == "__main__":
+    main(sys.argv)

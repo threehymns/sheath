@@ -1,5 +1,5 @@
+use crate::vfs as fs;
 use std::cmp::Ordering;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 

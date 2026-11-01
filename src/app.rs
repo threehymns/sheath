@@ -19,7 +19,7 @@ mod sheets;
 mod size;
 mod watch;
 
-#[cfg(test)]
+#[cfg(all(test, not(target_arch = "wasm32")))]
 pub(crate) use watch::changed;
 
 pub use commands::{Palette, SettingsTab};
@@ -38,9 +38,9 @@ pub use rules_view::{RULE_ROW_HEIGHT, RuleDrag, RuleEdit, RuleMenu, RuleProp, ru
 pub use scrolling::{FILES, poll};
 pub use sheets::{Sheet, SheetKind};
 
+use rune::time::Instant;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use rune::{Latest, PointerPress, TextEdit, Tx, Waker};
 use rune_kit::shell::Reorder;
@@ -164,7 +164,7 @@ impl App {
                 // Without a folder on the command line, the window reopens where it was left.
                 let remembered = session
                     .folder()
-                    .filter(|path| path.is_dir())
+                    .filter(|path| crate::vfs::is_dir(path))
                     .map(Path::to_path_buf);
                 App::open_in(remembered.unwrap_or_else(default_location), session)
             }
@@ -439,6 +439,7 @@ impl App {
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
+    crate::vfs::set_waker(wake.clone());
     s.sizer.set_waker(wake.clone());
     s.previews.set_waker(wake.clone());
     s.previews

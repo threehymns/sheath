@@ -2,7 +2,7 @@
 //! A change the watcher reports is read and parsed on a worker thread, and only the finished
 //! [`Readback`] reaches the store, in a later `poll`.
 
-use std::fs;
+use crate::vfs as fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
