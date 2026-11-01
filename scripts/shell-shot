@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Render the boot shell — the HTML in web/index.html, before any wasm runs — to a PNG, with the
+# browser settings held fixed so repeated runs are comparable. See docs/shell-match.md.
+set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$root"
+
+theme=dark
+size=1180x760
+out=
+
+while (($#)); do
+    case $1 in
+        --theme) theme=${2:?--theme needs dark or light}; shift 2 ;;
+        --size) size=${2:?--size needs WxH}; shift 2 ;;
+        --out) out=${2:?--out needs a path}; shift 2 ;;
+        -h|--help)
+            echo "usage: shell-shot [--theme dark|light] [--size WxH] [--out PNG]"
+            echo "  Renders web/index.html without its scripts, so the page stays on its boot shell."
+            echo "  CHROME overrides the browser binary."
+            exit 0
+            ;;
+        *) echo "shell-shot: unknown option: $1" >&2; exit 2 ;;
+    esac
+done
+
+case $theme in
+    dark|light) ;;
+    *) echo "shell-shot: --theme is dark or light" >&2; exit 2 ;;
+esac
+
+chrome=${CHROME:-$(command -v google-chrome-stable || command -v google-chrome || command -v chromium || command -v chromium-browser || true)}
+if [[ -z $chrome ]]; then
+    echo "shell-shot: no Chrome or Chromium on PATH; set CHROME=/path/to/chrome" >&2
+    exit 2
+fi
+
+out=${out:-target/shell-$theme.png}
+mkdir -p "$(dirname "$out")"
+
+# The shell is self-contained (inline CSS and SVG symbols), so the snapshot needs no server and
+# no wasm. Removing every <script> keeps the page from booting the app and replacing the shell.
+python3 - "$root/web/index.html" "$root/target/shell.html" <<'PY'
+import pathlib, re, sys
+
+src, dst = (pathlib.Path(p) for p in sys.argv[1:3])
+html = src.read_text()
+stripped = re.sub(r"<script\b.*?</script>", "", html, flags=re.S)
+if stripped == html:
+    sys.exit("shell-shot: web/index.html has no <script> blocks to strip")
+dst.write_text(stripped)
+PY
+
+# Fixed flags: 1x scale (device pixels = CSS pixels), no subpixel text, no GPU (the shell is
+# HTML), no scrollbars, and a fixed window so the viewport is exactly --size. Dark forces
+# `prefers-color-scheme: dark` in the headless browser.
+flags=(
+    --headless=new
+    --disable-gpu
+    --hide-scrollbars
+    --force-device-scale-factor=1
+    --font-render-hinting=none
+    --disable-lcd-text
+    --disable-features=Translate,MediaRouter
+    --window-size="${size/x/,}"
+    --virtual-time-budget=800
+    --screenshot="$root/$out"
+)
+if [[ $theme == dark ]]; then
+    flags+=(--force-dark-mode --blink-settings=preferredColorScheme=0)
+fi
+
+"$chrome" "${flags[@]}" "file://$root/target/shell.html" >/dev/null 2>&1 || {
+    echo "shell-shot: $chrome failed; run it by hand with: ${flags[*]}" >&2
+    exit 1
+}
+
+python3 - "$root/$out" <<'PY'
+import pathlib, struct, sys
+
+path = pathlib.Path(sys.argv[1])
+data = path.read_bytes()
+width, height = struct.unpack(">II", data[16:24])
+print(f"{path}: {width}x{height}, {len(data):,} bytes")
+PY
