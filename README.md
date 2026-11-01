@@ -3,7 +3,7 @@
 A file manager built with [Rune](https://github.com/anomalyco/rune) for its
 views, layout, input, animation and rendering. It has a reorderable sidebar of places, a
 breadcrumb path bar, a sortable file list or tile grid, folder and entry rules in its config,
-live search that can reach subfolders, an inspector with text and picture previews, and copy,
+live search of the folder and everything below it, an inspector with text and picture previews, and copy,
 move, rename and trash operations.
 
 ## Run
@@ -122,8 +122,7 @@ unsupported by this backend.
 | Jump to a name | Type its first letters; repeat a letter to cycle matches |
 | Back / forward | Cmd/Ctrl+[ and Cmd/Ctrl+] |
 | Go to a folder by path | Cmd/Ctrl+L |
-| Search this folder | The search field, or / to focus it; Escape clears it |
-| Search the folders below | The folder button beside the search field |
+| Search this folder and below | The search field, or / to focus it; Escape clears it |
 | Sort or resize | Click a column header, or a sort button above the tiles; drag a header edge |
 | Keep or drop a column, or sort folders first | Right-click a column header |
 | List or grid | The layout button in the toolbar, or the command bar |
@@ -256,7 +255,7 @@ command names are `command-bar`, `focus-search`, `open-settings`, `back`, `forwa
 `refresh`, `new-folder`, `new-file`, `toggle-hidden`, `rename`, `move`, `trash`, `copy`,
 `copy-path`, `copy-name`, `cut`, `paste`, `delete`,
 `duplicate`, `select-all`, `deselect-all`, `invert-selection`, `open-terminal`, `reveal`,
-`search-subfolders`, `add-place`, `make-alias`, `toggle-layout`, `toggle-inspector`,
+`add-place`, `make-alias`, `toggle-layout`, `toggle-inspector`,
 `toggle-folders-first`,
 `view-folder-rules`, `view-entry-rules`, `save-layout-rule`, `show-entry`,
 `hide-entry` and `pick-rule`. The rule commands start with no chord. Recording a chord in

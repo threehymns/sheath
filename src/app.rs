@@ -4,6 +4,7 @@ mod drag;
 mod drop;
 mod entry;
 mod files;
+mod find;
 mod grid;
 mod input;
 mod marquee;
@@ -97,8 +98,8 @@ pub struct App {
     // on a worker, so the frame that asks for it never waits.
     pub folder_size: Option<(u64, usize)>,
     sizer: size::Sizer,
-    // Whether a search reaches the folders below the one on screen.
-    pub search_all: bool,
+    // The recursive search below the folder on screen, and the index behind it.
+    finder: find::Finder,
     pub search_truncated: bool,
     // The folder's own rows, parked while a search below it replaces the list.
     parked: Option<Vec<Entry>>,
@@ -236,7 +237,7 @@ impl App {
             previews: preview::Previewer::default(),
             folder_size: None,
             sizer: size::Sizer::default(),
-            search_all: false,
+            finder: find::Finder::default(),
             search_truncated: false,
             parked: None,
             sidebar: PaneState::new(212.0).range(176.0, 330.0),

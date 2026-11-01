@@ -270,7 +270,6 @@ impl App {
             Action::PickRule => self.open_rule_picker(),
             Action::OpenTerminal => self.open_terminal_here(),
             Action::Reveal => self.reveal_selected(),
-            Action::SearchSubfolders => self.toggle_search_all(),
         }
     }
 }

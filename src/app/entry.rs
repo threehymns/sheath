@@ -30,7 +30,30 @@ impl Entry {
         let name = dir_entry.file_name().to_string_lossy().into_owned();
         // `DirEntry::metadata` reports the link itself, so a symlink's size and kind come from
         // its target.
-        let link_meta = dir_entry.metadata().ok()?;
+        Entry::build(path, name, dir_entry.metadata().ok()?)
+    }
+
+    /// The row for a path a search found below the folder on screen. `relative` is the folder it
+    /// was found in, empty for the folder's own entries.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn at(path: PathBuf, relative: Option<String>) -> Option<Entry> {
+        let name = path.file_name()?.to_string_lossy().into_owned();
+        let link_meta = fs::symlink_metadata(&path).ok()?;
+        let mut entry = Entry::build(path, name, link_meta)?;
+        if let Some(relative) = relative {
+            // A name is only unique within its own folder, so a match from below carries the
+            // folder it was found in. Without it two `notes.txt` rows would share one id, and
+            // every action that resolves a row by id would take the first of them. Slashes
+            // become colons, which keeps the id clear of the `/`-separated key paths Rune uses.
+            let folder = relative.replace(['/', '\\'], ":");
+            entry.id = format!("f:{folder}:{}", entry.name);
+            entry.name_key = format!("name-{}", entry.id);
+            entry.relative = Some(relative);
+        }
+        Some(entry)
+    }
+
+    fn build(path: PathBuf, name: String, link_meta: fs::Metadata) -> Option<Entry> {
         let is_symlink = link_meta.file_type().is_symlink();
         let target_meta = if is_symlink {
             fs::metadata(&path).ok()

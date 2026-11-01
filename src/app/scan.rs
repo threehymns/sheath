@@ -2,7 +2,10 @@ use crate::app::Entry;
 use crate::vfs as fs;
 use rune_kit::SortDir;
 use std::cmp::Ordering;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+
+#[cfg(target_arch = "wasm32")]
+use std::path::Path;
 
 use super::entry::compare_time;
 
@@ -55,6 +58,8 @@ pub(super) struct Found {
 
 /// Every entry named like `query`, from `root` and the folders below it. Hidden names stay out of
 /// the walk unless asked for, so a search does not crawl through a dot directory's contents.
+/// The desktop build indexes with fff instead; a browser tab has no filesystem to index.
+#[cfg(target_arch = "wasm32")]
 pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: usize) -> Found {
     let mut entries = Vec::new();
     let mut truncated = false;

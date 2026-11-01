@@ -86,8 +86,10 @@ impl App {
     }
 
     pub fn reload(&mut self) {
+        // A read means the folders below may have changed too, so the index starts over.
+        self.finder.invalidate();
         // The list is showing matches from below, so a read means walking again, not one folder.
-        if self.parked.is_some() || (self.search_all && !self.search.text.trim().is_empty()) {
+        if self.parked.is_some() {
             self.apply_filter();
             return;
         }
@@ -212,22 +214,19 @@ impl App {
         rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
     }
 
-    pub fn toggle_search_all(&mut self) {
-        self.search_all = !self.search_all;
-        self.apply_filter();
-    }
-
-    /// Shows matches from the folders below while the scope asks for them, and puts the folder's
-    /// own rows back when it does not.
+    /// Shows the matches from the folder on screen and the folders below it, and puts the
+    /// folder's own rows back when the field is empty.
     fn apply_scope(&mut self, query: &str) {
-        if !self.search_all || query.is_empty() {
+        if query.is_empty() {
             if let Some(parked) = self.parked.take() {
                 self.entries = parked;
             }
             self.search_truncated = false;
             return;
         }
-        let found = super::scan::search_below(&self.cwd, query, self.show_hidden, SEARCH_LIMIT);
+        let found = self
+            .finder
+            .find(&self.cwd, query, self.show_hidden, SEARCH_LIMIT);
         if self.parked.is_none() {
             self.parked = Some(std::mem::take(&mut self.entries));
         }
@@ -239,16 +238,25 @@ impl App {
         self.stop_scrolling();
         let query = self.search.text.trim().to_lowercase();
         self.apply_scope(&query);
+        // The search has already chosen the matches, so only the folder's own rows need the
+        // name check; the path bar keeps counting the folder, not what was found below it.
+        let searching = self.parked.is_some();
+        let counted = self.parked.as_deref().unwrap_or(&self.entries);
+        let unhidden = counted
+            .iter()
+            .filter(|entry| !self.entry_hidden(entry))
+            .count();
+        self.unhidden = unhidden;
         let hidden: Vec<bool> = self
             .entries
             .iter()
             .map(|entry| self.entry_hidden(entry))
             .collect();
-        self.unhidden = hidden.iter().filter(|hidden| !**hidden).count();
         self.visible = (0..self.entries.len())
             .filter(|&i| {
                 let entry = &self.entries[i];
-                !hidden[i] && (query.is_empty() || entry.name.to_lowercase().contains(&query))
+                !hidden[i]
+                    && (query.is_empty() || searching || entry.name.to_lowercase().contains(&query))
             })
             .collect();
         self.keys_version = self.keys_version.wrapping_add(1);

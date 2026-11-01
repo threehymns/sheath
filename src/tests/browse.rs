@@ -30,7 +30,9 @@ fn searching_filters_the_visible_rows() {
     let mut app = app(&dir);
     app.search = rune::TextEdit::new("file");
     app.apply_filter();
-    assert_eq!(names(&app), ["file2.txt", "file10.txt"]);
+    let mut found = names(&app);
+    found.sort();
+    assert_eq!(found, ["file10.txt", "file2.txt"]);
     assert_eq!(app.phrase_for_count(), "2 of 4 items");
 }
 
@@ -316,7 +318,7 @@ fn opening_a_folder_remembers_it_for_the_next_launch() {
 }
 
 #[test]
-fn a_search_can_reach_the_folders_below_the_one_on_screen() {
+fn a_search_reaches_the_folders_below_the_one_on_screen() {
     let dir = fixture();
     fs::create_dir_all(dir.path().join("alpha").join("deep")).unwrap();
     fs::write(
@@ -331,13 +333,6 @@ fn a_search_can_reach_the_folders_below_the_one_on_screen() {
 
     app.search.text = "notes".into();
     app.apply_filter();
-    assert_eq!(
-        names(&app),
-        vec!["notes.md"],
-        "the folder alone is searched"
-    );
-
-    app.toggle_search_all();
     let rows: Vec<(&str, Option<&str>)> = app
         .visible
         .iter()
@@ -348,13 +343,14 @@ fn a_search_can_reach_the_folders_below_the_one_on_screen() {
             )
         })
         .collect();
-    assert_eq!(
-        rows,
-        vec![
-            ("notes.md", None),
-            ("notes-elsewhere.md", Some("alpha/deep"))
-        ],
-        "the match below is listed with the folder it is in"
+    assert_eq!(rows.len(), 2, "both matches are listed: {rows:?}");
+    assert!(
+        rows.contains(&("notes.md", None)),
+        "the folder's own match: {rows:?}"
+    );
+    assert!(
+        rows.contains(&("notes-elsewhere.md", Some("alpha/deep"))),
+        "the match below is listed with the folder it is in: {rows:?}"
     );
 
     app.search.clear();
@@ -391,7 +387,7 @@ fn a_name_in_two_subfolders_keeps_the_rows_apart() {
     let mut app = app(&dir);
 
     app.search = rune::TextEdit::new("dup");
-    app.toggle_search_all();
+    app.apply_filter();
     assert_eq!(names(&app).len(), 2, "both matches are listed");
     let ids: Vec<&str> = app
         .visible

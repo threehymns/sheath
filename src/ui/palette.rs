@@ -187,7 +187,6 @@ pub(super) fn action_icon(action: Action, k: &Kit) -> &'static Icon {
         Action::ShowEntry | Action::HideEntry => k.glyph.eye,
         Action::OpenTerminal => &icons::TERMINAL,
         Action::Reveal => &glyphs::FOLDER_OPEN,
-        Action::SearchSubfolders => k.glyph.search,
         Action::AddPlace => &icons::FOLDER_PLUS,
         Action::MakeAlias => &icons::LINK,
         Action::ToggleLayout => &icons::GRID,

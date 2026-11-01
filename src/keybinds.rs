@@ -38,7 +38,6 @@ pub enum Action {
     PickRule,
     OpenTerminal,
     Reveal,
-    SearchSubfolders,
     CopyName,
     AddPlace,
     MakeAlias,
@@ -48,7 +47,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 38] = [
+    pub const ALL: [Action; 37] = [
         Action::CommandBar,
         Action::FocusSearch,
         Action::OpenSettings,
@@ -80,7 +79,6 @@ impl Action {
         Action::PickRule,
         Action::OpenTerminal,
         Action::Reveal,
-        Action::SearchSubfolders,
         Action::CopyName,
         Action::AddPlace,
         Action::MakeAlias,
@@ -126,7 +124,6 @@ impl Action {
             Action::PickRule => "pick-rule",
             Action::OpenTerminal => "open-terminal",
             Action::Reveal => "reveal",
-            Action::SearchSubfolders => "search-subfolders",
             Action::CopyName => "copy-name",
             Action::AddPlace => "add-place",
             Action::MakeAlias => "make-alias",
@@ -169,7 +166,6 @@ impl Action {
             Action::PickRule => "Show All Rules",
             Action::OpenTerminal => "Open Terminal Here",
             Action::Reveal => "Reveal in File Manager",
-            Action::SearchSubfolders => "Search Subfolders",
             Action::CopyName => "Copy Name",
             Action::AddPlace => "Add This Folder to the Sidebar",
             Action::MakeAlias => "Make Alias",
@@ -194,7 +190,6 @@ impl Action {
             | Action::InvertSelection
             | Action::OpenTerminal
             | Action::Reveal
-            | Action::SearchSubfolders
             | Action::CopyName
             | Action::AddPlace
             | Action::MakeAlias

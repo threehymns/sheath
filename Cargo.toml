@@ -25,6 +25,10 @@ rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "b1457a
 # Platform integration the desktop build uses: notifications over D-Bus and Rune's audio.
 rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", features = ["dbus", "ogg-audio", "svg"] }
 avif-decode = { version = "3", default-features = false }
+# fff is the file finder behind the recursive search: it indexes the folder on screen and ranks
+# the matches, so the app does not carry its own tree walk. Its index is native-only (LMDB,
+# libgit2, threads), so the web demo keeps the plain walk.
+fff-search = "0.11.1-nightly.f64bab2"
 notify = "8"
 trash = "5.2.9"
 heif-oxide = "0.1"
