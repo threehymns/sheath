@@ -52,6 +52,11 @@ impl App {
             for (title, body) in self.term.take_notifications() {
                 self.raise_terminal_notice(title, body);
             }
+            // A blinking cursor asks for the frame that shows its next half, and nothing else:
+            // a solid cursor leaves the loop idle.
+            if let Some(wait) = self.term.blink_wait() {
+                tx.wake_after(wait);
+            }
             redraw
         }
     }

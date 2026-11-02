@@ -21,6 +21,43 @@ fn the_fraction_is_the_shift_the_content_is_drawn_at() {
     assert_eq!((rows, fraction * pane.line), (3, 8.0));
 }
 
+/// The cursor blinks only while the program asked for it and the pane has the keyboard, so a
+/// plain shell never wakes the frame loop for it.
+#[test]
+fn the_cursor_blinks_only_while_the_program_asked_and_the_pane_is_focused() {
+    use std::time::{Duration, Instant};
+    let mut pane = Terminal::new();
+    pane.toggle(PathBuf::from("/tmp"));
+    assert!(pane.cursor_on(), "a solid cursor is always drawn");
+    assert_eq!(pane.blink_wait(), None, "and never wakes the frame loop");
+
+    pane.frame.cursor_blink = true;
+    let wait = pane
+        .blink_wait()
+        .expect("a blinking cursor is one wake away");
+    assert!(wait <= Duration::from_millis(500), "within the first half");
+    let at = Instant::now();
+    assert!(pane.cursor_on(), "the first half is drawn");
+    assert!(
+        !pane.tick_blink(at + Duration::from_millis(200)),
+        "nothing flips before the half is up"
+    );
+    assert!(
+        pane.tick_blink(at + Duration::from_millis(600)),
+        "then it flips"
+    );
+    assert!(!pane.cursor_on(), "and the cursor is off for it");
+    assert!(
+        pane.tick_blink(at + Duration::from_millis(1200)),
+        "and back on"
+    );
+    assert!(pane.cursor_on());
+
+    pane.focus = false;
+    assert!(pane.cursor_on(), "an unfocused pane keeps it solid");
+    assert_eq!(pane.blink_wait(), None, "and stops waking the loop");
+}
+
 #[test]
 fn the_pane_toggles_and_keeps_its_height_in_range() {
     let mut pane = Terminal::new();

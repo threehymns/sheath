@@ -304,7 +304,7 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
                         .absolute(0.0, top),
                 );
             }
-            if let Some((x, y)) = t.frame.cursor {
+            if let Some((x, y)) = t.frame.cursor.filter(|_| t.cursor_on()) {
                 // The program's own cursor colour (OSC 12) when it set one, else the theme's
                 // accent, muted while the pane is unfocused.
                 let color = t.frame.cursor_color.unwrap_or(if t.focus {
@@ -391,7 +391,15 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
         } else {
             k.c.text_muted
         }),
-        cursor_alpha: if t.focus { 140 } else { 89 },
+        // Nothing is painted for the off half of a blink, so the wash goes fully transparent
+        // rather than the pane rebuilding the image for a cursor it is not showing.
+        cursor_alpha: if !t.cursor_on() {
+            0
+        } else if t.focus {
+            140
+        } else {
+            89
+        },
         selection: crate::term::raster::rgb(k.c.text_accent),
     };
     let picture = crate::term::raster::picture(&t.frame, t.cell, t.line, scale, palette)?;

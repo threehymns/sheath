@@ -104,6 +104,9 @@ pub fn poll(s: &mut Window, _t: f64, tx: &mut Tx) -> bool {
     // The window is only the grid, with no toasts to put a program's OSC 9 or 777 notification
     // in: drained so they do not pile up behind it, and otherwise dropped.
     s.term.take_notifications();
+    if let Some(wait) = s.term.blink_wait() {
+        tx.wake_after(wait);
+    }
     s.frames += 1;
     let elapsed = s.logged.elapsed();
     if elapsed >= Duration::from_secs(1)

@@ -99,6 +99,8 @@ pub struct Frame {
     /// draws an editor's insert-mode bar and its tinted cursor the same way.
     pub cursor_shape: CursorShape,
     pub cursor_color: Option<Color>,
+    /// Whether the program asked for a blinking cursor (DECSCUSR, or DEC mode 12).
+    pub cursor_blink: bool,
     pub title: String,
     /// The terminal's own background, when the program set one with OSC 11. Unset means the
     /// view's theme colour, which is what the shell starts with.

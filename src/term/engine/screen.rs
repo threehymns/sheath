@@ -158,6 +158,7 @@ impl Engine {
         // theme's own until an OSC 12 (or 112, back again) moves it, and the pane draws its
         // unfocused cursor in a different colour from the theme's.
         let default_cursor = self.vt.default_cursor_color().ok().flatten();
+        out.cursor_blink = snapshot.cursor_blinking().unwrap_or(false);
         out.cursor_color = snapshot
             .cursor_color()
             .ok()

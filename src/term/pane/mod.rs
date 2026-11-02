@@ -2,9 +2,11 @@
 //! fractional scroll that makes the wheel smooth. The engine behind it is native only; the web
 //! build keeps this type so the app compiles and the pane can say where the terminal lives.
 
+mod layout;
 mod protocol;
 
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use rune::{KeyEvent, Waker};
 
@@ -12,6 +14,10 @@ use crate::term::Theme;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::term::engine::Engine;
 use crate::term::grid::Frame;
+
+/// How long each half of the cursor's blink lasts, the rate xterm and Ghostty blink at. Only a
+/// cursor the program asked to blink blinks, so a plain shell costs no frames at all.
+const BLINK: Duration = Duration::from_millis(500);
 
 pub const MIN_HEIGHT: f32 = 120.0;
 pub const MAX_HEIGHT: f32 = 720.0;
@@ -42,6 +48,9 @@ pub struct Terminal {
     pub frame: Frame,
     scroll: f32,
     pub focus: bool,
+    /// Whether the cursor is in its drawn half of the blink, and when the half started.
+    blink_on: bool,
+    blink_at: Instant,
     /// Whether the drag in flight has shown the pane. A gesture that did is a resize, so its
     /// release is not the click that opens a collapsed pane.
     opened: bool,
@@ -80,6 +89,8 @@ impl Default for Terminal {
             frame: Frame::default(),
             scroll: 0.0,
             focus: false,
+            blink_on: true,
+            blink_at: Instant::now(),
             opened: false,
             rect: [0.0; 4],
             cell: 7.6,
@@ -146,109 +157,35 @@ impl Terminal {
         style.lh(self.line).tracking(self.tracking)
     }
 
-    pub fn is_open(&self) -> bool {
-        self.open
+    /// Whether the cursor blinks at all: the program asked for a blinking cursor, the pane is
+    /// open, and the keyboard is here, which is where the cursor is what the user is looking at.
+    /// Everything else keeps it solid, so an idle pane never asks for a frame.
+    fn blinking(&self) -> bool {
+        self.open && self.focus && self.frame.cursor_blink
     }
 
-    pub fn height(&self) -> f32 {
-        self.height
+    /// Whether to draw the cursor this frame: solid unless it is blinking and in its off half.
+    pub fn cursor_on(&self) -> bool {
+        self.blink_on || !self.blinking()
     }
 
-    pub fn set_height(&mut self, height: f32) {
-        if height.is_finite() {
-            self.height = height.round().clamp(MIN_HEIGHT, MAX_HEIGHT);
+    /// Advances the blink: flips the phase once a half is up and says so, which is the one thing
+    /// a view build needs. The frame is not rebuilt, since only the cursor's own wash changes.
+    pub(crate) fn tick_blink(&mut self, now: Instant) -> bool {
+        if !self.blinking() || now.saturating_duration_since(self.blink_at) < BLINK {
+            self.blink_on = true;
+            return false;
         }
+        self.blink_at = now;
+        self.blink_on = !self.blink_on;
+        true
     }
 
-    /// Hides the pane and leaves the shell running, so collapsing and opening it again is the
-    /// same session. [`close`](Terminal::close) is what ends the shell.
-    pub fn collapse(&mut self) {
-        self.open = false;
-        self.focus = false;
-        self.pending = None;
-        self.clear_selection();
-    }
-
-    /// Hides the pane and ends its shell, so opening it again starts a fresh session in the
-    /// folder on screen.
-    pub fn close(&mut self) {
-        self.collapse();
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(mut engine) = self.engine.take() {
-            engine.kill();
-        }
-        self.frame = Frame::default();
-        self.scroll = 0.0;
-        self.fresh = true;
-        self.copies.clear();
-    }
-
-    /// Shows the pane in `dir`, starting a shell there the first time and keeping the one it
-    /// already has.
-    pub fn open(&mut self, dir: PathBuf) {
-        if !self.open {
-            self.open = true;
-            self.fresh = true;
-            #[cfg(not(target_arch = "wasm32"))]
-            if self.engine.is_none() {
-                self.pending = Some(dir);
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                let _ = dir;
-                self.notice = Some(
-                    "The terminal runs in Sheath's desktop app; the browser tab has no shell."
-                        .to_owned(),
-                );
-            }
-        }
-        self.focus = true;
-    }
-
-    pub fn toggle(&mut self, dir: PathBuf) {
-        if self.open {
-            self.collapse();
-        } else {
-            self.open(dir);
-        }
-    }
-
-    /// Shows the pane at `height`, for a drag up from the bottom edge: a collapsed pane brings
-    /// its shell back, a closed one starts a fresh shell in `dir`, and neither takes the
-    /// keyboard from the browser.
-    pub fn expand(&mut self, dir: PathBuf, height: f32) {
-        self.open(dir);
-        self.opened = true;
-        self.focus = false;
-        self.set_height(height);
-    }
-
-    /// Starts a drag gesture: nothing has been shown yet, so releasing it while the pane is
-    /// collapsed is a click. A drag that opens the pane marks itself with [`did_open`].
-    pub fn begin_drag(&mut self) {
-        self.opened = false;
-    }
-
-    /// Whether the drag in flight has shown the pane at least once.
-    pub fn did_open(&self) -> bool {
-        self.opened
-    }
-
-    /// Applies a drag's target height while the pointer moves. An open pane resizes to it and
-    /// collapses once it is pushed well past the minimum; a collapsed one opens when the drag
-    /// reaches the minimum. The gap between those two points is a dead band: a drag sitting in
-    /// it keeps whatever the pane was, so the handle cannot flip the pane in and out as the
-    /// pointer moves a point at a time.
-    pub fn drag(&mut self, wanted: f32, dir: PathBuf) {
-        if self.open {
-            if wanted < MIN_HEIGHT - COLLAPSE_DRAG {
-                self.collapse();
-            } else {
-                self.set_height(wanted);
-            }
-        } else if wanted >= MIN_HEIGHT {
-            self.expand(dir, wanted);
-        }
+    /// How long until the next blink phase, for the frame loop to come back for it. `None` when
+    /// the cursor is solid, so a pane nobody is typing in costs no frames.
+    pub fn blink_wait(&self) -> Option<Duration> {
+        self.blinking()
+            .then(|| BLINK.saturating_sub(Instant::now().saturating_duration_since(self.blink_at)))
     }
 
     /// Reads the PTY, resizes the grid to the rect it was laid out in, and rebuilds the frame
@@ -267,11 +204,15 @@ impl Terminal {
             if let Some(dir) = self.pending.take() {
                 self.start(dir, wake, theme);
             }
+            // The cursor's half flips before the engine is borrowed: the view draws the cursor,
+            // so the frame is built again but the grid is not read for it.
+            let blinked = self.tick_blink(Instant::now());
             let (cols, rows) = self.grid_size();
             let Some(engine) = self.engine.as_mut() else {
-                return false;
+                return blinked;
             };
             let mut redraw = engine.drain();
+            redraw |= blinked;
             redraw |= engine.resize(cols, rows, (self.cell, self.line), self.scale);
             if engine.take_bell() {
                 redraw = true;
@@ -311,6 +252,10 @@ impl Terminal {
     /// Sends the key to the shell. Keys a terminal can't use are still consumed, so nothing
     /// behind the pane acts on them.
     pub fn key(&mut self, event: &KeyEvent) -> bool {
+        // The cursor is solid while the user types: chasing a blink in the middle of a keystroke
+        // is what makes a blinking cursor feel like it lags the keyboard.
+        self.blink_at = Instant::now();
+        self.blink_on = true;
         #[cfg(not(target_arch = "wasm32"))]
         {
             let Some(engine) = self.engine.as_mut() else {
