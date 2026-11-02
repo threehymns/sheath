@@ -124,6 +124,13 @@ pub(crate) fn open_url(url: &str) -> Result<(), String> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
+    // The launched program, and whatever it forks (a browser's zygote, say), must not write to
+    // the app's own console: its log lines would land in the terminal the app was started from,
+    // and once that pipe closes a stray write surfaces there as "Broken pipe".
+    command
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
     match command.spawn() {
         Ok(mut child) => {
             std::thread::spawn(move || {
@@ -148,16 +155,7 @@ pub(super) fn open_external(path: &Path) -> Result<(), String> {
     #[cfg(all(unix, not(target_os = "macos")))]
     let mut command = Command::new("xdg-open");
     command.arg(path);
-    match command.spawn() {
-        Ok(mut child) => {
-            // Reap the launcher so opening many files doesn't collect zombies.
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-            Ok(())
-        }
-        Err(err) => Err(format!("Couldn’t open {}: {err}", path.display())),
-    }
+    spawn_reaped(command, &path.display().to_string())
 }
 
 /// Shows the item in the platform's file manager, with the item itself chosen where the platform
