@@ -8,7 +8,7 @@ mod find;
 mod grid;
 mod input;
 mod marquee;
-mod paths;
+pub(crate) mod paths;
 mod places;
 pub(crate) mod preview;
 mod rules_view;

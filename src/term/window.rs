@@ -73,7 +73,9 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     let at = Instant::now();
     let screen = screen_of(&s.term, s.scale.get(), k)
         .on_wheel(|s: &mut Window, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
-        .on_drag(|s: &mut Window, drag: &mut Drag, _: &mut Tx| terminal_drag(&mut s.term, drag))
+        .on_drag(|s: &mut Window, drag: &mut Drag, tx: &mut Tx| {
+            terminal_drag(&mut s.term, drag, tx)
+        })
         .on_press(|s: &mut Window| s.term.focus = true)
         .on_layout_tx(|s: &mut Window, rect, tx: &mut Tx| {
             let cell = s.term.cell;

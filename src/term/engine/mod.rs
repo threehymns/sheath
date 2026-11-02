@@ -7,6 +7,7 @@
 //! draws, and `input` encodes keys, mouse and paste into what the program reads.
 
 mod input;
+mod link;
 mod parse;
 mod pty;
 mod screen;

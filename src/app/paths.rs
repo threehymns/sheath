@@ -92,6 +92,36 @@ pub(super) fn reveal_external(_path: &Path) -> Result<(), String> {
     Err("A browser tab has no file manager to reveal in.".into())
 }
 
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn open_url(_url: &str) -> Result<(), String> {
+    Err("A browser tab can’t open links from the demo folder.".into())
+}
+
+/// Opens a link a program printed (OSC 8). A URL is handed to the platform's launcher as
+/// written, but only for the schemes a terminal's links actually use: a program must not be
+/// able to talk the app into launching an arbitrary handler.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn open_url(url: &str) -> Result<(), String> {
+    if !["http://", "https://", "mailto:", "file://"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
+    {
+        return Err(format!("Not a link this app opens: {url}"));
+    }
+    #[cfg(target_os = "macos")]
+    let mut command = Command::new("open");
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", ""]);
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = Command::new("xdg-open");
+    command.arg(url);
+    spawn_reaped(command, url)
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 fn spawn_reaped(mut command: Command, label: &str) -> Result<(), String> {
     match command.spawn() {

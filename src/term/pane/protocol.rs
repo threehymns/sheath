@@ -35,6 +35,16 @@ impl Terminal {
         Vec::new()
     }
 
+    /// The hyperlink on the cell at a viewport point (OSC 8), which a Cmd/Ctrl+click opens.
+    pub fn hyperlink_at(&self, at: (u16, u16)) -> Option<String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(engine) = &self.engine {
+            return engine.hyperlink_at(at);
+        }
+        let _ = at;
+        None
+    }
+
     /// A copy the program asked for (OSC 52), handed to the clipboard on the next poll.
     pub fn take_copies(&mut self) -> Vec<String> {
         #[cfg(not(target_arch = "wasm32"))]

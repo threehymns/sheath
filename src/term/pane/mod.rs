@@ -65,6 +65,9 @@ pub struct Terminal {
     pub notice: Option<String>,
     fresh: bool,
     copies: Vec<String>,
+    /// The press that opened an OSC 8 link: the rest of its gesture is the link's, not a
+    /// selection's.
+    pub link_press: bool,
     #[cfg(not(target_arch = "wasm32"))]
     engine: Option<Engine>,
 }
@@ -90,6 +93,7 @@ impl Default for Terminal {
             notice: None,
             fresh: false,
             copies: Vec::new(),
+            link_press: false,
             #[cfg(not(target_arch = "wasm32"))]
             engine: None,
         }

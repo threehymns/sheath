@@ -231,7 +231,7 @@ fn progress(t: &Terminal, k: &'static Kit) -> Option<El> {
 fn screen(s: &App, k: &'static Kit) -> El {
     screen_of(&s.term, s.scale.get(), k)
         .on_wheel(|s: &mut App, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
-        .on_drag(|s: &mut App, drag: &mut Drag, _: &mut Tx| terminal_drag(&mut s.term, drag))
+        .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))
         .on_press(|s: &mut App| s.term.focus = true)
         .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
             let cell = s.term.cell;
@@ -388,7 +388,7 @@ fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
 }
 
-pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {
+pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag, tx: &mut Tx) {
     let cell = t.cell.max(1.0);
     let line = t.line.max(1.0);
     let at = (
@@ -400,6 +400,17 @@ pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {
     match drag.phase {
         Phase::Down => {
             t.focus = true;
+            // Cmd+click (Ctrl+click off macOS) opens the OSC 8 link under the pointer, the way
+            // Ghostty does. The rest of this gesture belongs to the link, not to a selection.
+            let mods = tx.mods();
+            if (mods.cmd || mods.ctrl)
+                && !tracking
+                && let Some(uri) = t.hyperlink_at(at)
+            {
+                t.link_press = true;
+                let _ = crate::app::paths::open_url(&uri);
+                return;
+            }
             if tracking {
                 t.mouse(MouseAction::Press, at, false);
             } else {
@@ -408,6 +419,9 @@ pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {
             }
         }
         Phase::Move => {
+            if t.link_press {
+                return;
+            }
             if tracking {
                 t.mouse(MouseAction::Drag, at, false);
             } else {
@@ -415,6 +429,9 @@ pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {
             }
         }
         Phase::Up => {
+            if std::mem::take(&mut t.link_press) {
+                return;
+            }
             if tracking {
                 t.mouse(MouseAction::Release, at, false);
             }

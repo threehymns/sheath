@@ -8,6 +8,44 @@ use crate::term::{Progress, ProgressKind};
 #[cfg(not(target_arch = "wasm32"))]
 use ghostty_vt::terminal::ProgressState;
 
+/// OSC 8 links are stored with the cells they cover, so a click resolves the same link from any
+/// cell of it and nothing from the cell past its end.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn an_osc8_link_comes_back_with_the_cells_it_covers() {
+    use crate::term::engine::Engine;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    // Written straight into the parser, so the screen is exactly this and not whatever the
+    // shell's prompt happens to print first.
+    engine.feed(b"\x1b[2J\x1b[H\x1b]8;;https://example.com\x1b\\example\x1b]8;;\x1b\\");
+    assert_eq!(
+        engine.hyperlink_at((0, 0)).as_deref(),
+        Some("https://example.com"),
+        "the link is on the cell its text starts at"
+    );
+    assert_eq!(
+        engine.hyperlink_at((2, 0)).as_deref(),
+        Some("https://example.com"),
+        "every cell of the link text carries it"
+    );
+    assert_eq!(
+        engine.hyperlink_at((8, 0)),
+        None,
+        "the cell past the link text has none"
+    );
+}
+
 /// OSC 7 arrives as a `file://` URI with the path percent-encoded, which is how a folder with a
 /// space in its name reaches the header.
 #[cfg(not(target_arch = "wasm32"))]

@@ -141,13 +141,16 @@ build always uses it.
   a row at a time. Anything you type jumps back to the live tail.
 - **Selecting.** Drag over the grid to select; **Ctrl+Shift+C** (Cmd+Shift+C on macOS) copies it.
   **Ctrl+Shift+V** pastes, wrapping in bracketed paste when the program asked for it.
+- **Links.** Cmd+click (Ctrl+click off macOS) opens the link under the pointer when a program
+  printed one with OSC 8. `http`/`https`, `mailto` and `file` links go to the system's launcher;
+  any other scheme is left alone rather than handed to an arbitrary handler.
 - **Programs that want the mouse** get the clicks and drags instead of a selection, so `htop`,
   `vim` and `less` behave as they do in Ghostty.
 - **What a program can ask it for.** Titles (OSC 0/2), the shell's directory (OSC 7, which the
   header falls back to), notifications for the desktop (OSC 9 and 777, as toasts), its own
-  progress (OSC 9;4, drawn in the pane's header), its own background and colours (OSC 10/11), the
-  clipboard (OSC 52) and synchronized output (mode 2026), so a screen a TUI redraws never shows
-  its half-written frame.
+  progress (OSC 9;4, drawn in the pane's header), its own background and colours (OSC 10/11),
+  links over its text (OSC 8), the clipboard (OSC 52) and synchronized output (mode 2026), so a
+  screen a TUI redraws never shows its half-written frame.
 - **Which keys reach the shell.** While the pane has focus it keeps everything, Ctrl-C included;
   only the command bar, Settings and the pane's own shortcut reach the app. Clicking the file list
   takes the keyboard back.
@@ -183,6 +186,7 @@ build has no shell and says so.
 | Show or hide the terminal | Ctrl+Shift+T (Cmd+Shift+T on macOS), the row menu, or the command bar: `Open Terminal Here` |
 | Copy the terminal selection | Ctrl+Shift+C (Cmd+Shift+C on macOS) |
 | Paste into the terminal | Ctrl+Shift+V (Cmd+Shift+V on macOS) |
+| Open a link in the terminal | Cmd/Ctrl+click |
 | Reveal in the system file manager | The row menu, or the command bar: `Reveal in File Manager` |
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places, or the folder menu's `Add This Folder to the Sidebar` |
