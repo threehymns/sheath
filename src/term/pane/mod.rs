@@ -2,6 +2,8 @@
 //! fractional scroll that makes the wheel smooth. The engine behind it is native only; the web
 //! build keeps this type so the app compiles and the pane can say where the terminal lives.
 
+mod protocol;
+
 use std::path::PathBuf;
 
 use rune::{KeyEvent, Waker};
@@ -270,6 +272,12 @@ impl Terminal {
             if engine.take_bell() {
                 redraw = true;
             }
+            // A program in a synchronized-output hold (mode 2026) is still assembling its frame: drawing
+            // now would show the half-written screen the hold exists to hide. The bytes keep being
+            // parsed, and the frame is drawn the moment the hold ends.
+            if engine.holding() {
+                return redraw;
+            }
             if redraw || self.fresh || split(self.scroll).1 > 0.0 {
                 self.refresh();
             }
@@ -433,15 +441,6 @@ impl Terminal {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn stats(&self) -> Option<crate::term::engine::Stats> {
         self.engine.as_ref().map(|engine| engine.stats())
-    }
-
-    /// A copy the program asked for (OSC 52), handed to the clipboard on the next poll.
-    pub fn take_copies(&mut self) -> Vec<String> {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = self.engine.as_mut() {
-            self.copies.extend(engine.take_clipboard());
-        }
-        std::mem::take(&mut self.copies)
     }
 
     pub fn copy_selection(&mut self) -> Option<String> {

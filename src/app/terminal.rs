@@ -49,8 +49,32 @@ impl App {
             for text in self.term.take_copies() {
                 tx.copy(text);
             }
+            for (title, body) in self.term.take_notifications() {
+                self.raise_terminal_notice(title, body);
+            }
             redraw
         }
+    }
+
+    /// A notification the shell sent with OSC 9 or OSC 777 becomes a toast, which is the app's
+    /// one place for what a program wants to say.
+    fn raise_terminal_notice(&mut self, title: String, body: String) {
+        let title = if title.trim().is_empty() {
+            "Terminal".to_owned()
+        } else {
+            title
+        };
+        let detail = if body.trim().is_empty() {
+            "The shell sent a notification.".to_owned()
+        } else {
+            body
+        };
+        let report = format!("{title}\n{detail}");
+        let notice = crate::notice::Notice::new("terminal", title, detail, report);
+        // One toast per shell: a program that notifies repeatedly replaces its own, instead of
+        // stacking a column of them.
+        self.notices.retain(|up| up.file != "terminal");
+        self.notices.push(notice);
     }
 
     pub fn remember_terminal_height(&mut self) {

@@ -4,6 +4,7 @@
 
 mod box_drawing;
 mod metrics;
+mod osc;
 mod paint;
 mod pane;
 mod shell;

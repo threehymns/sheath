@@ -7,12 +7,13 @@
 //! draws, and `input` encodes keys, mouse and paste into what the program reads.
 
 mod input;
+mod parse;
 mod pty;
 mod screen;
 
 use std::cell::Cell;
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,14 +24,14 @@ use pty::Incoming;
 use ghostty_vt::key::{Encoder as KeyEncoder, Event as EncoderEvent};
 use ghostty_vt::mouse;
 use ghostty_vt::selection::{FormatOptions, Selection};
-use ghostty_vt::terminal::{Point, PointCoordinate, ScrollViewport};
+use ghostty_vt::terminal::{Mode, Point, PointCoordinate, ScrollViewport};
 use ghostty_vt::{RenderState, Terminal as Vt, TerminalOptions};
 use portable_pty::{MasterPty, PtySize};
 use rune::Waker;
 
-use crate::term::Theme;
 use crate::term::grid::Line;
 use crate::term::shapes::Metrics;
+use crate::term::{Progress, Theme};
 
 /// How much history the terminal keeps above the viewport. libghostty measures this in bytes,
 /// not rows, so this is roughly a quarter million lines of plain text.
@@ -45,6 +46,11 @@ const PARSE_CHUNK: usize = 64 * 1024;
 /// behind the shell by at most [`pty::QUEUE_LIMIT`], instead of every frame growing with the
 /// backlog and the two chasing each other down.
 const PARSE_BUDGET: Duration = Duration::from_millis(6);
+
+/// How long mode 2026 may hold the screen before the pane draws anyway, the way Ghostty caps a
+/// synchronized-output hold. The terminal has no clock of its own, so a program that starts a
+/// hold and never ends it would otherwise freeze the pane for good.
+const HOLD_LIMIT: Duration = Duration::from_secs(1);
 
 pub struct Engine {
     vt: Vt,
@@ -98,6 +104,17 @@ pub struct Engine {
     wake: Waker,
     /// Text the program put on the clipboard (OSC 52), waiting for the app to take it.
     clipboard: Vec<String>,
+    /// Progress the running program reported (OSC 9;4), or `None` when it reports none.
+    progress: Option<Progress>,
+    /// Notifications the running program addressed to the desktop (OSC 9, OSC 777), waiting for
+    /// the app to take them.
+    notes: Vec<(String, String)>,
+    /// When the running program started holding the screen for synchronized output (mode 2026),
+    /// or `None` when it is not holding it.
+    hold: Option<Instant>,
+    /// The directory the running program reported (OSC 7), for the header to fall back to when
+    /// the program sets no title.
+    pwd: Option<PathBuf>,
 }
 
 /// What the pane is doing behind the frame it just drew. `lag` is the honest latency number: a
@@ -200,6 +217,10 @@ impl Engine {
             pending: session.pending,
             wake,
             clipboard: Vec::new(),
+            progress: None,
+            notes: Vec::new(),
+            hold: None,
+            pwd: None,
         })
     }
 
@@ -208,45 +229,19 @@ impl Engine {
     pub fn drain(&mut self) -> bool {
         self.pending.store(false, Ordering::Release);
         let mut changed = false;
+        // A hold that ran past its limit is let go before anything else: a frame never drawn is
+        // worse than one drawn mid-sequence, and the program has had its second.
+        if let Some(started) = self.hold
+            && started.elapsed() >= HOLD_LIMIT
+        {
+            self.hold = None;
+            let _ = self.vt.set_mode(Mode::SYNC_OUTPUT, false);
+            self.force_full = true;
+            changed = true;
+        }
         let at = Instant::now();
         let mut replies = Vec::new();
-        loop {
-            let bytes = self.incoming.take(PARSE_CHUNK);
-            if bytes.is_empty() {
-                break;
-            }
-            self.vt.vt_write(&bytes);
-            self.parsed += bytes.len() as u64;
-            changed = true;
-            for event in self.vt.events() {
-                match event {
-                    // Device attributes, cursor reports and mode answers, on their way back.
-                    ghostty_vt::terminal::Event::PtyWrite(data) => replies.extend(data),
-                    ghostty_vt::terminal::Event::Bell => self.bell.set(true),
-                    ghostty_vt::terminal::Event::TitleChanged(title) => {
-                        self.title = title;
-                    }
-                    // OSC 52 and the other clipboard protocols, on their way to the app's
-                    // clipboard.
-                    ghostty_vt::terminal::Event::ClipboardWrite(write) => {
-                        for content in write.contents {
-                            if content.mime.starts_with("text/")
-                                && let Ok(text) = String::from_utf8(content.data)
-                            {
-                                self.clipboard.push(text);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            // Past the budget the rest waits for the next frame: a backlog is drawn over many
-            // frames at the display's rate, instead of one frame that takes as long as the
-            // backlog is deep while the reader keeps adding to it.
-            if at.elapsed() >= PARSE_BUDGET {
-                break;
-            }
-        }
+        changed |= self.parse(&mut replies, at + PARSE_BUDGET);
         if !replies.is_empty() {
             let _ = self.writer.write_all(&replies);
         }
@@ -297,6 +292,27 @@ impl Engine {
     /// Text the program put on the clipboard (OSC 52).
     pub fn take_clipboard(&mut self) -> Vec<String> {
         std::mem::take(&mut self.clipboard)
+    }
+
+    /// Progress the running program reported (OSC 9;4), or `None` once it reports none left.
+    pub fn progress(&self) -> Option<Progress> {
+        self.progress
+    }
+
+    /// Notifications the running program sent (OSC 9, OSC 777), oldest first.
+    pub fn take_notifications(&mut self) -> Vec<(String, String)> {
+        std::mem::take(&mut self.notes)
+    }
+
+    /// Whether the running program is holding the screen for synchronized output (mode 2026).
+    /// While it is, the pane keeps parsing and leaves the last complete frame on screen.
+    pub fn holding(&self) -> bool {
+        self.hold.is_some()
+    }
+
+    /// The directory the running program reported (OSC 7), if it reported one.
+    pub fn pwd(&self) -> Option<&Path> {
+        self.pwd.as_deref()
     }
 
     /// Writes VT bytes straight into the parser, without the PTY. Tests use it to put an exact
@@ -461,3 +477,7 @@ impl Engine {
         out
     }
 }
+
+// The report parsers live with the parse loop; the tests reach them through here.
+#[cfg(test)]
+pub(crate) use parse::{directory, progress_of};

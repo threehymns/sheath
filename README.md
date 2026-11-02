@@ -143,6 +143,11 @@ build always uses it.
   **Ctrl+Shift+V** pastes, wrapping in bracketed paste when the program asked for it.
 - **Programs that want the mouse** get the clicks and drags instead of a selection, so `htop`,
   `vim` and `less` behave as they do in Ghostty.
+- **What a program can ask it for.** Titles (OSC 0/2), the shell's directory (OSC 7, which the
+  header falls back to), notifications for the desktop (OSC 9 and 777, as toasts), its own
+  progress (OSC 9;4, drawn in the pane's header), its own background and colours (OSC 10/11), the
+  clipboard (OSC 52) and synchronized output (mode 2026), so a screen a TUI redraws never shows
+  its half-written frame.
 - **Which keys reach the shell.** While the pane has focus it keeps everything, Ctrl-C included;
   only the command bar, Settings and the pane's own shortcut reach the app. Clicking the file list
   takes the keyboard back.

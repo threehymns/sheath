@@ -351,8 +351,12 @@ impl App {
                 report,
             ));
         }
-        self.notices
-            .retain(|notice| found.iter().any(|problem| problem.file == notice.file));
+        // The config's own toasts follow the files they report on; everything else (a terminal
+        // notification, say) is not this pass's to clear.
+        self.notices.retain(|notice| {
+            found.iter().any(|problem| problem.file == notice.file)
+                || !matches!(notice.file, config::CONFIG | config::KEYBINDS)
+        });
         for notice in found {
             match self.notices.iter_mut().find(|up| up.file == notice.file) {
                 Some(up) if up.report != notice.report => *up = notice,

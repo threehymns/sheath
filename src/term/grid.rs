@@ -82,4 +82,7 @@ pub struct Frame {
     /// The cursor's cell within the viewport, when it is on screen.
     pub cursor: Option<(u16, u16)>,
     pub title: String,
+    /// The terminal's own background, when the program set one with OSC 11. Unset means the
+    /// view's theme colour, which is what the shell starts with.
+    pub background: Option<Color>,
 }

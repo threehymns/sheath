@@ -80,6 +80,9 @@ impl Engine {
             out.lead = None;
             return;
         };
+        // A program that set its own background with OSC 11 (a TUI matching its theme, say)
+        // draws on that colour, not on the one the pane started with.
+        out.background = Some(color(colors.background));
         let cols = snapshot.cols().unwrap_or(self.cols);
         let rows = snapshot.rows().unwrap_or(self.rows);
         if out.cols != cols || out.rows != rows || out.lines.len() != rows as usize {

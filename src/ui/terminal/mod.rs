@@ -1,10 +1,11 @@
+#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+mod rows;
+
 use crate::app::App;
 use crate::icons;
+use crate::term::{MouseAction, ProgressKind, Terminal};
 #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-use crate::term::grid::Line;
-use crate::term::{MouseAction, Terminal};
-#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-use rune::Span;
+use rows::line_row;
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 use rune::SurfaceFit;
 use rune::{Cursor, Drag, El, Phase, Spring, Transition, Tx, col, el, row, text};
@@ -95,10 +96,15 @@ pub(super) fn pane(s: &App, k: &'static Kit) -> El {
 }
 
 fn header(s: &App, k: &'static Kit) -> El {
-    let title = if s.term.frame.title.trim().is_empty() {
-        s.cwd.display().to_string()
-    } else {
+    // A program that sets no title leaves the header on the shell's own directory when it
+    // reports one (OSC 7), so `cd` in the pane still moves the header even without a prompt
+    // that renames the window.
+    let title = if !s.term.frame.title.trim().is_empty() {
         s.term.frame.title.clone()
+    } else if let Some(dir) = s.term.pwd() {
+        dir.display().to_string()
+    } else {
+        s.cwd.display().to_string()
     };
     let mut bar = row()
         .key("terminal-header")
@@ -142,6 +148,9 @@ fn header(s: &App, k: &'static Kit) -> El {
                 .key("terminal-close")
                 .transition(Transition::none()),
         );
+    if let Some(report) = progress(&s.term, k) {
+        bar = bar.child(report);
+    }
     if let Some(error) = &s.term.error {
         bar = bar.child(
             text(error.clone())
@@ -163,6 +172,60 @@ fn header(s: &App, k: &'static Kit) -> El {
                 .fill(k.c.border_muted)
                 .transition(Transition::none()),
         )
+}
+
+/// OSC 9;4: the progress a program reports for its own work, drawn in the header it shares with
+/// the title. A program that reports none gets no room, so the common shell is unchanged.
+fn progress(t: &Terminal, k: &'static Kit) -> Option<El> {
+    let report = t.progress()?;
+    let (label, color) = match report.kind {
+        ProgressKind::Set => (
+            report
+                .percent
+                .map_or_else(|| "Working…".to_owned(), |percent| format!("{percent}%")),
+            k.c.text_accent,
+        ),
+        ProgressKind::Indeterminate => ("Working…".to_owned(), k.c.text_accent),
+        ProgressKind::Pause => ("Paused".to_owned(), k.c.text_muted),
+        ProgressKind::Error => ("Failed".to_owned(), k.c.danger.fg),
+    };
+    let mut bar = row()
+        .key("terminal-progress")
+        .h(14.0)
+        .gap(6.0)
+        .center_y()
+        .shrink()
+        .transition(Transition::none())
+        .child(
+            text(label)
+                .key("terminal-progress-label")
+                .font(k.ty.caption())
+                .color(color)
+                .transition(Transition::none()),
+        );
+    if let Some(percent) = report.percent {
+        // A determinate report gets a track as well: the number alone reads as a label, and
+        // the bar is what makes it read as how much is left.
+        let track = 48.0;
+        let width = (track * f32::from(percent) / 100.0).max(1.0);
+        bar = bar.child(
+            el().key("terminal-progress-track")
+                .w(track)
+                .h(3.0)
+                .clip_rounded(1.5)
+                .fill(k.alpha(k.c.text_muted, 0.25))
+                .transition(Transition::none())
+                .child(
+                    el().key("terminal-progress-fill")
+                        .w(width)
+                        .h(3.0)
+                        .clip_rounded(1.5)
+                        .fill(color)
+                        .transition(Transition::none()),
+                ),
+        );
+    }
+    Some(bar)
 }
 
 fn screen(s: &App, k: &'static Kit) -> El {
@@ -190,9 +253,12 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
     // The offset is the scroll itself, so it must land on the frame it is asked for: a spring
     // here lags the fraction and then chases a whole line every time the viewport steps, which
     // reads as the top row sliding half out and snapping back.
+    // The rows sit on the terminal's own background: a program that set one with OSC 11
+    // recolours the whole pane, not just the cells it painted.
     let mut lines = col()
         .key("terminal-lines")
         .w_full()
+        .fill(t.frame.background.unwrap_or(k.c.bg_base))
         .offset(0.0, t.offset())
         .transition(Transition::none())
         // A terminal cell changes in one frame: no layout, colour or fill eases. A spring here
@@ -297,7 +363,7 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
         return None;
     }
     let palette = crate::term::raster::Palette {
-        bg: crate::term::raster::rgb(k.c.bg_base),
+        bg: crate::term::raster::rgb(t.frame.background.unwrap_or(k.c.bg_base)),
         cursor: crate::term::raster::rgb(if t.focus {
             k.c.text_accent
         } else {
@@ -320,120 +386,6 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
 #[cfg(any(target_arch = "wasm32", feature = "text-renderer"))]
 fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
-}
-
-#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-fn line_row(
-    name: String,
-    line: &Line,
-    mono: rune::TextStyle,
-    cell: f32,
-    height: f32,
-    scale: f32,
-    k: &'static Kit,
-) -> El {
-    // Rows are cut, never faded: a row slipping past an edge is clipped by the clip box, and a
-    // mount or exit fade would make it pop in and out instead.
-    let mut element = el()
-        .key(name)
-        .w_full()
-        .h(height)
-        .transition(Transition::none());
-    if let Some((start, end)) = line.selection {
-        let width = f32::from(end.saturating_sub(start) + 1) * cell;
-        element = element.child(
-            el().key("selected")
-                .absolute(f32::from(start) * cell, 0.0)
-                .w(width)
-                .h(height)
-                .transition(Transition::none())
-                .fill(k.alpha(k.c.text_accent, 0.24)),
-        );
-    }
-    // Cell backgrounds are rectangles over the run's cells: flush with each other, the row edges
-    // and the pane, which is what a terminal draws. The shaper's own span background pads and
-    // rounds, so it is left off.
-    // Overlay keys come from the cell they cover, never their position in the vector: a cell
-    // that gains or loses a background or a shape changes the element at that cell alone. A
-    // positional key would renumber every element to its right, remapping their rectangles
-    // for a frame, which reads as a flash travelling along the rest of the row.
-    for run in &line.runs {
-        let Some(bg) = run.pen.bg else { continue };
-        let width = f32::from(run.cols.1.saturating_sub(run.cols.0)) * cell;
-        element = element.child(
-            el().key(format!("bg{}", run.cols.0))
-                .absolute(f32::from(run.cols.0) * cell, 0.0)
-                .w(width)
-                .h(height)
-                .transition(Transition::none())
-                .fill(bg),
-        );
-    }
-    // Cell-filling characters are rectangles, not glyphs: their edges are snapped to whole
-    // device pixels from the cell's own column, so two cells' rules abut instead of leaving the
-    // hairline a font's glyph leaves when the family's design does not tile.
-    let snap_x =
-        |col: u16, fraction: f32| ((f32::from(col) + fraction) * cell * scale).round() / scale;
-    // One cell can need several rectangles (a double cross, an arc), so the key is the cell's
-    // column and the rectangle's ordinal within that cell. Both are stable when cells to the
-    // left change shape; only the rects of the cell that changed are replaced.
-    let mut ordinal = 0u16;
-    let mut column = None;
-    for shape in &line.shapes {
-        if column != Some(shape.col) {
-            column = Some(shape.col);
-            ordinal = 0;
-        }
-        let key = format!("sh{}_{ordinal}", shape.col);
-        ordinal = ordinal.saturating_add(1);
-        let [x0, y0, x1, y1] = shape.rect;
-        let (left, right) = (snap_x(shape.col, x0), snap_x(shape.col, x1));
-        let top = (y0 * height * scale).round() / scale;
-        let bottom = (y1 * height * scale).round() / scale;
-        element = element.child(
-            el().key(key)
-                .absolute(left, top)
-                .w(right - left)
-                .h(bottom - top)
-                .transition(Transition::none())
-                .fill(shape.fg),
-        );
-    }
-    let mut spans = Vec::with_capacity(line.runs.len());
-    let mut default = k.c.text_base;
-    for run in &line.runs {
-        default = run.pen.fg;
-        spans.push(Span {
-            start: run.start as u32,
-            end: run.end as u32,
-            weight: run.pen.bold.then_some(700.0),
-            mono: true,
-            size: None,
-            color: Some(run.pen.fg),
-            bg: None,
-            bg_pad: 0.0,
-            underline: run.pen.underline.then_some(run.pen.fg),
-            italic: run.pen.italic,
-        });
-    }
-    let mut body = text(line.text.clone())
-        .key("text")
-        .font(mono)
-        .color(default)
-        .spans(spans)
-        .shrink()
-        .min_w(0.0)
-        .transition(Transition::none());
-    let strikes: Vec<(usize, usize, Option<rune::Color>)> = line
-        .runs
-        .iter()
-        .filter(|run| run.pen.strike)
-        .map(|run| (run.start, run.end, Some(run.pen.fg)))
-        .collect();
-    if !strikes.is_empty() {
-        body = body.strikes(strikes);
-    }
-    element.child(body)
 }
 
 pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {

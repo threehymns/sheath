@@ -21,6 +21,30 @@ use ghostty_vt::style::RgbColor;
 pub use pane::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, split};
 pub use pane::{MouseAction, Terminal};
 
+/// Progress a program reported for its own work (OSC 9;4). The pane's header draws it, so a
+/// long build or download shows how far along it is without a prompt of its own.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Progress {
+    pub kind: ProgressKind,
+    /// The percentage the program reported, when it reported one.
+    pub percent: Option<u8>,
+}
+
+/// Which state a [`Progress`] report is in.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ProgressKind {
+    /// Determinate work.
+    Set,
+    /// Work with no percentage to show.
+    Indeterminate,
+    /// Work the program paused.
+    Pause,
+    /// Work that failed.
+    Error,
+}
+
 /// The colours the terminal hands libghostty as its defaults: what an unstyled cell draws in,
 /// and what `OSC 10`/`11` report. The view paints the same pair, so the grid and the pane agree.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
