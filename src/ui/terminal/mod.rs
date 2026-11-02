@@ -3,6 +3,8 @@ mod rows;
 
 use crate::app::App;
 use crate::icons;
+#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+use crate::term::grid::CursorShape;
 use crate::term::{MouseAction, ProgressKind, Terminal};
 #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 use rows::line_row;
@@ -303,18 +305,38 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
                 );
             }
             if let Some((x, y)) = t.frame.cursor {
-                lines = lines.child(
-                    el().key("terminal-cursor")
-                        .absolute(f32::from(x) * t.cell, f32::from(y) * t.line)
-                        .w(t.cell)
-                        .h(t.line)
+                // The program's own cursor colour (OSC 12) when it set one, else the theme's
+                // accent, muted while the pane is unfocused.
+                let color = t.frame.cursor_color.unwrap_or(if t.focus {
+                    k.c.text_accent
+                } else {
+                    k.c.text_muted
+                });
+                let fill = k.alpha(color, if t.focus { 0.55 } else { 0.35 });
+                let edge = (t.line * 0.08).max(2.0);
+                let bar = (t.cell * 0.125).max(2.0);
+                let at = |key: &str, dx: f32, dy: f32, w: f32, h: f32| {
+                    el().key(format!("terminal-cursor-{key}"))
+                        .absolute(f32::from(x) * t.cell + dx, f32::from(y) * t.line + dy)
+                        .w(w)
+                        .h(h)
                         .transition(Transition::none())
-                        .fill(if t.focus {
-                            k.alpha(k.c.text_accent, 0.55)
-                        } else {
-                            k.alpha(k.c.text_muted, 0.35)
-                        }),
-                );
+                        .fill(fill)
+                };
+                // DECSCUSR: a bar for an editor's insert mode, and the block the pane has
+                // always drawn for the shapes it does not single out.
+                lines = match t.frame.cursor_shape {
+                    CursorShape::Block => lines.child(at("block", 0.0, 0.0, t.cell, t.line)),
+                    CursorShape::Bar => lines.child(at("bar", 0.0, 0.0, bar, t.line)),
+                    CursorShape::Underline => {
+                        lines.child(at("underline", 0.0, t.line - edge, t.cell, edge))
+                    }
+                    CursorShape::Hollow => lines
+                        .child(at("top", 0.0, 0.0, t.cell, edge))
+                        .child(at("bottom", 0.0, t.line - edge, t.cell, edge))
+                        .child(at("left", 0.0, 0.0, edge, t.line))
+                        .child(at("right", t.cell - edge, 0.0, edge, t.line)),
+                };
             }
         }
     }

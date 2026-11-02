@@ -4,12 +4,12 @@
 
 use std::time::Instant;
 
-use ghostty_vt::render::{CellIteration, CellIterator, Dirty, RowIterator};
+use ghostty_vt::render::{CellIteration, CellIterator, CursorVisualStyle, Dirty, RowIterator};
 use ghostty_vt::style::{RgbColor, StyleColor, Underline};
 use rune::Color;
 
 use super::Engine;
-use crate::term::grid::{Frame, Line, Pen, Run, Shape};
+use crate::term::grid::{CursorShape, Frame, Line, Pen, Run, Shape};
 use crate::term::shapes::{self, Metrics};
 
 impl Engine {
@@ -140,11 +140,30 @@ impl Engine {
         }
         self.scratch = scratch;
         let _ = snapshot.set_dirty(Dirty::Clean);
+        // DECSCUSR picks the shape and OSC 12 the colour: a program that asks for a bar cursor
+        // in its insert mode, or tints the cursor to match its own theme, draws in Ghostty
+        // exactly what it asked for, and the pane reads the same two pieces of state.
         out.cursor = snapshot
             .cursor_viewport()
             .ok()
             .flatten()
+            .filter(|_| snapshot.cursor_visible().unwrap_or(true))
             .map(|at| (at.x, at.y));
+        out.cursor_shape = cursor_shape(
+            snapshot
+                .cursor_visual_style()
+                .unwrap_or(CursorVisualStyle::Block),
+        );
+        // Only a colour the program set: libghostty reports the effective colour, which is the
+        // theme's own until an OSC 12 (or 112, back again) moves it, and the pane draws its
+        // unfocused cursor in a different colour from the theme's.
+        let default_cursor = self.vt.default_cursor_color().ok().flatten();
+        out.cursor_color = snapshot
+            .cursor_color()
+            .ok()
+            .flatten()
+            .filter(|set| Some(*set) != default_cursor)
+            .map(color);
         if self.edges_at == Some(self.applied) {
             out.lead.clone_from(&self.lead);
             out.trail.clone_from(&self.trail);
@@ -263,6 +282,17 @@ fn read_cells(
         if let Some(last) = line.runs.last_mut() {
             last.end = last.end.min(used);
         }
+    }
+}
+
+/// DECSCUSR's shape, in the renderer's own terms. Any shape a later libghostty adds draws as
+/// the default block rather than nothing.
+fn cursor_shape(style: CursorVisualStyle) -> CursorShape {
+    match style {
+        CursorVisualStyle::Bar => CursorShape::Bar,
+        CursorVisualStyle::Underline => CursorShape::Underline,
+        CursorVisualStyle::BlockHollow => CursorShape::Hollow,
+        _ => CursorShape::Block,
     }
 }
 

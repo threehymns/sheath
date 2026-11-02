@@ -46,6 +46,82 @@ fn an_osc8_link_comes_back_with_the_cells_it_covers() {
     );
 }
 
+/// OSC 12 sets the cursor's own colour and OSC 112 hands it back to the theme, while DECSCUSR
+/// picks the shape: the two pieces of cursor state Ghostty's renderer draws from, and the two a
+/// program like an editor uses to draw a bar cursor in its insert mode.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn the_program_s_cursor_colour_and_shape_reach_the_frame() {
+    use crate::term::engine::Engine;
+    use crate::term::grid::CursorShape;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    engine.feed(b"\x1b[2J\x1b[H\x1b]12;#ff0000\x1b\\\x1b[4 q");
+    let frame = engine.frame();
+    assert_eq!(frame.cursor, Some((0, 0)));
+    let color = frame.cursor_color.expect("the program set a cursor colour");
+    let byte = |value: f32| (rune::color::srgb_encode(value) * 255.0).round() as u8;
+    assert_eq!((byte(color.r), byte(color.g), byte(color.b)), (255, 0, 0));
+    assert_eq!(
+        frame.cursor_shape,
+        CursorShape::Underline,
+        "DECSCUSR 4 is the underline shape"
+    );
+    engine.feed(b"\x1b]112\x1b\\\x1b[5 q");
+    let frame = engine.frame();
+    assert_eq!(
+        frame.cursor_color, None,
+        "OSC 112 gives the cursor back to the theme"
+    );
+    assert_eq!(
+        frame.cursor_shape,
+        CursorShape::Bar,
+        "DECSCUSR 5 is the bar"
+    );
+}
+
+/// OSC 52 hands the clipboard what the program copied, with the trailing whitespace Ghostty
+/// trims by default (`clipboard-trim-trailing-spaces`): a yank ends in a newline, and keeping it
+/// pastes a blank line wherever the copy lands.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn an_osc52_copy_is_trimmed_of_its_trailing_whitespace() {
+    use crate::term::engine::{Engine, trim_trailing};
+    assert_eq!(trim_trailing("echo hi\n".to_owned()), "echo hi");
+    assert_eq!(trim_trailing("echo hi \t\r\n\n".to_owned()), "echo hi");
+    assert_eq!(
+        trim_trailing("two words".to_owned()),
+        "two words",
+        "a copy with nothing trailing keeps its spaces inside"
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    // OSC 52 with `c` (the clipboard) and base64 of "hello  \n".
+    engine.feed(b"\x1b]52;c;aGVsbG8gIAo=\x1b\\");
+    assert_eq!(engine.take_clipboard(), vec!["hello".to_owned()]);
+}
+
 /// OSC 7 arrives as a `file://` URI with the path percent-encoded, which is how a folder with a
 /// space in its name reaches the header.
 #[cfg(not(target_arch = "wasm32"))]

@@ -66,6 +66,20 @@ pub struct Line {
     pub selection: Option<(u16, u16)>,
 }
 
+/// How the cursor is drawn, the shapes DECSCUSR selects and Ghostty's renderer draws.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CursorShape {
+    /// A wash over the whole cell.
+    #[default]
+    Block,
+    /// A hollow block: the cell's edges only.
+    Hollow,
+    /// A bar at the cell's left edge, which is what an insert-mode editor asks for.
+    Bar,
+    /// A rule along the cell's bottom edge.
+    Underline,
+}
+
 /// The visible screen at one moment.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 #[derive(Clone, Debug, Default)]
@@ -81,6 +95,10 @@ pub struct Frame {
     pub trail: Option<Line>,
     /// The cursor's cell within the viewport, when it is on screen.
     pub cursor: Option<(u16, u16)>,
+    /// The shape the program selected with DECSCUSR, and the colour it set with OSC 12. Ghostty
+    /// draws an editor's insert-mode bar and its tinted cursor the same way.
+    pub cursor_shape: CursorShape,
+    pub cursor_color: Option<Color>,
     pub title: String,
     /// The terminal's own background, when the program set one with OSC 11. Unset means the
     /// view's theme colour, which is what the shell starts with.

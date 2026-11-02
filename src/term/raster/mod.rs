@@ -152,7 +152,17 @@ impl Raster {
             let at = (usize::from(y) + 1) * row_bytes;
             let mut surface =
                 Surface::new(&mut rgba[at..at + row_bytes], width, line_px, palette.bg);
-            surface.cursor(x, cell_px, line_px, palette.cursor, palette.cursor_alpha);
+            // A program that set a cursor colour with OSC 12 draws it in that, not in the
+            // theme's; the theme's is only the colour the shell starts with.
+            let color = frame.cursor_color.map(rgb).unwrap_or(palette.cursor);
+            surface.cursor(
+                x,
+                cell_px,
+                line_px,
+                color,
+                palette.cursor_alpha,
+                frame.cursor_shape,
+            );
         }
         Some((width, height, rgba))
     }

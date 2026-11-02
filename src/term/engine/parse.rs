@@ -23,47 +23,7 @@ impl Engine {
             self.vt.vt_write(&bytes);
             self.parsed += bytes.len() as u64;
             changed = true;
-            for event in self.vt.events() {
-                match event {
-                    // Device attributes, cursor reports and mode answers, on their way back.
-                    Event::PtyWrite(data) => replies.extend(data),
-                    Event::Bell => self.bell.set(true),
-                    Event::TitleChanged(title) => {
-                        self.title = title;
-                    }
-                    // OSC 52 and the other clipboard protocols, on their way to the app's
-                    // clipboard.
-                    Event::ClipboardWrite(write) => {
-                        for content in write.contents {
-                            if content.mime.starts_with("text/")
-                                && let Ok(text) = String::from_utf8(content.data)
-                            {
-                                self.clipboard.push(text);
-                            }
-                        }
-                    }
-                    // OSC 9;4, the progress a program reports for its own work.
-                    Event::ProgressReport { state, progress } => {
-                        self.progress = progress_of(state, progress);
-                    }
-                    // OSC 9 and OSC 777, a notification the program addressed to the desktop.
-                    Event::DesktopNotification { title, body } => {
-                        self.notes.push((title, body));
-                    }
-                    // OSC 7 (and the OSC 9 / OSC 1337 forms): the shell's own directory.
-                    Event::PwdChanged(report) => {
-                        if let Some(dir) = directory(&report) {
-                            self.pwd = Some(dir);
-                        }
-                    }
-                    // Mode 2026: the program is assembling a frame and has asked the screen not
-                    // to show the parts of it written so far.
-                    Event::RenderHold(held) => {
-                        self.hold = held.then(Instant::now);
-                        changed = true;
-                    }
-                }
-            }
+            changed |= self.absorb_all(replies);
             // Past the budget the rest waits for the next frame: a backlog is drawn over many
             // frames at the display's rate, instead of one frame that takes as long as the
             // backlog is deep while the reader keeps adding to it.
@@ -72,6 +32,67 @@ impl Engine {
             }
         }
         changed
+    }
+}
+
+impl Engine {
+    /// Applies every event libghostty queued for the bytes just written, and says whether the
+    /// pane draws differently for any of them. The event buffer is reused: a burst raises
+    /// events per chunk, and a fresh vector per chunk would be an allocation per chunk.
+    pub(super) fn absorb_all(&mut self, replies: &mut Vec<u8>) -> bool {
+        let mut raised = std::mem::take(&mut self.events);
+        raised.extend(self.vt.events());
+        let mut changed = false;
+        for event in raised.drain(..) {
+            changed |= self.absorb(event, replies);
+        }
+        self.events = raised;
+        changed
+    }
+
+    /// Applies one side effect libghostty raised, and collects the reply the program is owed.
+    /// Says whether the pane draws differently for it. The parse loop and the test feed share
+    /// this, so a test sees the same clipboard, title and progress a shell's bytes produce.
+    pub(super) fn absorb(&mut self, event: Event, replies: &mut Vec<u8>) -> bool {
+        match event {
+            // Device attributes, cursor reports and mode answers, on their way back.
+            Event::PtyWrite(data) => replies.extend(data),
+            Event::Bell => self.bell.set(true),
+            Event::TitleChanged(title) => {
+                self.title = title;
+            }
+            // OSC 52 and the other clipboard protocols, on their way to the app's clipboard.
+            Event::ClipboardWrite(write) => {
+                for content in write.contents {
+                    if content.mime.starts_with("text/")
+                        && let Ok(text) = String::from_utf8(content.data)
+                    {
+                        self.clipboard.push(trim_trailing(text));
+                    }
+                }
+            }
+            // OSC 9;4, the progress a program reports for its own work.
+            Event::ProgressReport { state, progress } => {
+                self.progress = progress_of(state, progress);
+            }
+            // OSC 9 and OSC 777, a notification the program addressed to the desktop.
+            Event::DesktopNotification { title, body } => {
+                self.notes.push((title, body));
+            }
+            // OSC 7 (and the OSC 9 / OSC 1337 forms): the shell's own directory.
+            Event::PwdChanged(report) => {
+                if let Some(dir) = directory(&report) {
+                    self.pwd = Some(dir);
+                }
+            }
+            // Mode 2026: the program is assembling a frame and has asked the screen not to
+            // show the parts of it written so far.
+            Event::RenderHold(held) => {
+                self.hold = held.then(Instant::now);
+                return true;
+            }
+        }
+        false
     }
 }
 
@@ -87,6 +108,15 @@ pub(crate) fn directory(report: &str) -> Option<PathBuf> {
     };
     let path = decode(path);
     (!path.is_empty()).then(|| PathBuf::from(path))
+}
+
+/// A copy with its trailing whitespace trimmed, which is what Ghostty hands the clipboard by
+/// default (`clipboard-trim-trailing-spaces`): a `yank` or a selection almost always ends in a
+/// newline, and keeping it pastes an empty line wherever the copy lands.
+pub(crate) fn trim_trailing(mut text: String) -> String {
+    let len = text.trim_end_matches([' ', '\t', '\r', '\n']).len();
+    text.truncate(len);
+    text
 }
 
 /// The percent-decoded form of a URI path, which is how a directory with a space in it arrives.

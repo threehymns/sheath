@@ -25,7 +25,7 @@ use pty::Incoming;
 use ghostty_vt::key::{Encoder as KeyEncoder, Event as EncoderEvent};
 use ghostty_vt::mouse;
 use ghostty_vt::selection::{FormatOptions, Selection};
-use ghostty_vt::terminal::{Mode, Point, PointCoordinate, ScrollViewport};
+use ghostty_vt::terminal::{Event, Mode, Point, PointCoordinate, ScrollViewport};
 use ghostty_vt::{RenderState, Terminal as Vt, TerminalOptions};
 use portable_pty::{MasterPty, PtySize};
 use rune::Waker;
@@ -103,6 +103,9 @@ pub struct Engine {
     /// a drain that left bytes queued asks again.
     pending: Arc<AtomicBool>,
     wake: Waker,
+    /// Events libghostty raised for the chunk being parsed, kept between chunks so the parse
+    /// loop does not allocate a vector per chunk.
+    events: Vec<Event>,
     /// Text the program put on the clipboard (OSC 52), waiting for the app to take it.
     clipboard: Vec<String>,
     /// Progress the running program reported (OSC 9;4), or `None` when it reports none.
@@ -217,6 +220,7 @@ impl Engine {
             keys_stale: true,
             pending: session.pending,
             wake,
+            events: Vec::new(),
             clipboard: Vec::new(),
             progress: None,
             notes: Vec::new(),
@@ -316,12 +320,14 @@ impl Engine {
         self.pwd.as_deref()
     }
 
-    /// Writes VT bytes straight into the parser, without the PTY. Tests use it to put an exact
-    /// screen in front of the render path.
+    /// Writes VT bytes straight into the parser, without the PTY, and applies what they raised
+    /// the way the parse loop would. Tests use it to put an exact screen in front of the render
+    /// path, and an exact clipboard, title or progress report in front of the app.
     #[cfg(test)]
     pub fn feed(&mut self, bytes: &[u8]) {
         self.vt.vt_write(bytes);
-        for _ in self.vt.events() {}
+        let mut replies = Vec::new();
+        self.absorb_all(&mut replies);
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
@@ -481,4 +487,4 @@ impl Engine {
 
 // The report parsers live with the parse loop; the tests reach them through here.
 #[cfg(test)]
-pub(crate) use parse::{directory, progress_of};
+pub(crate) use parse::{directory, progress_of, trim_trailing};
