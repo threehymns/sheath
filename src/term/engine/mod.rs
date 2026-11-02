@@ -14,8 +14,11 @@ use std::cell::Cell;
 use std::io::Write;
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use pty::Incoming;
 
 use ghostty_vt::key::{Encoder as KeyEncoder, Event as EncoderEvent};
 use ghostty_vt::mouse;
@@ -33,6 +36,16 @@ use crate::term::shapes::Metrics;
 /// not rows, so this is roughly a quarter million lines of plain text.
 const MAX_SCROLLBACK: usize = 32 * 1024 * 1024;
 
+/// Bytes one parse step hands libghostty, so the frame's time budget can be checked between
+/// steps instead of after everything queued has been parsed.
+const PARSE_CHUNK: usize = 64 * 1024;
+
+/// How long one frame may spend parsing. Bytes past this wait for the next frame, so a burst
+/// costs more frames rather than longer ones: the screen stays at the display's rate and falls
+/// behind the shell by at most [`pty::QUEUE_LIMIT`], instead of every frame growing with the
+/// backlog and the two chasing each other down.
+const PARSE_BUDGET: Duration = Duration::from_millis(6);
+
 pub struct Engine {
     vt: Vt,
     render: RenderState,
@@ -42,7 +55,9 @@ pub struct Engine {
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
     /// Bytes the reader thread has taken off the PTY and not yet parsed.
-    incoming: Arc<Mutex<Vec<u8>>>,
+    incoming: Arc<Incoming>,
+    /// Bytes parsed since the shell started, for the frame-rate and lag measurement.
+    parsed: u64,
     bell: Rc<Cell<bool>>,
     /// How many rows back from the bottom the viewport is drawn, as last told to libghostty.
     applied: usize,
@@ -82,7 +97,34 @@ pub struct Engine {
     clipboard: Vec<String>,
 }
 
+/// What the pane is doing behind the frame it just drew. `lag` is the honest latency number: a
+/// frame showing a screen whose oldest byte has waited 20 seconds is twenty seconds stale, no
+/// matter what frame rate the program reports about its own writes.
+#[derive(Clone, Copy, Debug)]
+pub struct Stats {
+    /// Bytes read from the pty and not parsed yet.
+    pub queued: usize,
+    /// How long the oldest of those has waited.
+    pub lag: Duration,
+    /// Bytes parsed since the shell started.
+    pub parsed: u64,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        pty::close(&self.incoming);
+    }
+}
+
 impl Engine {
+    pub fn stats(&self) -> Stats {
+        Stats {
+            queued: self.incoming.len(),
+            lag: self.incoming.lag(),
+            parsed: self.parsed,
+        }
+    }
+
     pub fn spawn(
         dir: &Path,
         cols: u16,
@@ -120,6 +162,7 @@ impl Engine {
             writer: session.writer,
             child: session.child,
             incoming: session.incoming,
+            parsed: 0,
             bell,
             applied: 0,
             cols,
@@ -152,16 +195,18 @@ impl Engine {
     /// Parses what the reader brought, sends the replies the program asked for, and says whether
     /// anything the pane draws changed.
     pub fn drain(&mut self) -> bool {
-        let bytes = self
-            .incoming
-            .lock()
-            .map(|mut queue| std::mem::take(&mut *queue))
-            .unwrap_or_default();
         self.pending.store(false, Ordering::Release);
         let mut changed = false;
-        if !bytes.is_empty() {
+        let at = Instant::now();
+        let mut replies = Vec::new();
+        loop {
+            let bytes = self.incoming.take(PARSE_CHUNK);
+            if bytes.is_empty() {
+                break;
+            }
             self.vt.vt_write(&bytes);
-            let mut replies = Vec::new();
+            self.parsed += bytes.len() as u64;
+            changed = true;
             for event in self.vt.events() {
                 match event {
                     // Device attributes, cursor reports and mode answers, on their way back.
@@ -184,12 +229,17 @@ impl Engine {
                     _ => {}
                 }
             }
-            if !replies.is_empty() {
-                let _ = self.writer.write_all(&replies);
+            // Past the budget the rest waits for the next frame: a backlog is drawn over many
+            // frames at the display's rate, instead of one frame that takes as long as the
+            // backlog is deep while the reader keeps adding to it.
+            if at.elapsed() >= PARSE_BUDGET {
+                break;
             }
-            let _ = self.writer.flush();
-            changed = true;
         }
+        if !replies.is_empty() {
+            let _ = self.writer.write_all(&replies);
+        }
+        let _ = self.writer.flush();
         if let Ok(title) = self.vt.title()
             && title != self.title
         {
@@ -208,13 +258,12 @@ impl Engine {
             self.history = self.vt.scrollback_rows().unwrap_or(self.history);
             self.tracking = self.vt.is_mouse_tracking().unwrap_or(false);
         }
-        // Bytes that arrived while this drain ran get the next frame, not the one after.
-        let queued = self
-            .incoming
-            .lock()
-            .map(|queue| !queue.is_empty())
-            .unwrap_or(false);
-        if queued && !self.pending.swap(true, Ordering::AcqRel) {
+        // Bytes left over from the budget, and bytes that arrived while this drain ran, get the
+        // next frame, not the one after. The wake is not recorded as pending: one sent from
+        // inside a frame is not one the next frame is guaranteed to receive, and leaving the
+        // flag set would swallow every wake the reader sends after it.
+        if self.incoming.len() > 0 {
+            self.pending.store(false, Ordering::Release);
             (self.wake)();
         }
         changed
@@ -224,6 +273,7 @@ impl Engine {
     /// running. Dropping the PTY hangs the child up, but a kill is what stops a program that
     /// ignores that.
     pub fn kill(&mut self) {
+        pty::close(&self.incoming);
         let _ = self.child.kill();
     }
 

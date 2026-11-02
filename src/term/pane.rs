@@ -419,6 +419,12 @@ impl Terminal {
         (cols.max(2.0) as u16, rows.max(1.0) as u16)
     }
 
+    /// What the pane is behind by: bytes queued, the oldest one's wait, and bytes parsed.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn stats(&self) -> Option<crate::term::engine::Stats> {
+        self.engine.as_ref().map(|engine| engine.stats())
+    }
+
     /// A copy the program asked for (OSC 52), handed to the clipboard on the next poll.
     pub fn take_copies(&mut self) -> Vec<String> {
         #[cfg(not(target_arch = "wasm32"))]

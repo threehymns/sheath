@@ -10,7 +10,7 @@ mod scroll_area;
 mod settings;
 mod sidebar;
 mod table;
-mod terminal;
+pub(crate) mod terminal;
 
 use std::path::Component;
 

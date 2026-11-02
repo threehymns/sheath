@@ -9,6 +9,8 @@ pub(crate) mod shapes;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod engine;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod window;
 
 #[cfg(not(target_arch = "wasm32"))]
 use ghostty_vt::style::RgbColor;

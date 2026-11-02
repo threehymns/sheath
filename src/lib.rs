@@ -53,6 +53,13 @@ pub fn launch() {
     });
 }
 
+/// Opens a window that is only the terminal pane: the same engine, rows and scroll as the pane
+/// inside the app, with none of the file manager around it. `cargo run --bin terminal` starts it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn launch_terminal() {
+    term::window::launch();
+}
+
 /// Loads the KDL files OPFS kept from the last visit, before the web build opens its window.
 #[cfg(target_arch = "wasm32")]
 pub async fn hydrate_web() {

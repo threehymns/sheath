@@ -19,6 +19,14 @@ cargo run -- ~/Downloads  # start somewhere else
 cargo run -- README.md    # start beside a file, with it selected
 ```
 
+The terminal pane is also a window of its own — the same engine, rows and scroll, with no file
+manager around them:
+
+```sh
+cargo run --bin terminal           # a shell in the folder you are in
+cargo run --bin terminal -- ~/src  # ... or in another one
+```
+
 Arguments after `--` go to the app; Rune parses its own flags first. The framework is pinned
 to a `dev` commit in `Cargo.toml`, so the first build fetches Rune from git and takes a while.
 

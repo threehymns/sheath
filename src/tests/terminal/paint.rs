@@ -241,7 +241,7 @@ fn a_shape_is_a_rectangle_over_its_cell() {
 
     let row = rt.presented("t0").expect("the row").0;
     let (cell, height) = (rt.state.term.cell, rt.state.term.line);
-    let block = rt.presented("shape0").expect("the block").0;
+    let block = rt.presented("sh0_0").expect("the block").0;
     assert!(
         (block[0] - row[0]).abs() < 0.01,
         "flush with the row: {block:?}"
@@ -251,7 +251,7 @@ fn a_shape_is_a_rectangle_over_its_cell() {
         (block[3] - height).abs() < 0.01,
         "a full line tall, so blocks in a column meet: {block:?}"
     );
-    let quadrant = rt.presented("shape1").expect("the quadrant").0;
+    let quadrant = rt.presented("sh1_0").expect("the quadrant").0;
     assert!(
         (quadrant[0] - (row[0] + cell)).abs() < 0.01,
         "the next cell's shape starts on its own column: {quadrant:?}"
@@ -264,6 +264,209 @@ fn a_shape_is_a_rectangle_over_its_cell() {
         (quadrant[3] - height * 0.5).abs() < 0.01,
         "half a line: {quadrant:?}"
     );
+}
+
+/// An update to one cell must not renumber the elements to its right. A background run or a
+/// shape inserted on the left of a row changes that cell's rectangle alone; the rest of the row
+/// keeps its keys, so Rune updates those rectangles instead of remapping their geometry onto
+/// different elements, which read as a flash travelling along the row.
+#[test]
+fn an_update_keeps_the_elements_to_its_right() {
+    use crate::term::grid::{Pen, Run, Shape};
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let mut line = Line {
+        text: "     ".to_owned(),
+        ..Line::default()
+    };
+    line.shapes.push(Shape {
+        col: 3,
+        rect: [0.0, 0.0, 1.0, 1.0],
+        fg: rune::Color::WHITE,
+    });
+    line.shapes.push(Shape {
+        col: 4,
+        rect: [0.0, 0.0, 0.5, 0.5],
+        fg: rune::Color::WHITE,
+    });
+    line.runs.push(Run {
+        start: 3,
+        end: 5,
+        cols: (3, 5),
+        pen: Pen {
+            bg: Some(rune::Color::WHITE),
+            ..Pen::default()
+        },
+    });
+    let frame = Frame {
+        cols: 20,
+        rows: 2,
+        lines: vec![line, Line::default()],
+        ..Frame::default()
+    };
+    rt.state.term.show_for_test(frame);
+    rt.frame(0.0);
+    rt.invalidate();
+    rt.frame(0.0);
+
+    let row = rt.presented("t0").expect("the row").0;
+    let cell = rt.state.term.cell;
+    let before = rt.presented("sh3_0").expect("the block at column three").0[0];
+    assert!(rt.presented("bg3").is_some(), "its background");
+
+    // A cell to the left gains a shape and a background, as a TUI redraw inserts a box rule
+    // and a highlight into a row that is already on screen.
+    let line = &mut rt.state.term.frame.lines[0];
+    line.shapes.insert(
+        0,
+        Shape {
+            col: 1,
+            rect: [0.0, 0.0, 0.5, 1.0],
+            fg: rune::Color::WHITE,
+        },
+    );
+    line.runs.insert(
+        0,
+        Run {
+            start: 1,
+            end: 2,
+            cols: (1, 2),
+            pen: Pen {
+                bg: Some(rune::Color::WHITE),
+                ..Pen::default()
+            },
+        },
+    );
+    rt.invalidate();
+    rt.frame(0.0);
+
+    let after = rt.presented("sh3_0").expect("the block keeps its key").0[0];
+    assert!(
+        (after - before).abs() < 0.01,
+        "the block left of the update stays where it was: {after} vs {before}"
+    );
+    assert!(
+        rt.presented("sh4_0").is_some(),
+        "and so does the next cell's shape"
+    );
+    let bg = rt.presented("bg3").expect("the background keeps its key").0;
+    assert!(
+        (bg[0] - (row[0] + 3.0 * cell)).abs() < 0.01,
+        "the run still starts on column three: {bg:?}"
+    );
+    assert!(
+        (bg[2] - 2.0 * cell).abs() < 0.01,
+        "and still covers two cells: {bg:?}"
+    );
+    assert!(rt.presented("bg1").is_some(), "the run on the left is new");
+    assert!(
+        rt.presented("sh1_0").is_some(),
+        "and so is the shape beside it"
+    );
+    assert!(
+        rt.presented("text").is_some(),
+        "the row's text keeps one identity among its siblings"
+    );
+}
+
+/// A screen that swaps a block-art logo for a list, the way opencode replaces its welcome logo
+/// with the slash-command popover, leaves nothing behind in a transition: no element under the
+/// grid is exiting, springing, or below full opacity on the frames that follow.
+#[test]
+fn a_logo_replaced_by_a_popover_leaves_nothing_fading() {
+    use crate::term::grid::{Pen, Run, Shape};
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let mut frame = Frame {
+        cols: 40,
+        rows: 8,
+        ..Frame::default()
+    };
+    // Four rows of full blocks with a coloured bar: the body of a large logo.
+    for _ in 0..4 {
+        let mut line = Line {
+            text: " ".repeat(40),
+            ..Line::default()
+        };
+        for col in 8..30 {
+            line.shapes.push(Shape {
+                col,
+                rect: [0.0, 0.0, 1.0, 1.0],
+                fg: rune::Color::WHITE,
+            });
+        }
+        line.runs.push(Run {
+            start: 8,
+            end: 30,
+            cols: (8, 30),
+            pen: Pen {
+                bg: Some(rune::Color::WHITE),
+                ..Pen::default()
+            },
+        });
+        frame.lines.push(line);
+    }
+    while frame.lines.len() < 8 {
+        frame.lines.push(Line::default());
+    }
+    rt.state.term.show_for_test(frame);
+    for _ in 0..8 {
+        rt.frame(1.0 / 60.0);
+    }
+
+    // The popover: text rows with one short highlight, no full blocks.
+    for (index, line) in rt.state.term.frame.lines.iter_mut().enumerate().take(6) {
+        *line = Line {
+            text: format!("/command {index}").chars().take(40).collect(),
+            ..Line::default()
+        };
+        let cols = line.text.chars().count() as u16;
+        line.runs.push(Run {
+            start: 0,
+            end: line.text.len(),
+            cols: (0, cols),
+            pen: Pen::default(),
+        });
+        if index == 2 {
+            line.runs.push(Run {
+                start: 0,
+                end: line.text.len(),
+                cols: (0, cols),
+                pen: Pen {
+                    bg: Some(rune::Color::WHITE),
+                    ..Pen::default()
+                },
+            });
+        }
+    }
+    rt.invalidate();
+    for step in 0..8 {
+        rt.frame(1.0 / 60.0);
+        for element in rt.elements() {
+            if !element.path.contains("terminal-lines") {
+                continue;
+            }
+            assert_eq!(
+                element.opacity, 1.0,
+                "{} is fading on frame {step}",
+                element.path
+            );
+            assert!(
+                !element.exiting,
+                "{} is exiting on frame {step}",
+                element.path
+            );
+            assert!(
+                !element.moving,
+                "{} is still moving on frame {step}",
+                element.path
+            );
+        }
+    }
 }
 
 /// The engine decides: a cell-filling character becomes shapes on the frame and a space in the

@@ -1,8 +1,8 @@
 use crate::app::App;
 use crate::icons;
-use crate::term::MouseAction;
 use crate::term::grid::Line;
-use rune::{Cursor, Drag, El, Phase, Span, Transition, Tx, col, el, row, text};
+use crate::term::{MouseAction, Terminal};
+use rune::{Cursor, Drag, El, Phase, Span, Spring, Transition, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
@@ -161,12 +161,24 @@ fn header(s: &App, k: &'static Kit) -> El {
 }
 
 fn screen(s: &App, k: &'static Kit) -> El {
-    let t = &s.term;
+    screen_of(&s.term, s.scale.get(), k)
+        .on_wheel(|s: &mut App, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        .on_drag(|s: &mut App, drag: &mut Drag, _: &mut Tx| terminal_drag(&mut s.term, drag))
+        .on_press(|s: &mut App| s.term.focus = true)
+        .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
+            let cell = s.term.cell;
+            s.term.layout(rect, cell);
+            tx.live_only();
+        })
+}
+
+/// The rows, the cursor and the notice, with no input attached: the app's pane and the standalone
+/// terminal window both draw this, and each wires the handlers it has to it.
+pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
     // The rows are drawn on the font's own line box, the one the pane measured its cell from and
     // the one cell-filling glyphs are drawn to. The theme's line height is for paragraphs.
     let mono = t.text_style(k.ty.mono);
     let (cell, height) = (t.cell, t.line);
-    let scale = s.scale.get();
     // The offset is the scroll itself, so it must land on the frame it is asked for: a spring
     // here lags the fraction and then chases a whole line every time the viewport steps, which
     // reads as the top row sliding half out and snapping back.
@@ -175,6 +187,10 @@ fn screen(s: &App, k: &'static Kit) -> El {
         .w_full()
         .offset(0.0, t.offset())
         .transition(Transition::none())
+        // A terminal cell changes in one frame: no layout, colour or fill eases. A spring here
+        // makes a background bar or a rule fade from its old colour over the run it covers, and
+        // that run is exactly the stretch of the row to the right of the cell that changed.
+        .motion(Spring::NONE)
         .instant_changes();
     // The row above the viewport, hung one line up so the fraction of it the scroll shows fills
     // the top edge instead of background that fills in when the viewport steps.
@@ -227,16 +243,8 @@ fn screen(s: &App, k: &'static Kit) -> El {
         // inset above or below the rows is a strip that is cut by the clip instead of being
         // filled by the row entering there, which makes a row pop at half its height.
         .px(10.0)
-        .transition(Transition::none())
-        .on_wheel(|s: &mut App, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
-        .on_drag(|s: &mut App, drag: &mut Drag, _: &mut Tx| terminal_drag(s, drag))
-        .on_press(|s: &mut App| s.term.focus = true)
-        .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
-            let cell = s.term.cell;
-            s.term.layout(rect, cell);
-            tx.live_only();
-        });
-    if let Some(notice) = &s.term.notice {
+        .transition(Transition::none());
+    if let Some(notice) = &t.notice {
         view = view.child(
             text(notice.clone())
                 .key("terminal-notice")
@@ -289,11 +297,15 @@ fn line_row(
     // Cell backgrounds are rectangles over the run's cells: flush with each other, the row edges
     // and the pane, which is what a terminal draws. The shaper's own span background pads and
     // rounds, so it is left off.
-    for (index, run) in line.runs.iter().enumerate() {
+    // Overlay keys come from the cell they cover, never their position in the vector: a cell
+    // that gains or loses a background or a shape changes the element at that cell alone. A
+    // positional key would renumber every element to its right, remapping their rectangles
+    // for a frame, which reads as a flash travelling along the rest of the row.
+    for run in &line.runs {
         let Some(bg) = run.pen.bg else { continue };
         let width = f32::from(run.cols.1.saturating_sub(run.cols.0)) * cell;
         element = element.child(
-            el().key(format!("bg{index}"))
+            el().key(format!("bg{}", run.cols.0))
                 .absolute(f32::from(run.cols.0) * cell, 0.0)
                 .w(width)
                 .h(height)
@@ -306,13 +318,24 @@ fn line_row(
     // hairline a font's glyph leaves when the family's design does not tile.
     let snap_x =
         |col: u16, fraction: f32| ((f32::from(col) + fraction) * cell * scale).round() / scale;
-    for (index, shape) in line.shapes.iter().enumerate() {
+    // One cell can need several rectangles (a double cross, an arc), so the key is the cell's
+    // column and the rectangle's ordinal within that cell. Both are stable when cells to the
+    // left change shape; only the rects of the cell that changed are replaced.
+    let mut ordinal = 0u16;
+    let mut column = None;
+    for shape in &line.shapes {
+        if column != Some(shape.col) {
+            column = Some(shape.col);
+            ordinal = 0;
+        }
+        let key = format!("sh{}_{ordinal}", shape.col);
+        ordinal = ordinal.saturating_add(1);
         let [x0, y0, x1, y1] = shape.rect;
         let (left, right) = (snap_x(shape.col, x0), snap_x(shape.col, x1));
         let top = (y0 * height * scale).round() / scale;
         let bottom = (y1 * height * scale).round() / scale;
         element = element.child(
-            el().key(format!("shape{index}"))
+            el().key(key)
                 .absolute(left, top)
                 .w(right - left)
                 .h(bottom - top)
@@ -338,6 +361,7 @@ fn line_row(
         });
     }
     let mut body = text(line.text.clone())
+        .key("text")
         .font(mono)
         .color(default)
         .spans(spans)
@@ -356,35 +380,35 @@ fn line_row(
     element.child(body)
 }
 
-fn terminal_drag(s: &mut App, drag: &Drag) {
-    let cell = s.term.cell.max(1.0);
-    let line = s.term.line.max(1.0);
+pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag) {
+    let cell = t.cell.max(1.0);
+    let line = t.line.max(1.0);
     let at = (
         (drag.x / cell).floor().clamp(0.0, 4000.0) as u16,
         (drag.y / line).floor().clamp(0.0, 4000.0) as u16,
     );
     // A program that asked for the mouse gets the gesture; otherwise a drag selects text.
-    let tracking = s.term.mouse_tracking();
+    let tracking = t.mouse_tracking();
     match drag.phase {
         Phase::Down => {
-            s.term.focus = true;
+            t.focus = true;
             if tracking {
-                s.term.mouse(MouseAction::Press, at, false);
+                t.mouse(MouseAction::Press, at, false);
             } else {
-                s.term.clear_selection();
-                s.term.begin_selection(at);
+                t.clear_selection();
+                t.begin_selection(at);
             }
         }
         Phase::Move => {
             if tracking {
-                s.term.mouse(MouseAction::Drag, at, false);
+                t.mouse(MouseAction::Drag, at, false);
             } else {
-                s.term.extend_selection(at);
+                t.extend_selection(at);
             }
         }
         Phase::Up => {
             if tracking {
-                s.term.mouse(MouseAction::Release, at, false);
+                t.mouse(MouseAction::Release, at, false);
             }
         }
     }
