@@ -2,6 +2,8 @@
 //! and cell-filling shapes resolved against the terminal's palette, and the overscan rows above
 //! and below the viewport. The view is the only consumer.
 
+use std::time::Instant;
+
 use ghostty_vt::render::{CellIteration, CellIterator, Dirty, RowIterator};
 use ghostty_vt::style::{RgbColor, StyleColor, Underline};
 use rune::Color;
@@ -54,10 +56,17 @@ impl Engine {
         line
     }
 
+    /// Reads the screen into `out`, and adds the time it took to the frame's accounting.
+    pub fn fill(&mut self, out: &mut Frame) {
+        let at = Instant::now();
+        self.fill_into(out);
+        self.readback_time += at.elapsed();
+    }
+
     /// Reads the screen into `out`, reusing its buffers. Only rows libghostty reports as dirty
     /// are read again, and a cell with no styling skips the colour calls that would find none;
     /// cells past a row's last visible glyph are not built at all.
-    pub fn fill(&mut self, out: &mut Frame) {
+    fn fill_into(&mut self, out: &mut Frame) {
         if out.title != self.title {
             out.title.clone_from(&self.title);
         }

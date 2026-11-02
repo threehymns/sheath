@@ -37,6 +37,9 @@ pub struct Window {
     /// drew, how far behind the shell it is, and how much is still queued.
     frames: u64,
     parsed: u64,
+    parse: Duration,
+    readback: Duration,
+    built: Cell<Duration>,
     logged: Instant,
 }
 
@@ -51,6 +54,9 @@ impl Window {
             wake: None,
             frames: 0,
             parsed: 0,
+            parse: Duration::ZERO,
+            readback: Duration::ZERO,
+            built: Cell::new(Duration::ZERO),
             logged: Instant::now(),
         }
     }
@@ -64,25 +70,24 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     let k = theme::kit(cx.system_dark());
     s.dark.set(cx.system_dark());
     s.scale.set(cx.env().scale.max(1.0));
+    let at = Instant::now();
+    let screen = screen_of(&s.term, s.scale.get(), k)
+        .on_wheel(|s: &mut Window, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        .on_drag(|s: &mut Window, drag: &mut Drag, _: &mut Tx| terminal_drag(&mut s.term, drag))
+        .on_press(|s: &mut Window| s.term.focus = true)
+        .on_layout_tx(|s: &mut Window, rect, tx: &mut Tx| {
+            let cell = s.term.cell;
+            s.term.layout(rect, cell);
+            tx.live_only();
+        });
+    s.built.set(s.built.get() + at.elapsed());
     col()
         .key("terminal-window")
         .w_full()
         .h_full()
         .min_h(0.0)
         .fill(k.c.bg_base)
-        .child(
-            screen_of(&s.term, s.scale.get(), k)
-                .on_wheel(|s: &mut Window, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
-                .on_drag(|s: &mut Window, drag: &mut Drag, _: &mut Tx| {
-                    terminal_drag(&mut s.term, drag)
-                })
-                .on_press(|s: &mut Window| s.term.focus = true)
-                .on_layout_tx(|s: &mut Window, rect, tx: &mut Tx| {
-                    let cell = s.term.cell;
-                    s.term.layout(rect, cell);
-                    tx.live_only();
-                }),
-        )
+        .child(screen)
 }
 
 /// Drains the PTY and rebuilds the frame when it changed. Runs in the frame's poll, so the waker
@@ -100,14 +105,25 @@ pub fn poll(s: &mut Window, _t: f64, tx: &mut Tx) -> bool {
         && std::env::var_os("SHEATH_TERM_STATS").is_some()
         && let Some(stats) = s.term.stats()
     {
-        let frames = std::mem::take(&mut s.frames);
-        let rate = (stats.parsed - s.parsed) as f64 / elapsed.as_secs_f64() / 1024.0;
+        let frames = std::mem::take(&mut s.frames).max(1);
+        let per_frame = |time: Duration| time.as_secs_f64() * 1000.0 / frames as f64;
+        let frame = elapsed.as_secs_f64() * 1000.0 / frames as f64;
+        let parse = per_frame(stats.parse - s.parse);
+        let readback = per_frame(stats.readback - s.readback);
+        let built = per_frame(s.built.take());
+        // What is left of the frame once parsing, readback and the view build are taken out:
+        // Rune's layout, paint encoding, the GPU pass and any idle wait.
+        let rest = (frame - parse - readback - built).max(0.0);
+        let rate = (stats.parsed - s.parsed) as f64 / elapsed.as_secs_f64() / (1024.0 * 1024.0);
         eprintln!(
-            "term: {frames} fps, {rate:.0} KiB/s parsed, queue {} KiB, lag {} ms",
+            "term: {frames} fps ({frame:.0} ms): parse {parse:.1}, readback {readback:.1}, \
+             view {built:.1}, rest {rest:.1} ms | {rate:.1} MiB/s, queue {} KiB, lag {} ms",
             stats.queued / 1024,
             stats.lag.as_millis()
         );
         s.parsed = stats.parsed;
+        s.parse = stats.parse;
+        s.readback = stats.readback;
         s.logged = Instant::now();
     }
     redraw

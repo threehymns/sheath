@@ -58,6 +58,9 @@ pub struct Engine {
     incoming: Arc<Incoming>,
     /// Bytes parsed since the shell started, for the frame-rate and lag measurement.
     parsed: u64,
+    /// Time in the parser and in the readback, so a frame can be split by phase.
+    parse_time: Duration,
+    readback_time: Duration,
     bell: Rc<Cell<bool>>,
     /// How many rows back from the bottom the viewport is drawn, as last told to libghostty.
     applied: usize,
@@ -108,6 +111,10 @@ pub struct Stats {
     pub lag: Duration,
     /// Bytes parsed since the shell started.
     pub parsed: u64,
+    /// Time spent in the parser.
+    pub parse: Duration,
+    /// Time spent reading the screen back out of libghostty into the frame.
+    pub readback: Duration,
 }
 
 impl Drop for Engine {
@@ -122,6 +129,8 @@ impl Engine {
             queued: self.incoming.len(),
             lag: self.incoming.lag(),
             parsed: self.parsed,
+            parse: self.parse_time,
+            readback: self.readback_time,
         }
     }
 
@@ -163,6 +172,8 @@ impl Engine {
             child: session.child,
             incoming: session.incoming,
             parsed: 0,
+            parse_time: Duration::ZERO,
+            readback_time: Duration::ZERO,
             bell,
             applied: 0,
             cols,
@@ -266,6 +277,8 @@ impl Engine {
             self.pending.store(false, Ordering::Release);
             (self.wake)();
         }
+
+        self.parse_time += at.elapsed();
         changed
     }
 
