@@ -2,6 +2,7 @@
 name = "sheath"
 version = "0.1.0"
 edition = "2024"
+default-run = "sheath"
 description = "A file manager PoC built with the Rune UI framework"
 
 [features]
