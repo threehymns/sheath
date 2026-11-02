@@ -15,6 +15,9 @@ use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
 
+/// The screen's horizontal padding: the pointer's local points include it, a cell does not.
+const PAD: f32 = 10.0;
+
 // The pane's edge is its handle: dragging it sets the height, and the shell reflows to the grid
 // the new rect fits as it moves. Pushed past the minimum it collapses, and the same handle sits
 // at the bottom of the frame to drag the pane back open. It is pinned rather than laid out, so
@@ -233,6 +236,18 @@ fn progress(t: &Terminal, k: &'static Kit) -> Option<El> {
 fn screen(s: &App, k: &'static Kit) -> El {
     screen_of(&s.term, s.scale.get(), k)
         .on_wheel(|s: &mut App, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        // The link under the pointer gets an underline, the way Ghostty shows which link a click
+        // would open. A move inside the same cell is answered from the pane's last cell, so this
+        // runs the terminal only when the pointer crosses into a new one.
+        .on_pointer_move_local(|s: &mut App, p, _: &mut Tx| {
+            let at = terminal_cell(&s.term, (p.x, p.y));
+            s.term.hover(at);
+        })
+        .on_hover_change(|s: &mut App, inside: bool, _: &mut Tx| {
+            if !inside {
+                s.term.hover(None);
+            }
+        })
         .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))
         .on_press(|s: &mut App| s.term.focus = true)
         .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
@@ -341,6 +356,23 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
         }
     }
 
+    // A hovered OSC 8 link is underlined under the cells it covers, the way Ghostty shows which
+    // link a click would open. It is drawn over the grid, not into it: the streamed image is not
+    // rebuilt for a pointer move, so crossing a row of links costs nothing but the hit test.
+    if let Some((row, start, end)) = t.hovered() {
+        lines = lines.child(
+            el().key("terminal-link-underline")
+                .absolute(
+                    f32::from(start) * t.cell,
+                    f32::from(row) * t.line + (t.line - 1.5).max(0.0),
+                )
+                .w(f32::from(end.saturating_sub(start) + 1) * t.cell)
+                .h(1.5)
+                .transition(Transition::none())
+                .fill(k.c.text_accent),
+        );
+    }
+
     let mut view = col()
         .key("terminal-screen")
         .w_full()
@@ -350,7 +382,7 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
         // No vertical padding: the clip is the visible box, so it has to be the row band. Any
         // inset above or below the rows is a strip that is cut by the clip instead of being
         // filled by the row entering there, which makes a row pop at half its height.
-        .px(10.0)
+        .px(PAD)
         .transition(Transition::none());
     if let Some(notice) = &t.notice {
         view = view.child(
@@ -416,6 +448,22 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
 #[cfg(any(target_arch = "wasm32", feature = "text-renderer"))]
 fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
+}
+
+/// Where a local point falls in the grid, or `None` when it is outside it. The padding and the
+/// scroll's fraction are taken out here, so the pane's hover only ever sees a cell.
+pub(crate) fn terminal_cell(t: &Terminal, at: (f32, f32)) -> Option<(u16, u16)> {
+    let x = at.0 - PAD;
+    let y = at.1 - t.offset();
+    if x < 0.0 || y < 0.0 {
+        return None;
+    }
+    let col = (x / t.cell.max(1.0)).floor();
+    let row = (y / t.line.max(1.0)).floor();
+    if col >= f32::from(t.frame.cols) || row >= f32::from(t.frame.rows) {
+        return None;
+    }
+    Some((col as u16, row as u16))
 }
 
 pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag, tx: &mut Tx) {

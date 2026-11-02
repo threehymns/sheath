@@ -60,6 +60,10 @@ impl Engine {
     pub fn fill(&mut self, out: &mut Frame) {
         let at = Instant::now();
         self.fill_into(out);
+        // Every readback is a new image even when it painted the same thing: the view's cache
+        // tells one frame from the next on this, so a build that only moved the hover underline
+        // reuses the last image instead of compositing the grid again.
+        out.generation = out.generation.wrapping_add(1);
         self.readback_time += at.elapsed();
     }
 

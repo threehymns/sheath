@@ -28,7 +28,7 @@ use crate::term::grid::{Frame, Line};
 use atlas::Atlas;
 use paint::{Surface, glyph_size, paint_line};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Palette {
     pub bg: [u8; 3],
     pub cursor: [u8; 3],
@@ -48,8 +48,27 @@ struct Raster {
     atlas: Atlas,
 }
 
+/// What the cached image currently holds. A view build that changed nothing about the grid (a
+/// hover underline, a moved element) leaves all of this equal and reuses the pixels.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Stamp {
+    generation: u64,
+    cols: u16,
+    rows: u16,
+    cell_px: u32,
+    line_px: u32,
+    palette: Palette,
+}
+
+/// The raster and the image it last produced, which the pane streams until the grid changes.
+struct Cache {
+    raster: Raster,
+    pixels: Pixels,
+    drawn: Option<Stamp>,
+}
+
 thread_local! {
-    static CACHE: RefCell<Option<(Raster, Pixels)>> = const { RefCell::new(None) };
+    static CACHE: RefCell<Option<Cache>> = const { RefCell::new(None) };
 }
 
 /// The visible grid as an RGBA image, at device pixels, with one overscan row above and below.
@@ -67,10 +86,28 @@ pub(crate) fn picture(
     }
     CACHE.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let (raster, pixels) = slot.get_or_insert_with(|| (Raster::new(), Pixels::new()));
-        let (width, height, rgba) = raster.compose(frame, cell, line, scale, palette)?;
-        pixels.set(width, height, rgba);
-        Some(pixels.clone())
+        let cache = slot.get_or_insert_with(|| Cache {
+            raster: Raster::new(),
+            pixels: Pixels::new(),
+            drawn: None,
+        });
+        let stamp = Stamp {
+            generation: frame.generation,
+            cols: frame.cols,
+            rows: frame.rows,
+            cell_px: (cell * scale).round().max(1.0) as u32,
+            line_px: (line * scale).round().max(1.0) as u32,
+            palette,
+        };
+        // Generation zero is a frame the engine did not build (the tests compose those), so it
+        // is never reused: only a readback says the image is still current.
+        if frame.generation > 0 && cache.drawn == Some(stamp) {
+            return Some(cache.pixels.clone());
+        }
+        let (width, height, rgba) = cache.raster.compose(frame, cell, line, scale, palette)?;
+        cache.pixels.set(width, height, rgba);
+        cache.drawn = (frame.generation > 0).then_some(stamp);
+        Some(cache.pixels.clone())
     })
 }
 

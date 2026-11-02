@@ -3,6 +3,7 @@
 //! build keeps this type so the app compiles and the pane can say where the terminal lives.
 
 mod layout;
+mod link;
 mod protocol;
 
 use std::path::PathBuf;
@@ -77,6 +78,10 @@ pub struct Terminal {
     /// The press that opened an OSC 8 link: the rest of its gesture is the link's, not a
     /// selection's.
     pub link_press: bool,
+    /// The link the pointer is over, as its row and the columns it covers, and the cell that
+    /// answer was read for: a move inside that cell never reaches the engine.
+    hover: Option<(u16, u16, u16)>,
+    hover_cell: Option<(u16, u16)>,
     #[cfg(not(target_arch = "wasm32"))]
     engine: Option<Engine>,
 }
@@ -105,6 +110,8 @@ impl Default for Terminal {
             fresh: false,
             copies: Vec::new(),
             link_press: false,
+            hover: None,
+            hover_cell: None,
             #[cfg(not(target_arch = "wasm32"))]
             engine: None,
         }

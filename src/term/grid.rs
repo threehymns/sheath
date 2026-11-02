@@ -105,4 +105,8 @@ pub struct Frame {
     /// The terminal's own background, when the program set one with OSC 11. Unset means the
     /// view's theme colour, which is what the shell starts with.
     pub background: Option<Color>,
+    /// Bumped by the engine on every readback, so the streamed image can tell a new frame from
+    /// the same one drawn again: a view build that only moved a cursor or a hover underline
+    /// reuses the last image instead of compositing the grid again.
+    pub generation: u64,
 }

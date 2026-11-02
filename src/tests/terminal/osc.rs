@@ -44,6 +44,16 @@ fn an_osc8_link_comes_back_with_the_cells_it_covers() {
         None,
         "the cell past the link text has none"
     );
+    assert_eq!(
+        engine.hyperlink_span((2, 0)),
+        Some((0, 6)),
+        "the span a hover underlines covers the link text and stops at its end"
+    );
+    assert_eq!(
+        engine.hyperlink_span((8, 0)),
+        None,
+        "a cell with no link has no span to underline"
+    );
 }
 
 /// OSC 12 sets the cursor's own colour and OSC 112 hands it back to the theme, while DECSCUSR

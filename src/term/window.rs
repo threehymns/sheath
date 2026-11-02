@@ -11,7 +11,7 @@ use rune::{Cx, Drag, El, KeyEvent, Tx, Waker, col};
 use rune_theme_opencode as theme;
 
 use crate::term::Terminal;
-use crate::ui::terminal::{screen_of, terminal_drag};
+use crate::ui::terminal::{screen_of, terminal_cell, terminal_drag};
 
 /// Where the shell starts: the first path on the command line that is a folder, else the folder
 /// the window was started in.
@@ -73,6 +73,15 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     let at = Instant::now();
     let screen = screen_of(&s.term, s.scale.get(), k)
         .on_wheel(|s: &mut Window, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        .on_pointer_move_local(|s: &mut Window, p, _: &mut Tx| {
+            let at = terminal_cell(&s.term, (p.x, p.y));
+            s.term.hover(at);
+        })
+        .on_hover_change(|s: &mut Window, inside: bool, _: &mut Tx| {
+            if !inside {
+                s.term.hover(None);
+            }
+        })
         .on_drag(|s: &mut Window, drag: &mut Drag, tx: &mut Tx| {
             terminal_drag(&mut s.term, drag, tx)
         })
