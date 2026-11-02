@@ -1,6 +1,6 @@
-//! The terminal pane: Ghostty's VT core for the screen, a PTY for the shell, and Rune text for
-//! the grid. The engine is native only, so the web build keeps the pane's types and says where
-//! the terminal lives.
+//! The terminal pane: Ghostty's VT core for the screen, a PTY for the shell, and Rune text (or,
+//! behind `SHEATH_TERM_TEXTURE`, one streamed texture) for the grid. The engine is native only,
+//! so the web build keeps the pane's types and says where the terminal lives.
 
 pub(crate) mod grid;
 mod pane;
@@ -9,6 +9,8 @@ pub(crate) mod shapes;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod engine;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod raster;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod window;
 

@@ -33,6 +33,8 @@ fff-search = "0.11.1-nightly.f64bab2"
 # grid, scrollback, and reflow, while Rune draws the cells. It builds a pinned Ghostty source
 # with Zig at build time, so it stays out of the web build.
 ghostty-vt = { version = "0.8.0", default-features = false }
+# The texture prototype rasterizes the pane's glyphs itself, from the same mono face.
+swash = "0.2.10"
 # Reading the clipboard for a paste into the shell; Rune's own clipboard is write-only from the
 # app side, and a terminal's paste is a read.
 arboard = "3"
