@@ -210,24 +210,15 @@ impl App {
         );
     }
 
-    pub fn open_terminal_here(&mut self) {
-        let path = self.cwd.clone();
-        if let Err(err) = super::paths::open_terminal(&path) {
-            self.error = Some(err);
-        }
-    }
-
-    /// Opens a terminal in the chosen folder, or in the folder on screen when the chosen row is a
-    /// file.
+    /// Opens the pane in the chosen folder, or in the folder on screen when the chosen row is a
+    /// file. The pane keeps the shell it already has.
     pub fn open_terminal_in_selection(&mut self) {
         let path = self
             .selected_entry()
             .filter(|entry| entry.is_dir)
             .map(|entry| entry.path.clone())
             .unwrap_or_else(|| self.cwd.clone());
-        if let Err(err) = super::paths::open_terminal(&path) {
-            self.error = Some(err);
-        }
+        self.term.open(path);
     }
 
     pub fn entry_hidden(&self, entry: &Entry) -> bool {

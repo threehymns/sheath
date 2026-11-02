@@ -243,6 +243,7 @@ impl App {
             self.apply(key, stepped, tx);
         }
         self.follow_drag();
+        redraw |= self.poll_terminal(tx);
         redraw
     }
 }

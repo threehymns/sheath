@@ -13,6 +13,8 @@ pub struct Session {
     folder: Option<PathBuf>,
     // Kind, size and date column widths, in points.
     columns: Option<[f32; 3]>,
+    // The terminal pane's height, in points, so it opens at the size it was left.
+    pane: Option<f32>,
 }
 
 impl Session {
@@ -31,9 +33,10 @@ impl Session {
         let Ok(text) = crate::vfs::read_to_string(&path) else {
             return session;
         };
-        let (folder, columns) = parse(&text);
+        let (folder, columns, pane) = parse(&text);
         session.folder = folder;
         session.columns = columns;
+        session.pane = pane;
         session
     }
 
@@ -43,6 +46,19 @@ impl Session {
 
     pub fn columns(&self) -> Option<[f32; 3]> {
         self.columns
+    }
+
+    pub fn pane(&self) -> Option<f32> {
+        self.pane
+    }
+
+    /// Remembers the terminal pane's height after a drag, not on every frame of one.
+    pub fn remember_pane(&mut self, height: f32) {
+        if self.pane == Some(height) {
+            return;
+        }
+        self.pane = Some(height);
+        self.save();
     }
 
     /// Remembers a folder, skipping the write when the file already says so.
@@ -67,11 +83,14 @@ impl Session {
         let Some(path) = self.path.clone() else {
             return;
         };
-        let _ = config::write_atomic(&path, &render(self.folder.as_deref(), self.columns));
+        let _ = config::write_atomic(
+            &path,
+            &render(self.folder.as_deref(), self.columns, self.pane),
+        );
     }
 }
 
-fn render(folder: Option<&Path>, columns: Option<[f32; 3]>) -> String {
+fn render(folder: Option<&Path>, columns: Option<[f32; 3]>, pane: Option<f32>) -> String {
     let mut doc = KdlDocument::new();
     if let Some(folder) = folder {
         let mut node = KdlNode::new("folder");
@@ -85,13 +104,18 @@ fn render(folder: Option<&Path>, columns: Option<[f32; 3]>) -> String {
         node.push(KdlEntry::new_prop("date", date as f64));
         doc.nodes_mut().push(node);
     }
+    if let Some(height) = pane {
+        let mut node = KdlNode::new("pane");
+        node.push(KdlEntry::new(height as f64));
+        doc.nodes_mut().push(node);
+    }
     doc.autoformat();
     format!("// What the window was last showing. Sheath owns this file.\n{doc}")
 }
 
-fn parse(text: &str) -> (Option<PathBuf>, Option<[f32; 3]>) {
+fn parse(text: &str) -> (Option<PathBuf>, Option<[f32; 3]>, Option<f32>) {
     let Ok(doc) = text.parse::<KdlDocument>() else {
-        return (None, None);
+        return (None, None, None);
     };
     let folder = doc
         .nodes()
@@ -112,7 +136,14 @@ fn parse(text: &str) -> (Option<PathBuf>, Option<[f32; 3]>) {
                 read("date")? as f32,
             ])
         });
-    (folder, columns)
+    let pane = doc
+        .nodes()
+        .iter()
+        .find(|node| node.name().value() == "pane")
+        .and_then(|node| node.get(0))
+        .and_then(|entry| entry.as_float())
+        .map(|height| height as f32);
+    (folder, columns, pane)
 }
 
 #[cfg(test)]

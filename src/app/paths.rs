@@ -82,12 +82,6 @@ pub fn root_dir() -> PathBuf {
     }
 }
 
-/// A browser tab opens nothing outside itself.
-#[cfg(target_arch = "wasm32")]
-pub(super) fn open_terminal(_path: &Path) -> Result<(), String> {
-    Err("A browser tab has no terminal to open.".into())
-}
-
 #[cfg(target_arch = "wasm32")]
 pub(super) fn open_external(_path: &Path) -> Result<(), String> {
     Err("A browser tab can’t open files from the demo folder.".into())
@@ -96,76 +90,6 @@ pub(super) fn open_external(_path: &Path) -> Result<(), String> {
 #[cfg(target_arch = "wasm32")]
 pub(super) fn reveal_external(_path: &Path) -> Result<(), String> {
     Err("A browser tab has no file manager to reveal in.".into())
-}
-
-/// Opens a terminal with its working folder set here. Linux tries `$TERMINAL`, then the common
-/// emulators; the first one that launches wins.
-#[cfg(not(target_arch = "wasm32"))]
-pub(super) fn open_terminal(path: &Path) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    {
-        let mut command = Command::new("open");
-        command.arg("-a").arg("Terminal").arg(path);
-        return spawn_reaped(command, "Terminal");
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let mut command = Command::new("cmd");
-        command
-            .args(["/C", "start", "", "cmd", "/K", "cd", "/d"])
-            .arg(path);
-        return spawn_reaped(command, "Command Prompt");
-    }
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        let mut failures = Vec::new();
-        for program in terminals() {
-            let mut command = Command::new(&program);
-            command.current_dir(path);
-            match command.spawn() {
-                Ok(mut child) => {
-                    std::thread::spawn(move || {
-                        let _ = child.wait();
-                    });
-                    return Ok(());
-                }
-                Err(err) => failures.push(format!("{program}: {err}")),
-            }
-        }
-        Err(format!(
-            "Couldn’t open a terminal here. {}",
-            failures.join("; ")
-        ))
-    }
-    #[cfg(not(any(unix, target_os = "windows")))]
-    {
-        let _ = path;
-        Err("This platform has no terminal to open.".into())
-    }
-}
-
-#[cfg(all(unix, not(target_os = "macos"), not(target_arch = "wasm32")))]
-fn terminals() -> Vec<String> {
-    let mut out = Vec::new();
-    if let Some(program) = std::env::var_os("TERMINAL") {
-        let program = program.to_string_lossy().trim().to_owned();
-        if !program.is_empty() {
-            out.push(program);
-        }
-    }
-    for program in [
-        "x-terminal-emulator",
-        "gnome-terminal",
-        "konsole",
-        "xfce4-terminal",
-        "alacritty",
-        "kitty",
-        "foot",
-        "xterm",
-    ] {
-        out.push(program.to_owned());
-    }
-    out
 }
 
 #[cfg(not(target_arch = "wasm32"))]

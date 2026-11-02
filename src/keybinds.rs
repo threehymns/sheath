@@ -188,7 +188,6 @@ impl Action {
             | Action::HideEntry
             | Action::PickRule
             | Action::InvertSelection
-            | Action::OpenTerminal
             | Action::Reveal
             | Action::CopyName
             | Action::AddPlace
@@ -226,6 +225,7 @@ impl Action {
                 Action::Duplicate => "super+d",
                 Action::SelectAll => "super+a",
                 Action::DeselectAll => "shift+super+a",
+                Action::OpenTerminal => "super+shift+t",
                 _ => "",
             }
         }
@@ -254,6 +254,7 @@ impl Action {
                 Action::Duplicate => "ctrl+d",
                 Action::SelectAll => "ctrl+a",
                 Action::DeselectAll => "shift+ctrl+a",
+                Action::OpenTerminal => "ctrl+shift+t",
                 _ => "",
             }
         }

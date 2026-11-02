@@ -1,0 +1,323 @@
+//! What the pane paints: the rows a scroll moves, the overscan row at each edge, and the
+//! rectangles cell backgrounds and cell-filling characters are drawn as.
+
+use crate::term::Terminal;
+use crate::term::grid::{Frame, Line};
+
+/// Where a fractional scroll puts the rows: the first row hangs lower by exactly the fraction,
+/// and the overscan row above it covers the strip that would otherwise be background.
+#[test]
+fn the_overscan_row_covers_the_top_edge_at_every_offset() {
+    use crate::tests::helpers::*;
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let mut frame = Frame {
+        cols: 20,
+        rows: 6,
+        ..Frame::default()
+    };
+    for i in 0..6 {
+        frame.lines.push(Line {
+            text: format!("row{i}"),
+            ..Line::default()
+        });
+    }
+    rt.state.term.show_for_test(frame);
+    rt.state.term.scroll_for_test(0.0);
+    rt.frame(0.0);
+    let flush = rt.presented("t0").expect("the first row").0[1];
+    assert!(
+        rt.presented("lead").is_none(),
+        "no overscan at a whole-row offset"
+    );
+
+    for step in 1..10 {
+        let fraction = step as f32 / 10.0;
+        rt.state.term.frame.lead = Some(Line {
+            text: "above".to_owned(),
+            ..Line::default()
+        });
+        rt.state.term.frame.trail = Some(Line {
+            text: "below".to_owned(),
+            ..Line::default()
+        });
+        rt.state.term.scroll_for_test(fraction);
+        rt.invalidate();
+        rt.frame(1.0 / 60.0);
+        let line = 16.0;
+        let top = rt.presented("t0").expect("the first row").0[1];
+        let lead = rt.presented("lead").expect("the overscan row").0[1];
+        assert!(
+            (top - (flush + fraction * line)).abs() < 0.01,
+            "at {fraction} the first row is {top}, wanted {}",
+            flush + fraction * line
+        );
+        assert!(
+            (lead - (flush + (fraction - 1.0) * line)).abs() < 0.01,
+            "at {fraction} the overscan row is {lead}, wanted {}",
+            flush + (fraction - 1.0) * line
+        );
+        let trail = rt.presented("trail").expect("the row below").0[1];
+        assert!(
+            (trail - (flush + 6.0 * line + fraction * line)).abs() < 0.01,
+            "at {fraction} the row below the viewport is {trail}, wanted {}",
+            flush + 6.0 * line + fraction * line
+        );
+    }
+}
+
+/// A wheel settles the grid before the view reads it. The frame and the offset come from one
+/// moment: if the scroll lands between the poll and the build, the new offset is drawn over the
+/// previous rows and the content jumps back a row at every boundary it crosses.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
+    use rune::{Key, KeyEvent, Mods};
+
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let theme = crate::term::theme(true);
+    let mut pane = Terminal::new();
+    pane.open(dir.path().to_path_buf());
+    let pump = |pane: &mut Terminal| {
+        for _ in 0..40 {
+            if pane.poll(Some(&wake), theme) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(25));
+        }
+        false
+    };
+    assert!(pump(&mut pane), "the shell started");
+    for c in "seq 1 60".chars() {
+        pane.key(&KeyEvent {
+            key: Key::Text(c.to_string()),
+            mods: Mods::default(),
+        });
+    }
+    pane.key(&KeyEvent {
+        key: Key::Enter,
+        mods: Mods::default(),
+    });
+    let mut scrolled = false;
+    for _ in 0..40 {
+        pump(&mut pane);
+        if pane.wheel(pane.line * 3.0) && pane.scroll_back() == 3 {
+            scrolled = true;
+            break;
+        }
+    }
+    assert!(
+        scrolled,
+        "the output above the viewport is history to scroll"
+    );
+
+    // No poll between the wheel and this read: the frame the view draws is already there.
+    let top = pane.frame.lines[0].text.clone();
+    assert!(pane.wheel(pane.line * 2.0));
+    assert_eq!(pane.scroll_back(), 5);
+    assert_ne!(
+        pane.frame.lines[0].text, top,
+        "the wheel moved the rows the view will draw"
+    );
+}
+
+/// A cell background is a rectangle over its cells: flush with the row's edge, exactly as many
+/// cells wide, and a full line tall, so neighbouring rows' bars meet without a gap.
+#[test]
+fn a_background_is_a_rectangle_over_its_cells() {
+    use crate::term::grid::{Pen, Run};
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let mut line = Line {
+        text: "hello".to_owned(),
+        ..Line::default()
+    };
+    line.runs.push(Run {
+        start: 0,
+        end: 5,
+        cols: (0, 5),
+        pen: Pen {
+            bg: Some(rune::Color::WHITE),
+            ..Pen::default()
+        },
+    });
+    let frame = Frame {
+        cols: 20,
+        rows: 2,
+        lines: vec![line, Line::default()],
+        ..Frame::default()
+    };
+    rt.state.term.show_for_test(frame);
+    // One frame measures the mono advance, the next draws with it.
+    rt.frame(0.0);
+    rt.invalidate();
+    rt.frame(0.0);
+
+    let row = rt.presented("t0").expect("the row").0;
+    let bg = rt.presented("bg0").expect("the background").0;
+    let cell = rt.state.term.cell;
+    assert!(
+        (bg[0] - row[0]).abs() < 0.01,
+        "the bar starts at the row's own left edge: {bg:?} vs {row:?}"
+    );
+    assert!(
+        (bg[2] - 5.0 * cell).abs() < 0.01,
+        "and covers five cells: {} vs {}",
+        bg[2],
+        5.0 * cell
+    );
+    assert!(
+        (bg[3] - rt.state.term.line).abs() < 0.01,
+        "at the full line height, so bars meet: {bg:?}"
+    );
+}
+
+#[test]
+fn the_pane_draws_below_the_browser_when_it_opens() {
+    use crate::tests::helpers::*;
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    assert!(rt.find("terminal-screen").is_none(), "closed by default");
+    assert!(
+        rt.find("terminal-grip").is_some(),
+        "the handle to open it stays at the bottom"
+    );
+    assert!(
+        rt.find("terminal-header").is_none(),
+        "a collapsed pane shows no header"
+    );
+    assert!(
+        rt.find("terminal-divider").is_none(),
+        "and no seam line under the handle"
+    );
+
+    rt.state.term.open(dir.path().to_path_buf());
+    rt.frame(1.0 / 60.0);
+    assert!(rt.find("terminal-screen").is_some(), "the pane is laid out");
+    assert!(rt.find("terminal-grip").is_some(), "and has its own edge");
+    assert!(
+        rt.find("files-table").is_some(),
+        "the browser stays above it"
+    );
+}
+
+/// A shape is a rectangle over its cell, painted after the cell's background and under the text:
+/// snapped to whole device pixels from the cell's own column, so it abuts its neighbours.
+#[test]
+fn a_shape_is_a_rectangle_over_its_cell() {
+    use crate::term::grid::Shape;
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let mut line = Line {
+        text: "  ".to_owned(),
+        ..Line::default()
+    };
+    line.shapes.push(Shape {
+        col: 0,
+        rect: [0.0, 0.0, 1.0, 1.0],
+        fg: rune::Color::WHITE,
+    });
+    line.shapes.push(Shape {
+        col: 1,
+        rect: [0.0, 0.0, 0.5, 0.5],
+        fg: rune::Color::WHITE,
+    });
+    let frame = Frame {
+        cols: 20,
+        rows: 2,
+        lines: vec![line, Line::default()],
+        ..Frame::default()
+    };
+    rt.state.term.show_for_test(frame);
+    rt.frame(0.0);
+    rt.invalidate();
+    rt.frame(0.0);
+
+    let row = rt.presented("t0").expect("the row").0;
+    let (cell, height) = (rt.state.term.cell, rt.state.term.line);
+    let block = rt.presented("shape0").expect("the block").0;
+    assert!(
+        (block[0] - row[0]).abs() < 0.01,
+        "flush with the row: {block:?}"
+    );
+    assert!((block[2] - cell).abs() < 0.01, "one cell wide: {block:?}");
+    assert!(
+        (block[3] - height).abs() < 0.01,
+        "a full line tall, so blocks in a column meet: {block:?}"
+    );
+    let quadrant = rt.presented("shape1").expect("the quadrant").0;
+    assert!(
+        (quadrant[0] - (row[0] + cell)).abs() < 0.01,
+        "the next cell's shape starts on its own column: {quadrant:?}"
+    );
+    assert!(
+        (quadrant[2] - cell * 0.5).abs() < 0.01,
+        "half a cell: {quadrant:?}"
+    );
+    assert!(
+        (quadrant[3] - height * 0.5).abs() < 0.01,
+        "half a line: {quadrant:?}"
+    );
+}
+
+/// The engine decides: a cell-filling character becomes shapes on the frame and a space in the
+/// line's text, so the columns the runs report are still the cells the shapes cover.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_box_drawing_cell_is_shapes_and_a_space() {
+    use crate::term::engine::Engine;
+
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        20,
+        4,
+        (7.0, 15.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("an engine");
+    engine.feed("\x1b[2J\x1b[H┌─┐\r\n│█│\r\n└─┘".as_bytes());
+    let frame = engine.frame();
+
+    for (index, row) in ["   ", "   ", "   "].iter().enumerate() {
+        assert_eq!(
+            frame.lines[index].text.as_str(),
+            *row,
+            "row {index} is spaces"
+        );
+        let mut cols: Vec<u16> = frame.lines[index].shapes.iter().map(|s| s.col).collect();
+        cols.dedup();
+        assert_eq!(cols, [0, 1, 2], "and covers every cell on row {index}");
+    }
+    let block = frame.lines[1]
+        .shapes
+        .iter()
+        .find(|shape| shape.col == 1)
+        .expect("the middle cell");
+    assert_eq!(
+        block.rect,
+        [0.0, 0.0, 1.0, 1.0],
+        "a full block is the whole cell"
+    );
+    assert!(
+        frame.lines[0]
+            .shapes
+            .iter()
+            .all(|shape| shape.rect[1] <= 0.5 && shape.rect[3] >= 0.5),
+        "a rule runs through the middle of its row, the way a box drawn in a terminal does"
+    );
+    assert_eq!(
+        (frame.lines[0].runs[0].start, frame.lines[0].runs[0].cols),
+        (0, (0, 3)),
+        "the space still maps one byte to one cell, so the runs stay honest"
+    );
+}

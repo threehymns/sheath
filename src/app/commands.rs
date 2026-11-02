@@ -268,7 +268,7 @@ impl App {
             Action::ShowEntry => self.pin_entry(false),
             Action::HideEntry => self.pin_entry(true),
             Action::PickRule => self.open_rule_picker(),
-            Action::OpenTerminal => self.open_terminal_here(),
+            Action::OpenTerminal => self.toggle_terminal(),
             Action::Reveal => self.reveal_selected(),
         }
     }

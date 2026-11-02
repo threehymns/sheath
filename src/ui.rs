@@ -10,6 +10,7 @@ mod scroll_area;
 mod settings;
 mod sidebar;
 mod table;
+mod terminal;
 
 use std::path::Component;
 
@@ -28,8 +29,29 @@ use table::{empty_state, file_table};
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let k = theme::kit(cx.system_dark());
+    s.dark.set(cx.system_dark());
+    s.scale.set(cx.env().scale.max(1.0));
     s.begin_view();
-    let shell = SplitView::new(main(s, k))
+    let mut content = col()
+        .key("browser-split")
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .child(
+            col()
+                .key("browser-slot")
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .child(main(s, k)),
+        );
+    if s.term.is_open() {
+        content = content.child(terminal::pane(s, k));
+    }
+    // Pinned over the pane's edge, not in the flow: the handle is always at the boundary, and
+    // taking it out of the layout is what stops the pane from pushing the rows above it.
+    content = content.child(terminal::grip(s, k));
+    let shell = SplitView::new(content)
         .sidebar(
             &s.sidebar,
             |s: &mut App| &mut s.sidebar,
@@ -139,6 +161,13 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         layers.push(region.build(k));
     }
     rune_kit::root(shell, layers)
+}
+
+/// The 1pt line two panes meet on. Panes sit flush against it, so the seam is one element the
+/// layout places rather than a border owned by either side: when tabs and splits move the
+/// boundary, the same line still separates whatever is above from whatever is below.
+pub(super) fn divider(k: &Kit) -> El {
+    el().w_full().h(1.0).fill(k.c.border_muted)
 }
 
 fn toolbar(s: &App, k: &'static Kit) -> Toolbar {

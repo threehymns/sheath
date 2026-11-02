@@ -42,6 +42,26 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.place_rename.is_some() {
         return false;
     }
+    // A shell with the keyboard keeps every key, Ctrl-C and Escape included. Only the pane's own
+    // chords and the commands that leave the pane reach the app while it has focus.
+    if s.term.is_open() && s.term.focus {
+        if s.terminal_chord(event, tx) {
+            return true;
+        }
+        for action in [
+            Action::CommandBar,
+            Action::OpenSettings,
+            Action::OpenTerminal,
+        ] {
+            if s.keybinds.matches(action, event) {
+                s.perform(action, tx);
+                return true;
+            }
+        }
+        if s.term.key(event) {
+            return true;
+        }
+    }
     let mods = event.mods;
     let typing = tx.focused().is_some_and(|key| key.ends_with("input"));
     let guarded = [

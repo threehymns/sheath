@@ -12,6 +12,7 @@ mod recorder;
 mod rules;
 mod session;
 mod settings;
+mod term;
 mod ui;
 mod vfs;
 mod views;

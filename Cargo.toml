@@ -29,6 +29,15 @@ avif-decode = { version = "3", default-features = false }
 # the matches, so the app does not carry its own tree walk. Its index is native-only (LMDB,
 # libgit2, threads), so the web demo keeps the plain walk.
 fff-search = "0.11.1-nightly.f64bab2"
+# The terminal pane's emulator: Ghostty's VT core, which parses escape sequences and keeps the
+# grid, scrollback, and reflow, while Rune draws the cells. It builds a pinned Ghostty source
+# with Zig at build time, so it stays out of the web build.
+ghostty-vt = { version = "0.8.0", default-features = false }
+# Reading the clipboard for a paste into the shell; Rune's own clipboard is write-only from the
+# app side, and a terminal's paste is a read.
+arboard = "3"
+# The PTY behind the pane, and the shell process on the other end of it.
+portable-pty = "0.9"
 notify = "8"
 trash = "5.2.9"
 heif-oxide = "0.1"

@@ -132,6 +132,18 @@ pub static HALF_SQUARE: Icon = Icon {
     body: r#"<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" stroke="currentColor"/><path d="M8 3h3.25a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H8V3Z" fill="currentColor"/>"#,
 };
 
+pub static CHEVRON_DOWN: Icon = Icon {
+    name: "sheath-chevron-down",
+    view: 16.0,
+    body: r#"<path d="M3.5 6 8 10.5 12.5 6" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub static X: Icon = Icon {
+    name: "sheath-x",
+    view: 16.0,
+    body: r#"<path d="M4.5 4.5l7 7M11.5 4.5l-7 7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 pub static FOLDER_PLUS: Icon = Icon {
     name: "sheath-folder-plus",
     view: 16.0,

@@ -8,8 +8,10 @@ move, rename and trash operations.
 
 ## Run
 
-Requires a recent stable Rust toolchain (edition 2024, built with 1.98) and a GPU adapter
-(Metal, Vulkan or DX12).
+Requires a recent stable Rust toolchain (edition 2024, built with 1.98), a GPU adapter
+(Metal, Vulkan or DX12), and Zig 0.17 on `PATH`. The terminal pane builds Ghostty's VT core from
+a pinned source tarball at build time, and its build script looks for `zig` (or `$ZIG`). The web
+build does not: it uses no terminal.
 
 ```sh
 cargo run                 # start where you left off, or in your home folder the first time
@@ -111,6 +113,33 @@ This is a state-preserving loop, not a subsecond one: at this Rune commit the fr
 README reports about 8 s median save-to-GPU for its Settings example. Physical iOS devices are
 unsupported by this backend.
 
+## Terminal
+
+The bottom pane is a real terminal: a shell on a PTY in the folder on screen, with Ghostty's VT
+core parsing what the program writes and Rune drawing the cells. It keeps ~250,000 lines of
+scrollback, reflows on resize, and follows the theme's foreground, background and cursor colours
+while keeping Ghostty's ANSI palette.
+
+- **Collapsing, and closing.** The header's chevron (or the pane's own shortcut) collapses the
+  pane; the shell keeps running and the same session comes back. The close button ends the
+  shell, so opening the pane again starts a fresh one.
+- **Resizing.** Drag the pane's top edge; the shell reflows as it moves. A drag stops at the
+  minimum height; pushing a little further past it collapses the pane, and dragging the handle
+  up from the bottom opens it again once the drag reaches the minimum. A click on the collapsed
+  handle opens it at the height it had.
+- **Scrolling.** The wheel and a trackpad scroll the history smoothly, pixel by pixel rather than
+  a row at a time. Anything you type jumps back to the live tail.
+- **Selecting.** Drag over the grid to select; **Ctrl+Shift+C** (Cmd+Shift+C on macOS) copies it.
+  **Ctrl+Shift+V** pastes, wrapping in bracketed paste when the program asked for it.
+- **Programs that want the mouse** get the clicks and drags instead of a selection, so `htop`,
+  `vim` and `less` behave as they do in Ghostty.
+- **Which keys reach the shell.** While the pane has focus it keeps everything, Ctrl-C included;
+  only the command bar, Settings and the pane's own shortcut reach the app. Clicking the file list
+  takes the keyboard back.
+
+The pane's height is remembered in `session.kdl`, so it opens at the size it was left. The web
+build has no shell and says so.
+
 ## Controls
 
 | Action | Control |
@@ -136,7 +165,9 @@ unsupported by this backend.
 | Copy path | Shift+Cmd/Ctrl+C |
 | Copy name | The row menu, or the command bar: `Copy Name` |
 | Command bar | Cmd/Ctrl+P |
-| Open a terminal here | The row menu, or the command bar: `Open Terminal Here` |
+| Show or hide the terminal | Ctrl+Shift+T (Cmd+Shift+T on macOS), the row menu, or the command bar: `Open Terminal Here` |
+| Copy the terminal selection | Ctrl+Shift+C (Cmd+Shift+C on macOS) |
+| Paste into the terminal | Ctrl+Shift+V (Cmd+Shift+V on macOS) |
 | Reveal in the system file manager | The row menu, or the command bar: `Reveal in File Manager` |
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places, or the folder menu's `Add This Folder to the Sidebar` |
@@ -314,4 +345,5 @@ built-in places.
 ## Not there yet
 
 No per-entry icons or badges. Copy and paste use the app's own clipboard rather than the system
-one.
+one. The terminal draws text and colours but not Kitty graphics or images, has no IME
+pre-editing, and selects by dragging only (no word or line selection).

@@ -18,6 +18,7 @@ mod scrolling;
 mod selection;
 mod sheets;
 mod size;
+mod terminal;
 mod watch;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -138,6 +139,15 @@ pub struct App {
     pub place_dragged: bool,
     pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
+    /// The bottom terminal pane and the shell behind it.
+    pub term: crate::term::Terminal,
+    /// The appearance the last frame drew in, so a shell started from a poll gets the same
+    /// colours the pane paints with.
+    pub dark: std::cell::Cell<bool>,
+    /// The device scale: a terminal's cell is a whole number of its pixels.
+    pub scale: std::cell::Cell<f32>,
+    /// The window's waker, which the terminal's reader thread holds to ask for a frame.
+    wake: Option<Waker>,
     pub session: Session,
     pub recorders: BTreeMap<Action, Recorder>,
     pub store: Store,
@@ -186,6 +196,9 @@ impl App {
             app.kind_width = kind.clamp(80.0, 320.0);
             app.size_width = size.clamp(64.0, 320.0);
             app.date_width = date.clamp(100.0, 420.0);
+        }
+        if let Some(height) = app.session.pane() {
+            app.term.set_height(height);
         }
         app.views = Views::load();
         app.places = Places::load();
@@ -273,6 +286,10 @@ impl App {
             place_dragged: false,
             notices: Vec::new(),
             keybinds,
+            term: crate::term::Terminal::new(),
+            dark: std::cell::Cell::new(true),
+            scale: std::cell::Cell::new(1.0),
+            wake: None,
             session: Session::default(),
             recorders,
             store,
@@ -440,6 +457,7 @@ impl App {
 }
 
 pub fn setup(s: &mut App, wake: Waker) {
+    s.wake = Some(wake.clone());
     crate::vfs::set_waker(wake.clone());
     s.sizer.set_waker(wake.clone());
     s.previews.set_waker(wake.clone());
