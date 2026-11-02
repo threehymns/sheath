@@ -54,6 +54,7 @@ pub struct Terminal {
     /// Whether the cell is given (a prepared frame in a test) instead of measured from the font.
     fixed: bool,
     /// Extra space per glyph: the shaper's advance plus this is exactly one cell.
+    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
     tracking: f32,
     /// The folder the shell starts in, waiting for the first poll to start it.
     pending: Option<PathBuf>,
@@ -80,6 +81,7 @@ impl Default for Terminal {
             line: LINE_HEIGHT,
             scale: 1.0,
             fixed: false,
+            #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
             tracking: 0.0,
             pending: None,
             error: None,
@@ -123,12 +125,17 @@ impl Terminal {
         self.cell = (advance * scale).round().max(1.0) / scale;
         self.line = (box_height * scale).round().max(1.0) / scale;
         // The shaper advances by the font's own width; tracking it to the pixel-aligned cell is
-        // how the glyphs land on the same grid the pane draws and points at.
-        self.tracking = self.cell - advance;
+        // how the glyphs land on the same grid the pane draws and points at. Only the text
+        // renderer shapes again, so the raster build does not carry it.
+        #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+        {
+            self.tracking = self.cell - advance;
+        }
     }
 
     /// The style the rows are drawn in: the font's own line box, tracked to the pixel-aligned
     /// cell so a glyph's advance and a cell are the same width.
+    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
     pub fn text_style(&self, style: rune::TextStyle) -> rune::TextStyle {
         style.lh(self.line).tracking(self.tracking)
     }
@@ -385,7 +392,7 @@ impl Terminal {
     }
 
     /// Sets the scroll without a shell, so a test can check where a fractional offset draws.
-    #[cfg(test)]
+    #[cfg(all(test, feature = "text-renderer"))]
     pub fn scroll_for_test(&mut self, scroll: f32) {
         self.scroll = scroll.max(0.0);
     }
@@ -398,7 +405,10 @@ impl Terminal {
         self.frame = frame;
         self.cell = 8.0;
         self.line = 16.0;
-        self.tracking = 0.0;
+        #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+        {
+            self.tracking = 0.0;
+        }
         // A prepared frame comes with prepared geometry; the live pane measures the font.
         self.fixed = true;
         self.rect = [0.0, 0.0, 1160.0, 224.0];

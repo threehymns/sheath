@@ -126,7 +126,9 @@ unsupported by this backend.
 The bottom pane is a real terminal: a shell on a PTY in the folder on screen, with Ghostty's VT
 core parsing what the program writes and Rune drawing the cells. It keeps ~250,000 lines of
 scrollback, reflows on resize, and follows the theme's foreground, background and cursor colours
-while keeping Ghostty's ANSI palette.
+while keeping Ghostty's ANSI palette. Desktop builds stream the grid as one texture;
+`cargo run --features text-renderer` builds the earlier text-row renderer instead, and the web
+build always uses it.
 
 - **Collapsing, and closing.** The header's chevron (or the pane's own shortcut) collapses the
   pane; the shell keeps running and the same session comes back. The close button ends the

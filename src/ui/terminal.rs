@@ -1,8 +1,13 @@
 use crate::app::App;
 use crate::icons;
+#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 use crate::term::grid::Line;
 use crate::term::{MouseAction, Terminal};
-use rune::{Cursor, Drag, El, Phase, Span, Spring, SurfaceFit, Transition, Tx, col, el, row, text};
+#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+use rune::Span;
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+use rune::SurfaceFit;
+use rune::{Cursor, Drag, El, Phase, Spring, Transition, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
@@ -175,9 +180,12 @@ fn screen(s: &App, k: &'static Kit) -> El {
 /// The rows, the cursor and the notice, with no input attached: the app's pane and the standalone
 /// terminal window both draw this, and each wires the handlers it has to it.
 pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
-    // The rows are drawn on the font's own line box, the one the pane measured its cell from and
-    // the one cell-filling glyphs are drawn to. The theme's line height is for paragraphs.
+    // The text rows are drawn on the font's own line box, the one the pane measured its cell
+    // from and the one cell-filling glyphs are drawn to. The theme's line height is for
+    // paragraphs. Only the text renderer needs them.
+    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
     let mono = t.text_style(k.ty.mono);
+    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
     let (cell, height) = (t.cell, t.line);
     // The offset is the scroll itself, so it must land on the frame it is asked for: a spring
     // here lags the fraction and then chases a whole line every time the viewport steps, which
@@ -192,53 +200,56 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
         // that run is exactly the stretch of the row to the right of the cell that changed.
         .motion(Spring::NONE)
         .instant_changes();
-    // The texture path draws the whole grid as one streamed image: its own cursor, selection,
-    // shapes and overscan rows come with it. The text path builds those as elements instead and
-    // stays the renderer when the texture is off or unavailable.
+    // The native default draws the whole grid as one streamed image: its own cursor, selection,
+    // shapes and overscan rows come with it. The text renderer builds those as elements instead
+    // and is a build-time fallback (`text-renderer`) and the only one on the web.
     if let Some(picture) = texture(t, scale, k) {
         lines = lines.child(picture);
     } else {
-        // The row above the viewport, hung one line up so the fraction of it the scroll shows
-        // fills the top edge instead of background that fills in when the viewport steps.
-        if let Some(lead) = &t.frame.lead {
-            lines = lines.child(
-                line_row("lead".to_owned(), lead, mono, cell, height, scale, k)
-                    .absolute(0.0, -height),
-            );
-        }
-        for (index, line) in t.frame.lines.iter().enumerate() {
-            lines = lines.child(line_row(
-                format!("t{index}"),
-                line,
-                mono,
-                cell,
-                height,
-                scale,
-                k,
-            ));
-        }
-        // The row below the viewport, hung under the last line: the pane is seldom a whole
-        // number of lines tall, and the strip the last row does not reach is this row's top.
-        if let Some(trail) = &t.frame.trail {
-            let top = t.frame.rows as f32 * height;
-            lines = lines.child(
-                line_row("trail".to_owned(), trail, mono, cell, height, scale, k)
-                    .absolute(0.0, top),
-            );
-        }
-        if let Some((x, y)) = t.frame.cursor {
-            lines = lines.child(
-                el().key("terminal-cursor")
-                    .absolute(f32::from(x) * t.cell, f32::from(y) * t.line)
-                    .w(t.cell)
-                    .h(t.line)
-                    .transition(Transition::none())
-                    .fill(if t.focus {
-                        k.alpha(k.c.text_accent, 0.55)
-                    } else {
-                        k.alpha(k.c.text_muted, 0.35)
-                    }),
-            );
+        #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+        {
+            // The row above the viewport, hung one line up so the fraction of it the scroll shows
+            // fills the top edge instead of background that fills in when the viewport steps.
+            if let Some(lead) = &t.frame.lead {
+                lines = lines.child(
+                    line_row("lead".to_owned(), lead, mono, cell, height, scale, k)
+                        .absolute(0.0, -height),
+                );
+            }
+            for (index, line) in t.frame.lines.iter().enumerate() {
+                lines = lines.child(line_row(
+                    format!("t{index}"),
+                    line,
+                    mono,
+                    cell,
+                    height,
+                    scale,
+                    k,
+                ));
+            }
+            // The row below the viewport, hung under the last line: the pane is seldom a whole
+            // number of lines tall, and the strip the last row does not reach is this row's top.
+            if let Some(trail) = &t.frame.trail {
+                let top = t.frame.rows as f32 * height;
+                lines = lines.child(
+                    line_row("trail".to_owned(), trail, mono, cell, height, scale, k)
+                        .absolute(0.0, top),
+                );
+            }
+            if let Some((x, y)) = t.frame.cursor {
+                lines = lines.child(
+                    el().key("terminal-cursor")
+                        .absolute(f32::from(x) * t.cell, f32::from(y) * t.line)
+                        .w(t.cell)
+                        .h(t.line)
+                        .transition(Transition::none())
+                        .fill(if t.focus {
+                            k.alpha(k.c.text_accent, 0.55)
+                        } else {
+                            k.alpha(k.c.text_muted, 0.35)
+                        }),
+                );
+            }
         }
     }
 
@@ -276,12 +287,12 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
     view
 }
 
-/// The grid as one image, when the texture path is on and a frame is ready. It covers the lead
-/// and trail rows as well, hung one row up inside the scrolled container: the clip cuts the
-/// part above the viewport, and the fraction of a row the scroll shows is already in the image.
-#[cfg(not(target_arch = "wasm32"))]
+/// The grid as one image, the desktop default. It covers the lead and trail rows as well, hung
+/// one row up inside the scrolled container: the clip cuts the part above the viewport, and the
+/// fraction of a row the scroll shows is already in the image. A notice, an error or an empty
+/// frame is left to the text below.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
-    std::env::var_os("SHEATH_TERM_TEXTURE")?;
     if t.notice.is_some() || t.error.is_some() || t.frame.lines.is_empty() {
         return None;
     }
@@ -306,11 +317,12 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
     )
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", feature = "text-renderer"))]
 fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
 }
 
+#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 fn line_row(
     name: String,
     line: &Line,

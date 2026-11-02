@@ -1,11 +1,16 @@
-//! What the pane paints: the rows a scroll moves, the overscan row at each edge, and the
-//! rectangles cell backgrounds and cell-filling characters are drawn as.
+//! What the text renderer paints: the rows a scroll moves, the overscan row at each edge, and
+//! the rectangles cell backgrounds and cell-filling characters are drawn as.
+//!
+//! Desktop builds stream the grid as one texture and build no row elements, so these tests run
+//! with `--features text-renderer`.
 
 use crate::term::Terminal;
+#[cfg(feature = "text-renderer")]
 use crate::term::grid::{Frame, Line};
 
 /// Where a fractional scroll puts the rows: the first row hangs lower by exactly the fraction,
 /// and the overscan row above it covers the strip that would otherwise be background.
+#[cfg(feature = "text-renderer")]
 #[test]
 fn the_overscan_row_covers_the_top_edge_at_every_offset() {
     use crate::tests::helpers::*;
@@ -124,6 +129,7 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
 
 /// A cell background is a rectangle over its cells: flush with the row's edge, exactly as many
 /// cells wide, and a full line tall, so neighbouring rows' bars meet without a gap.
+#[cfg(feature = "text-renderer")]
 #[test]
 fn a_background_is_a_rectangle_over_its_cells() {
     use crate::term::grid::{Pen, Run};
@@ -207,6 +213,7 @@ fn the_pane_draws_below_the_browser_when_it_opens() {
 
 /// A shape is a rectangle over its cell, painted after the cell's background and under the text:
 /// snapped to whole device pixels from the cell's own column, so it abuts its neighbours.
+#[cfg(feature = "text-renderer")]
 #[test]
 fn a_shape_is_a_rectangle_over_its_cell() {
     use crate::term::grid::Shape;
@@ -270,6 +277,7 @@ fn a_shape_is_a_rectangle_over_its_cell() {
 /// shape inserted on the left of a row changes that cell's rectangle alone; the rest of the row
 /// keeps its keys, so Rune updates those rectangles instead of remapping their geometry onto
 /// different elements, which read as a flash travelling along the row.
+#[cfg(feature = "text-renderer")]
 #[test]
 fn an_update_keeps_the_elements_to_its_right() {
     use crate::term::grid::{Pen, Run, Shape};
@@ -374,6 +382,7 @@ fn an_update_keeps_the_elements_to_its_right() {
 /// A screen that swaps a block-art logo for a list, the way opencode replaces its welcome logo
 /// with the slash-command popover, leaves nothing behind in a transition: no element under the
 /// grid is exiting, springing, or below full opacity on the frames that follow.
+#[cfg(feature = "text-renderer")]
 #[test]
 fn a_logo_replaced_by_a_popover_leaves_nothing_fading() {
     use crate::term::grid::{Pen, Run, Shape};
@@ -522,5 +531,76 @@ fn a_box_drawing_cell_is_shapes_and_a_space() {
         (frame.lines[0].runs[0].start, frame.lines[0].runs[0].cols),
         (0, (0, 3)),
         "the space still maps one byte to one cell, so the runs stay honest"
+    );
+}
+
+/// The desktop default streams the grid as one image: one texture sized to the viewport and its
+/// two overscan rows, with no row elements behind it.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+#[test]
+fn the_grid_streams_as_one_texture_by_default() {
+    use crate::term::grid::{Frame, Line};
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    let frame = Frame {
+        cols: 20,
+        rows: 2,
+        lines: vec![
+            Line {
+                text: "hello".to_owned(),
+                ..Line::default()
+            },
+            Line::default(),
+        ],
+        ..Frame::default()
+    };
+    rt.state.term.show_for_test(frame);
+    rt.frame(0.0);
+
+    let grid = rt
+        .presented("terminal-texture")
+        .expect("the streamed grid")
+        .0;
+    let (cell, line) = (rt.state.term.cell, rt.state.term.line);
+    assert!(
+        (grid[2] - 20.0 * cell).abs() < 0.01,
+        "the image covers the grid's columns: {grid:?}"
+    );
+    assert!(
+        (grid[3] - 4.0 * line).abs() < 0.01,
+        "and the viewport plus one overscan row each side: {grid:?}"
+    );
+    assert!(
+        rt.presented("t0").is_none(),
+        "the default builds no row elements"
+    );
+}
+
+/// A notice or the starting state is still text: there is no frame to stream yet.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+#[test]
+fn a_notice_or_a_starting_shell_still_uses_text() {
+    use crate::term::grid::Frame;
+    use crate::tests::helpers::*;
+
+    let dir = long_folder(4);
+    let mut rt = runtime(app(&dir));
+    rt.state.term.show_for_test(Frame::default());
+    rt.frame(0.0);
+    assert!(rt.find("terminal-starting").is_some(), "the starting note");
+    assert!(
+        rt.presented("terminal-texture").is_none(),
+        "no image to stream yet"
+    );
+
+    rt.state.term.notice = Some("The terminal is unavailable here.".to_owned());
+    rt.invalidate();
+    rt.frame(0.0);
+    assert!(rt.find("terminal-notice").is_some(), "the notice");
+    assert!(
+        rt.presented("terminal-texture").is_none(),
+        "a notice is text, not a grid"
     );
 }

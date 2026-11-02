@@ -7,6 +7,9 @@ description = "A file manager PoC built with the Rune UI framework"
 [features]
 # Opt-in Rust hot-patching for desktop development; see "Live editing" in README.md.
 hot = ["rune/hot"]
+# The original row/span renderer for the grid. Desktop builds stream the grid as one texture by
+# default; this builds the text rows instead, and the paint tests that assert their elements.
+text-renderer = []
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }

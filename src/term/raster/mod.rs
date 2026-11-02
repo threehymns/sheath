@@ -2,14 +2,15 @@
 //! rectangle per background run. Cells are composited on the CPU from a glyph atlas and handed
 //! to Rune as a [`Pixels`] buffer, which it uploads by dirty rows.
 //!
-//! It is behind `SHEATH_TERM_TEXTURE=1` while it is measured. The text path stays the plain
-//! renderer and the only one on the web, so a gap here is a gap in the experiment only. The
-//! image always carries one blank overscan row above and below the viewport, which is what lets
-//! a fractional scroll show the next row entering at the edge instead of a strip of background.
+//! It is the native renderer. The text-row renderer is a build-time fallback
+//! (`--features text-renderer`) and the only one on the web, so a gap here does not reach the
+//! default build. The image always carries one blank overscan row above and below the viewport,
+//! which is what lets a fractional scroll show the next row entering at the edge instead of a
+//! strip of background.
 //!
 //! Wide characters still advance one column per code point, so a CJK glyph can overlap the cell
-//! after it. The text path remains the reference for that until the cell widths are carried on
-//! the frame.
+//! after it. The text renderer remains the reference for that until the cell widths are carried
+//! on the frame.
 
 mod atlas;
 mod paint;

@@ -26,13 +26,16 @@ fn the_cell_is_the_font_cell() {
         rt.state.term.line
     );
     let advance = rune::text::advance("M", natural);
-    let drawn = rt.state.term.text_style(kit.ty.mono);
-    assert!(
-        (rune::text::advance("M", drawn) - rt.state.term.cell).abs() < 0.01,
-        "the font is tracked to the cell, so a glyph advance is exactly one cell: {} vs {}",
-        rune::text::advance("M", drawn),
-        rt.state.term.cell
-    );
+    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
+    {
+        let drawn = rt.state.term.text_style(kit.ty.mono);
+        assert!(
+            (rune::text::advance("M", drawn) - rt.state.term.cell).abs() < 0.01,
+            "the font is tracked to the cell, so a glyph advance is exactly one cell: {} vs {}",
+            rune::text::advance("M", drawn),
+            rt.state.term.cell
+        );
+    }
     assert!(
         (advance - rt.state.term.cell).abs() > 0.0001 || rt.state.term.cell == advance,
         "the cell comes from the font's advance: {advance}"
