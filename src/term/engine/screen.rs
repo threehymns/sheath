@@ -5,6 +5,7 @@
 use std::time::Instant;
 
 use ghostty_vt::render::{CellIteration, CellIterator, CursorVisualStyle, Dirty, RowIterator};
+use ghostty_vt::screen::CellWide;
 use ghostty_vt::style::{RgbColor, StyleColor, Underline};
 use rune::Color;
 
@@ -133,6 +134,7 @@ impl Engine {
             let line = &mut out.lines[index];
             line.text.clear();
             line.runs.clear();
+            line.wide.clear();
             line.shapes.clear();
             line.selection = selection;
             read_cells(
@@ -209,6 +211,20 @@ fn read_cells(
     let mut used_cols = 0u16;
     let mut col = 0u16;
     while let Some(cell) = cells.next() {
+        // A wide character covers two cells, and the cell it covers holds no character of its
+        // own: it belongs to the wide cell's run, not to a blank of its own, which is what keeps
+        // the row's text from drawing a space the grid does not have. The cell a soft wrap
+        // leaves at the end of a row is the same: its wide character is on the row above. Each
+        // of the two is a column of the row, so the counter still steps once per cell.
+        let wide = cell
+            .raw_cell()
+            .and_then(|cell| cell.wide())
+            .unwrap_or(CellWide::Narrow);
+        if matches!(wide, CellWide::SpacerTail | CellWide::SpacerHead) {
+            col = col.saturating_add(1);
+            continue;
+        }
+        let width = if matches!(wide, CellWide::Wide) { 2 } else { 1 };
         let styled = cell.has_styling().unwrap_or(true);
         let pen = if styled {
             let style = cell.style().unwrap_or_default();
@@ -265,14 +281,17 @@ fn read_cells(
         let start = line.text.len();
         line.text.push_str(scratch);
         let end = line.text.len();
+        if width == 2 {
+            line.wide.push(col);
+        }
         // A blank cell still belongs to the row when it carries a background or a style: a
         // full-width bar is spaces, and trimming them would cut the bar short. A shape is
         // visible for the same reason, so its column is kept too.
         if scratch != " " || styled || filled {
             used = end;
-            used_cols = col + 1;
+            used_cols = col + width;
         }
-        let cols = (col, col + 1);
+        let cols = (col, col + width);
         col = col.saturating_add(1);
         match line.runs.last_mut() {
             Some(run) if run.pen == pen => {

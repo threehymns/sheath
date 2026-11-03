@@ -12,6 +12,7 @@ mod osc;
 mod paint;
 mod pane;
 mod shell;
+mod wide;
 
 #[cfg(not(target_arch = "wasm32"))]
 mod perf;

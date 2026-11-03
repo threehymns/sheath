@@ -131,6 +131,10 @@ pub struct Placement {
 pub struct Line {
     pub text: String,
     pub runs: Vec<Run>,
+    /// The columns whose character covers two cells, in increasing order: a CJK glyph or an
+    /// emoji. The cell after one holds no character of its own and draws nothing, so a renderer
+    /// walking the text advances two columns for that character.
+    pub wide: Vec<u16>,
     /// Cell-filling characters, painted before the text. The text holds a space in their cells.
     pub shapes: Vec<Shape>,
     /// Inclusive first and last selected column.

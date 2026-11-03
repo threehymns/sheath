@@ -278,9 +278,16 @@ pub(super) fn paint_line(
         let text = line.text.get(run.start..run.end).unwrap_or_default();
         let mut col = u32::from(run.cols.0);
         for ch in text.chars() {
+            // A wide character covers two cells and the frame says which ones, so the glyph
+            // after it starts where the grid puts it instead of in the cell it also covers.
+            let wide = line
+                .wide
+                .binary_search_by_key(&col, |column| u32::from(*column))
+                .is_ok();
+            let advance = if wide { 2 } else { 1 };
             if ch.is_control() || ch == ' ' {
                 if !format_char(ch) {
-                    col = col.saturating_add(1);
+                    col = col.saturating_add(advance);
                 }
                 continue;
             }
@@ -303,7 +310,7 @@ pub(super) fn paint_line(
                 );
             }
             if !combining(ch) {
-                col = col.saturating_add(1);
+                col = col.saturating_add(advance);
             }
         }
         let x0 = i32::from(run.cols.0) * cell_px as i32;

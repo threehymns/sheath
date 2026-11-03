@@ -8,9 +8,9 @@
 //! which is what lets a fractional scroll show the next row entering at the edge instead of a
 //! strip of background.
 //!
-//! Wide characters still advance one column per code point, so a CJK glyph can overlap the cell
-//! after it. The text renderer remains the reference for that until the cell widths are carried
-//! on the frame.
+//! A wide character is one glyph over two columns: the row carries which columns those are
+//! ([`Line::wide`](crate::term::grid::Line::wide)), so the glyph after it starts in its own cell
+//! rather than in the one the wide glyph also covers.
 
 mod atlas;
 mod image;

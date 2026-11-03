@@ -535,3 +535,41 @@ fn perf_texture_compose() {
         std::thread::available_parallelism()
     );
 }
+
+/// A wide character covers two columns, so the glyph drawn after it starts two cells along. The
+/// frame's own record of the wide columns is what the painter advances by; this row marks a
+/// narrow glyph wide on purpose, so the test does not depend on a face that installs a CJK one.
+#[test]
+fn the_cell_after_a_wide_character_is_drawn_at_its_own_column() {
+    let mut line = Line {
+        text: "l|".to_owned(),
+        ..Line::default()
+    };
+    line.wide.push(0);
+    line.runs.push(run(Pen::default(), (0, 3), 0, 2));
+    let frame = Frame {
+        cols: 4,
+        rows: 1,
+        lines: vec![line],
+        ..Frame::default()
+    };
+    let (width, _, rgba) = Raster::new()
+        .compose(&frame, 10.0, 20.0, 1.0, palette())
+        .expect("an image");
+    // The viewport is the band below the overscan row: row one of three.
+    let ink = |x0: u32, x1: u32| {
+        (20..40)
+            .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+            .filter(|&(x, y)| pixel(&rgba, width, x, y)[3] > 0)
+            .count()
+    };
+    assert_eq!(
+        ink(10, 20),
+        0,
+        "the wide character's second column stays empty"
+    );
+    assert!(
+        ink(20, 30) > 0,
+        "the glyph after it is drawn in the cell two columns along"
+    );
+}
