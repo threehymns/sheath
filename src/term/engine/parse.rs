@@ -114,12 +114,16 @@ pub(crate) fn scheme(theme: Theme) -> ColorScheme {
     }
 }
 
-/// The directory an OSC 7 report names: a `file://` URI whose path may be percent-encoded, or a
-/// bare path from one of the protocols that reports one. Anything that does not decode to a
-/// path is dropped, so the header keeps showing the last directory that did.
+/// The directory an OSC 7 report names: a `file://` URI whose path may be percent-encoded, a
+/// `kitty-shell-cwd://` one (the scheme Ghostty's integration scripts report with), or a bare
+/// path from one of the protocols that reports one. Anything that does not decode to a path is
+/// dropped, so the header keeps showing the last directory that did.
 pub(crate) fn directory(report: &str) -> Option<PathBuf> {
-    let path = match report.strip_prefix("file://") {
-        // `file://host/path`: the host is the local machine when it is empty, and the first
+    let path = match report
+        .strip_prefix("file://")
+        .or_else(|| report.strip_prefix("kitty-shell-cwd://"))
+    {
+        // `scheme://host/path`: the host is the local machine when it is empty, and the first
         // slash after it starts the path either way.
         Some(rest) => &rest[rest.find('/')?..],
         None => report,

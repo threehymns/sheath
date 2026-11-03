@@ -4,6 +4,7 @@
 
 mod box_drawing;
 mod images;
+mod integration;
 mod metrics;
 mod mouse;
 mod osc;

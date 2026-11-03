@@ -147,6 +147,11 @@ fn a_directory_report_decodes_into_the_path_it_names() {
         "a percent-encoded space decodes, and the host is not part of the path"
     );
     assert_eq!(
+        directory("kitty-shell-cwd://my-host/home/me/src").as_deref(),
+        Some(std::path::Path::new("/home/me/src")),
+        "the scheme Ghostty's integration scripts report with carries the path after the host"
+    );
+    assert_eq!(
         directory("/tmp/plain").as_deref(),
         Some(std::path::Path::new("/tmp/plain")),
         "the protocols that report a bare path are taken as one"
