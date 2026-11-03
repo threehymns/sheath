@@ -413,6 +413,9 @@ impl Engine {
         self.vt.vt_write(bytes);
         let mut replies = Vec::new();
         self.absorb_all(&mut replies);
+        // The parse loop refreshes the history count from the same place, and a test that scrolls
+        // the viewport needs it to have moved with the bytes it fed.
+        self.history = self.vt.scrollback_rows().unwrap_or(self.history);
         // The replies the query asked for, which a test has no pty to write them to. Tests that
         // are only feeding output are free to drop them.
         replies

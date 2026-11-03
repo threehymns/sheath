@@ -140,6 +140,54 @@ fn a_program_s_default_colours_reach_the_rows_already_drawn() {
     );
 }
 
+/// The overscan rows above and below a fractionally scrolled viewport are read with the rows, so
+/// a default-colour move has to read them again for that frame: dropped instead, they leave the
+/// strip the fractional offset shows blank until the next one.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_program_s_default_colours_reach_the_overscan_rows() {
+    use crate::term::engine::Engine;
+    use crate::term::grid::Frame;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    for line in 0..20 {
+        engine.feed(format!("line {line}\r\n").as_bytes());
+    }
+    assert!(engine.set_scroll(8), "the viewport moves off the tail");
+    let mut frame = Frame::default();
+    engine.ensure_edges(true);
+    engine.fill(&mut frame);
+    let above = frame.lead.clone().expect("the row above the viewport");
+    engine.feed(b"\x1b]10;#ff0000\x1b\\");
+    // What the pane does on the frame after the move: the edges are asked for first, and the
+    // fill is what notices the pair changed.
+    engine.ensure_edges(true);
+    engine.fill(&mut frame);
+    let after = frame
+        .lead
+        .expect("the overscan row is drawn again, not left blank for a frame");
+    assert_ne!(
+        after.runs[0].pen.fg, above.runs[0].pen.fg,
+        "the row read before the move draws the new default"
+    );
+    let byte = |value: f32| (rune::color::srgb_encode(value) * 255.0).round() as u8;
+    assert_eq!(
+        (byte(after.runs[0].pen.fg.r), byte(after.runs[0].pen.fg.g)),
+        (255, 0),
+        "OSC 10's colour, on the row that was already read"
+    );
+}
+
 /// OSC 52 hands the clipboard what the program copied, with the trailing whitespace Ghostty
 /// trims by default (`clipboard-trim-trailing-spaces`): a yank ends in a newline, and keeping it
 /// pastes a blank line wherever the copy lands.

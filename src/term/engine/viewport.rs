@@ -23,6 +23,12 @@ impl Engine {
             return;
         }
         self.edges_at = Some(self.applied);
+        self.fetch_edges();
+    }
+
+    /// Reads the two rows, with the viewport moved one row each way and put back. `edges_at` is
+    /// the caller's to set: it says which offset these two belong to.
+    pub(super) fn fetch_edges(&mut self) {
         self.lead = None;
         self.trail = None;
         self.vt.scroll_viewport(ScrollViewport::Delta(-1));
