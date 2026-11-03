@@ -222,9 +222,13 @@ impl Engine {
         // protocol itself, chunked transmits and deletes included, is libghostty's; the pane
         // reads the placements back in `read_images`.
         let _ = vt.set_kitty_image_storage_limit(KITTY_IMAGE_STORAGE);
+        // The file and shared memory mediums, as Ghostty allows them. The temporary-file medium
+        // is left at libghostty's default (disabled): the crate's setter for that option passes
+        // a bool where the C side reads a string path, and libghostty then copies a path out of
+        // the bool's stack slot, which faults in release builds. A `t=t` transmission is refused
+        // with an error reply instead. Revisit when the crate's wrapper carries the path.
         let _ = vt
             .set_kitty_image_from_file_allowed(true)
-            .and_then(|vt| vt.set_kitty_image_from_temp_file_allowed(true))
             .and_then(|vt| vt.set_kitty_image_from_shared_mem_allowed(true));
         let _ = ghostty_vt::kitty::graphics::set_png_decoder(Some(Box::new(
             ghostty_vt::kitty::graphics::RustPngDecoder::new(),
