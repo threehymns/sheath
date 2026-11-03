@@ -11,7 +11,7 @@ use crate::term::grid::CursorShape;
 use crate::term::{ProgressKind, Terminal};
 #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 use rows::line_row;
-use rune::{Cursor, Drag, El, Phase, Transition, Tx, col, el, row, text};
+use rune::{Cursor, Drag, El, Key, Phase, Transition, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
@@ -135,7 +135,23 @@ fn header(s: &App, k: &'static Kit) -> El {
                 .min_w(0.0)
                 .truncate()
                 .transition(Transition::none()),
-        )
+        );
+    // The find section sits between the title and the pane's own buttons, so it reads as part
+    // of the header instead of trailing the close button.
+    if s.term.searching() {
+        bar = bar
+            .child(search_field(s, k))
+            // A vertical rule separates finding from the pane's own controls, so the two read
+            // as different groups instead of one run of buttons.
+            .child(
+                el().key("terminal-search-rule")
+                    .w(1.0)
+                    .h(16.0)
+                    .fill(k.c.border_muted)
+                    .transition(Transition::none()),
+            );
+    }
+    bar = bar
         .child(
             IconButton::new(&icons::CHEVRON_DOWN)
                 .variant(IconButtonVariant::GhostMuted)
@@ -158,9 +174,6 @@ fn header(s: &App, k: &'static Kit) -> El {
                 .key("terminal-close")
                 .transition(Transition::none()),
         );
-    if s.term.searching() {
-        bar = bar.child(search_field(s, k));
-    }
     if let Some(report) = progress(&s.term, k) {
         bar = bar.child(report);
     }
@@ -190,73 +203,96 @@ fn header(s: &App, k: &'static Kit) -> El {
 /// The search field, its match count and the two buttons that walk the matches: the same three
 /// pieces Ghostty's own search bar shows.
 fn search_field(s: &App, k: &'static Kit) -> El {
-    let (total, selected) = s.term.search_state().unwrap_or((0, None));
-    let label = match (total, selected) {
-        (0, _) => "No matches".to_owned(),
-        (total, Some(index)) => format!("{}/{total}", index + 1),
-        (total, None) => format!("{total} matches"),
+    // A field nobody has typed in has nothing to report: "No matches" there would read as the
+    // scrollback having no matches rather than as a search that has not started.
+    let label = if s.term.search_text().text.trim().is_empty() {
+        None
+    } else {
+        let (total, selected) = s.term.search_state().unwrap_or((0, None));
+        Some(match (total, selected) {
+            (0, _) => "No matches".to_owned(),
+            (total, Some(index)) => format!("{}/{total}", index + 1),
+            (total, None) => format!("{total} matches"),
+        })
     };
-    row()
-        .key("terminal-search")
-        .gap(4.0)
-        .center_y()
-        .child(
-            rune_kit::TextInput::new(s.term.search_text())
-                .placeholder("Search the scrollback")
-                .width(Some(180.0))
-                .text_style(SEARCH_TYPE.lh(18.0))
-                .plain()
-                .on_edit(|s: &mut App| s.term.search_text_mut())
-                .on_change(|s: &mut App, _: &mut Tx| {
-                    s.term.apply_search();
-                })
-                .build(k)
-                .key("terminal-search-input"),
-        )
-        .child(
+    let mut bar = row().key("terminal-search").gap(4.0).center_y().child(
+        rune_kit::TextInput::new(s.term.search_text())
+            .placeholder("Search the scrollback")
+            .width(Some(180.0))
+            .text_style(SEARCH_TYPE.lh(18.0))
+            .plain()
+            .on_edit(|s: &mut App| s.term.search_text_mut())
+            .on_change(|s: &mut App, _: &mut Tx| {
+                s.term.apply_search();
+            })
+            // The focused field sees its keys before the app does, so Escape and Return are
+            // handled here: Escape closes the find section, Return walks the matches.
+            .on_key(
+                |s: &mut App, event: &rune::KeyEvent, _: &mut Tx| match event.key {
+                    Key::Escape => {
+                        s.term.close_search();
+                        true
+                    }
+                    Key::Enter => {
+                        if event.mods.shift {
+                            s.term.search_prev();
+                        } else {
+                            s.term.search_next();
+                        }
+                        true
+                    }
+                    _ => false,
+                },
+            )
+            .build(k)
+            .key("terminal-search-input"),
+    );
+    if let Some(label) = label {
+        bar = bar.child(
             text(label)
                 .key("terminal-search-count")
                 .font(k.ty.caption())
                 .color(k.c.text_muted)
                 .transition(Transition::none()),
-        )
-        .child(
-            IconButton::new(&icons::ARROW_UP)
-                .variant(IconButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label("Previous match")
-                .help("Previous match")
-                .on_press(|s: &mut App| {
-                    s.term.search_prev();
-                })
-                .build(k)
-                .key("terminal-search-prev")
-                .transition(Transition::none()),
-        )
-        .child(
-            IconButton::new(&icons::CHEVRON_DOWN)
-                .variant(IconButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label("Next match")
-                .help("Next match")
-                .on_press(|s: &mut App| {
-                    s.term.search_next();
-                })
-                .build(k)
-                .key("terminal-search-next")
-                .transition(Transition::none()),
-        )
-        .child(
-            IconButton::new(&icons::X)
-                .variant(IconButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label("Close search")
-                .help("Close the search")
-                .on_press(|s: &mut App| s.term.close_search())
-                .build(k)
-                .key("terminal-search-close")
-                .transition(Transition::none()),
-        )
+        );
+    }
+    bar.child(
+        IconButton::new(&icons::ARROW_UP)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("Previous match")
+            .help("Previous match")
+            .on_press(|s: &mut App| {
+                s.term.search_prev();
+            })
+            .build(k)
+            .key("terminal-search-prev")
+            .transition(Transition::none()),
+    )
+    .child(
+        IconButton::new(&icons::ARROW_DOWN)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("Next match")
+            .help("Next match")
+            .on_press(|s: &mut App| {
+                s.term.search_next();
+            })
+            .build(k)
+            .key("terminal-search-next")
+            .transition(Transition::none()),
+    )
+    .child(
+        IconButton::new(&icons::X)
+            .variant(IconButtonVariant::GhostMuted)
+            .control_size(ControlSize::Small)
+            .label("Close search")
+            .help("Close the search")
+            .on_press(|s: &mut App| s.term.close_search())
+            .build(k)
+            .key("terminal-search-close")
+            .transition(Transition::none()),
+    )
 }
 
 /// OSC 9;4: the progress a program reports for its own work, drawn in the header it shares with

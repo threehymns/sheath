@@ -66,6 +66,12 @@ pub static ARROW_UP: Icon = Icon {
     body: r#"<path d="M8 13V3M4 7l4-4 4 4" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
+pub static ARROW_DOWN: Icon = Icon {
+    name: "sheath-arrow-down",
+    view: 16.0,
+    body: r#"<path d="M8 3v10M4 9l4 4 4-4" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 pub static REFRESH: Icon = Icon {
     name: "sheath-refresh",
     view: 16.0,
