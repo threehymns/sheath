@@ -36,7 +36,13 @@ fff-search = "0.11.1-nightly.f64bab2"
 # The terminal pane's emulator: Ghostty's VT core, which parses escape sequences and keeps the
 # grid, scrollback, and reflow, while Rune draws the cells. It builds a pinned Ghostty source
 # with Zig at build time, so it stays out of the web build.
-ghostty-vt = { version = "0.8.0", default-features = false }
+# `kitty-graphics` turns on the image storage, placement and query half of the kitty graphics
+# protocol, and `png` bundles the decoder libghostty calls for `f=100` payloads. Both are
+# default features of the crate, so turning defaults off above means naming them here.
+ghostty-vt = { version = "0.8.0", default-features = false, features = [
+    "kitty-graphics",
+    "png",
+] }
 # The texture prototype rasterizes the pane's glyphs itself, from the same mono face.
 swash = "0.2.10"
 # Reading the clipboard for a paste into the shell; Rune's own clipboard is write-only from the

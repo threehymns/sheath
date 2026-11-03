@@ -7,6 +7,7 @@
 //! draws, and `input` encodes keys, mouse and paste into what the program reads.
 
 mod find;
+mod graphics;
 mod input;
 mod link;
 mod parse;
@@ -16,6 +17,7 @@ mod selection;
 mod viewport;
 
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -40,6 +42,11 @@ use crate::term::{Progress, Theme};
 /// How much history the terminal keeps above the viewport. libghostty measures this in bytes,
 /// not rows, so this is roughly a quarter million lines of plain text.
 const MAX_SCROLLBACK: usize = 32 * 1024 * 1024;
+
+/// How many bytes of images the kitty graphics protocol may keep for the pane. libghostty
+/// measures the decoded pixels against it and evicts the oldest images; zero disables the
+/// protocol, so this is what lets a program draw at all. Ghostty's own default.
+const KITTY_IMAGE_STORAGE: u64 = 320 * 1024 * 1024;
 
 /// Bytes one parse step hands libghostty, so the frame's time budget can be checked between
 /// steps instead of after everything queued has been parsed.
@@ -137,6 +144,13 @@ pub struct Engine {
     find: Option<ghostty_vt::search::Search>,
     /// Whether that search has more of the scrollback to walk through.
     search_pending: bool,
+    /// The kitty graphics placements, walked when a frame is read back.
+    placements: Option<ghostty_vt::kitty::graphics::PlacementIterator>,
+    /// Decoded pixels per image id, with the image generation they were read at.
+    images: graphics::ImageCache,
+    /// The image storage generation the last frame was read from. A transmit or a delete raises
+    /// no event, so this is how a drain notices that the screen changed.
+    graphics: u64,
 }
 
 /// What the pane is doing behind the frame it just drew. `lag` is the honest latency number: a
@@ -198,6 +212,23 @@ impl Engine {
         // Programs ask which side of the theme they are drawing on (CSI ? 996 n) and pick their
         // own colours from the answer, as they do in Ghostty.
         vt.set_color_scheme(Some(parse::scheme(theme)));
+        // The pixel size of a cell as well as the grid's: image placements and the pixel size a
+        // program can query (CSI 14/16/18 t, and the in-band reports of mode 2048) are answered
+        // in these units, and a terminal that never resized has a cell of no pixels at all.
+        let _ = vt.resize(cols, rows, cell.0.max(1.0) as u32, cell.1.max(1.0) as u32);
+        // Kitty graphics: the image storage, every transmission medium the protocol defines (the
+        // escape-code payload, files, temporary files and shared memory), the PNG decoder
+        // libghostty calls for `f=100` payloads, and the same storage limit Ghostty sets. The
+        // protocol itself, chunked transmits and deletes included, is libghostty's; the pane
+        // reads the placements back in `read_images`.
+        let _ = vt.set_kitty_image_storage_limit(KITTY_IMAGE_STORAGE);
+        let _ = vt
+            .set_kitty_image_from_file_allowed(true)
+            .and_then(|vt| vt.set_kitty_image_from_temp_file_allowed(true))
+            .and_then(|vt| vt.set_kitty_image_from_shared_mem_allowed(true));
+        let _ = ghostty_vt::kitty::graphics::set_png_decoder(Some(Box::new(
+            ghostty_vt::kitty::graphics::RustPngDecoder::new(),
+        )));
 
         let bell = Rc::new(Cell::new(false));
         let session = pty::spawn(dir, cols, rows, cell, wake.clone())?;
@@ -252,6 +283,9 @@ impl Engine {
             pwd: None,
             find: None,
             search_pending: false,
+            placements: ghostty_vt::kitty::graphics::PlacementIterator::new().ok(),
+            images: HashMap::new(),
+            graphics: 0,
         })
     }
 
@@ -289,6 +323,18 @@ impl Engine {
             && title != self.title
         {
             self.title = title.to_owned();
+            changed = true;
+        }
+        // A program that transmits, replaces or deletes an image raises no event: the storage's
+        // generation is the only sign, and without it an `icat` would stay invisible until the
+        // next keypress.
+        if self
+            .vt
+            .kitty_graphics()
+            .ok()
+            .and_then(|graphics| graphics.generation().ok())
+            .is_some_and(|generation| generation != self.graphics)
+        {
             changed = true;
         }
         if !self.exited

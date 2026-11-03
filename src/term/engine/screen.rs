@@ -71,6 +71,9 @@ impl Engine {
     /// are read again, and a cell with no styling skips the colour calls that would find none;
     /// cells past a row's last visible glyph are not built at all.
     fn fill_into(&mut self, out: &mut Frame) {
+        // Images first: they are the terminal's own state, not part of the row snapshot, and
+        // reading them needs the terminal from both sides.
+        self.read_images(out);
         if out.title != self.title {
             out.title.clone_from(&self.title);
         }

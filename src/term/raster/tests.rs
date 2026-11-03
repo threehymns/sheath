@@ -90,6 +90,115 @@ fn the_texture_carries_a_row_above_and_below_the_viewport() {
     assert_eq!(pixel(&rgba, width, 0, 40)[2], 255, "trail");
 }
 
+/// Kitty graphics placements are composited where the frame put them: the source rectangle
+/// scaled into the box, clipped at the image's edges, and on the side of the text its layer
+/// says — under the cell background for a negative z-index, over it otherwise.
+#[test]
+fn images_are_drawn_at_their_place_size_and_layer() {
+    use crate::term::grid::{ImageLayer, ImagePixels, Placement};
+    use std::sync::Arc;
+
+    let green = Arc::new(ImagePixels {
+        width: 2,
+        height: 2,
+        rgba: [0u8, 255, 0, 255].repeat(4),
+    });
+    let placement = |layer, x, w| Placement {
+        data: Arc::clone(&green),
+        layer,
+        z: 0,
+        x,
+        y: 0.0,
+        w,
+        h: 20.0,
+        source: [0, 0, 2, 2],
+    };
+    let mut frame = Frame {
+        cols: 2,
+        rows: 1,
+        lines: vec![Line::default()],
+        ..Frame::default()
+    };
+    frame
+        .images
+        .push(placement(ImageLayer::AboveText, 0.0, 10.0));
+    let (width, _, rgba) = Raster::new()
+        .compose(&frame, 10.0, 20.0, 1.0, palette())
+        .expect("an image");
+    // One overscan row sits above the viewport, so the placement starts on row 20.
+    assert_eq!(
+        pixel(&rgba, width, 5, 20),
+        [0, 255, 0, 255],
+        "the first row"
+    );
+    assert_eq!(pixel(&rgba, width, 5, 39), [0, 255, 0, 255], "the last row");
+    assert_eq!(pixel(&rgba, width, 5, 40), [0, 0, 0, 0], "below it");
+    assert_eq!(pixel(&rgba, width, 5, 19), [0, 0, 0, 0], "above it");
+    assert_eq!(pixel(&rgba, width, 12, 25), [0, 0, 0, 0], "past its width");
+
+    // Half a cell off the left edge: the raster clips the part outside it instead of wrapping.
+    frame.images.clear();
+    frame
+        .images
+        .push(placement(ImageLayer::AboveText, -5.0, 10.0));
+    let (width, _, rgba) = Raster::new()
+        .compose(&frame, 10.0, 20.0, 1.0, palette())
+        .expect("an image");
+    assert_eq!(
+        pixel(&rgba, width, 0, 25),
+        [0, 255, 0, 255],
+        "the visible left"
+    );
+    assert_eq!(
+        pixel(&rgba, width, 6, 25),
+        [0, 0, 0, 0],
+        "past its right edge"
+    );
+
+    // The same image under the text: the row's own background paints over it, where an image
+    // over the text paints over the background.
+    let mut line = Line::default();
+    line.runs.push(run(
+        Pen {
+            bg: Some(rune::Color {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            }),
+            ..Pen::default()
+        },
+        (0, 2),
+        0,
+        0,
+    ));
+    frame.lines = vec![line];
+    frame.images.clear();
+    frame
+        .images
+        .push(placement(ImageLayer::BelowText, 0.0, 10.0));
+    let (width, _, rgba) = Raster::new()
+        .compose(&frame, 10.0, 20.0, 1.0, palette())
+        .expect("an image");
+    assert_eq!(
+        pixel(&rgba, width, 5, 25),
+        [255, 0, 0, 255],
+        "the background wins"
+    );
+    frame.images.clear();
+    frame
+        .images
+        .push(placement(ImageLayer::AboveText, 0.0, 10.0));
+    let (width, _, rgba) = Raster::new()
+        .compose(&frame, 10.0, 20.0, 1.0, palette())
+        .expect("an image");
+    assert_eq!(
+        pixel(&rgba, width, 5, 25),
+        [0, 255, 0, 255],
+        "the image wins"
+    );
+}
+
 /// Cell backgrounds and shapes are drawn to the cell's device-pixel edges, so neighbouring
 /// cells tile instead of leaving a seam.
 #[test]

@@ -13,6 +13,7 @@
 //! on the frame.
 
 mod atlas;
+mod image;
 mod paint;
 
 #[cfg(test)]
@@ -23,9 +24,10 @@ use std::cell::RefCell;
 use rune::Pixels;
 use rune::color::srgb_encode;
 
-use crate::term::grid::{Frame, Line};
+use crate::term::grid::{Frame, ImageLayer, Line};
 
 use atlas::Atlas;
+use image::paint_image;
 use paint::{Surface, glyph_size, paint_line};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -150,6 +152,20 @@ impl Raster {
         // into every pixel would touch all 40 MB of a fullscreened grid each frame, which costs
         // more than all the glyphs together.
         let mut rgba = vec![0u8; (width * height * 4) as usize];
+        // The images a program placed go under the text when their z-index says so: under the
+        // cell backgrounds for the smallest values, under the glyphs for the other negatives.
+        // Painting them before the rows is what keeps text over an image readable, and it is
+        // the order Ghostty's own renderer uses.
+        let overscan = line_px as i32;
+        for placement in frame
+            .images
+            .iter()
+            .filter(|placement| placement.layer != ImageLayer::AboveText)
+        {
+            paint_image(
+                &mut rgba, width, height, placement, scale, overscan, palette.bg,
+            );
+        }
         let size = glyph_size(line_px);
         // The atlas is the only mutable state, so it is filled once and then read by the row
         // workers. Spawning them per frame is cheap next to the blending, and a grid this size
@@ -192,6 +208,18 @@ impl Raster {
                     });
                 }
             });
+        }
+        // A placement above the text is drawn last, over the glyphs, which is where a plain
+        // `a=T` image lands. The cursor goes after even that, so the pane always shows where the
+        // cursor is.
+        for placement in frame
+            .images
+            .iter()
+            .filter(|placement| placement.layer == ImageLayer::AboveText)
+        {
+            paint_image(
+                &mut rgba, width, height, placement, scale, overscan, palette.bg,
+            );
         }
         if let Some((x, y)) = frame.cursor
             && x < frame.cols

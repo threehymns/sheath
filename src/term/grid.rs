@@ -79,6 +79,49 @@ pub struct Highlight {
     pub current: bool,
 }
 
+/// The decoded pixels of one kitty graphics image, shared between the frame that places it and
+/// the engine's cache: cloning a frame must not copy a megabyte of image data.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[derive(Clone, Debug, PartialEq)]
+pub struct ImagePixels {
+    pub width: u32,
+    pub height: u32,
+    /// sRGB, straight alpha, four bytes per pixel, rows top first.
+    pub rgba: Vec<u8>,
+}
+
+/// Which side of the text a kitty graphics placement draws on, from its z-index.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ImageLayer {
+    /// Under the cell backgrounds: a wallpaper behind everything the screen draws.
+    BelowBackground,
+    /// Over the backgrounds and under the text, so a column of text stays readable on it.
+    BelowText,
+    /// Over the text, which is where a plain `a=T` image lands.
+    AboveText,
+}
+
+/// One image placed on the screen. The pixels are shared with the engine's cache and the geometry
+/// is in points, in the same units as a cell, so the raster scales the whole thing at draw time.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+#[derive(Clone, Debug, PartialEq)]
+pub struct Placement {
+    pub data: std::sync::Arc<ImagePixels>,
+    pub layer: ImageLayer,
+    /// The z-index that ordered it inside its layer.
+    pub z: i32,
+    /// Its top-left corner in points, from the viewport's own top-left. Negative when it starts
+    /// above or left of the viewport, which is what a partly scrolled image looks like.
+    pub x: f32,
+    pub y: f32,
+    /// The size it is drawn at, in points.
+    pub w: f32,
+    pub h: f32,
+    /// The part of the image to draw, in image pixels: x, y, width, height.
+    pub source: [u32; 4],
+}
+
 /// One terminal row: its text, the runs over it, the shapes under it, and the columns the
 /// selection covers.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -132,6 +175,9 @@ pub struct Frame {
     /// The terminal's own background, when the program set one with OSC 11. Unset means the
     /// view's theme colour, which is what the shell starts with.
     pub background: Option<Color>,
+    /// The images the program placed with the kitty graphics protocol, sorted by layer and then
+    /// z-index, ready to be drawn under or over the rows.
+    pub images: Vec<Placement>,
     /// Bumped by the engine on every readback, so the streamed image can tell a new frame from
     /// the same one drawn again: a view build that only moved a cursor or a hover underline
     /// reuses the last image instead of compositing the grid again.
