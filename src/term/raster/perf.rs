@@ -70,24 +70,32 @@ fn perf_texture_picture() {
         samples[(samples.len() as f64 * 0.95) as usize],
         f64::from(width * height * 4) / (1024.0 * 1024.0)
     );
-    // Every row rewritten, which is what a whole screen of bands is painted by: the same work a
-    // scroll used to do before the image moved with it.
-    let mut repaint = Vec::new();
+    // A scroll: every row moves up one band and a line enters at the bottom, which is what the
+    // wheel costs once per line it crosses and what a line of a program's output costs.
+    let mut scrolled = Vec::new();
     for index in 0..200 {
-        for line in frame.lines.iter_mut() {
-            line.text = format!("{index:>4} compiled sheath in 1.2s");
-            line.runs[0].end = line.text.len();
-        }
+        frame.lines.remove(0);
+        let text = format!("{index:>4} compiled sheath in 1.2s");
+        frame.lines.push(Line {
+            runs: vec![Run {
+                start: 0,
+                end: text.len(),
+                cols: (0, cols),
+                pen: Pen::default(),
+            }],
+            text,
+            ..Line::default()
+        });
         frame.generation = frame.generation.wrapping_add(1);
         let at = Instant::now();
         black_box(picture(&frame, 7.6, 16.5, 2.0, palette()));
-        repaint.push(at.elapsed().as_secs_f64() * 1e3);
+        scrolled.push(at.elapsed().as_secs_f64() * 1e3);
     }
-    repaint.sort_by(f64::total_cmp);
+    scrolled.sort_by(f64::total_cmp);
     println!(
-        "picture {cols}x{rows} at 2x, every row changed: median {:.3} ms, p95 {:.3} ms",
-        repaint[repaint.len() / 2],
-        repaint[(repaint.len() as f64 * 0.95) as usize]
+        "picture {cols}x{rows} at 2x, scrolled one row: median {:.3} ms, p95 {:.3} ms",
+        scrolled[scrolled.len() / 2],
+        scrolled[(scrolled.len() as f64 * 0.95) as usize]
     );
     // The copy the image hands the runtime, on its own: the pixels are kept between frames to
     // diff against, so a repaint copies the whole image into the `Pixels`.
