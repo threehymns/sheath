@@ -44,8 +44,7 @@ pub(super) fn screen(s: &App, k: &'static Kit) -> El {
         .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))
         .on_press(|s: &mut App| s.term.set_focus(true))
         .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
-            let cell = s.term.cell;
-            s.term.layout(rect, cell);
+            layout_screen(&mut s.term, rect);
             tx.live_only();
         })
 }
@@ -246,6 +245,16 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
 #[cfg(any(target_arch = "wasm32", feature = "text-renderer"))]
 fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
+}
+
+/// Sizes the grid from the screen's layout box. Rune reports the border box, so the padding the
+/// screen draws with is still inside the width: the columns are the ones the padded content
+/// holds. Left in, the extra columns start at the content origin and draw over the right padding
+/// and past the pane, which reads as the terminal spilling out of its parent.
+pub(crate) fn layout_screen(t: &mut Terminal, rect: [f32; 4]) {
+    let [x, y, w, h] = rect;
+    let cell = t.cell;
+    t.layout([x, y, (w - 2.0 * PAD).max(0.0), h], cell);
 }
 
 /// Where a local point falls in the grid, or `None` when it is outside it. The padding and the

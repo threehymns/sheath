@@ -2,7 +2,7 @@
 mod rows;
 mod surface;
 
-pub(crate) use surface::{screen_of, terminal_cell, terminal_drag};
+pub(crate) use surface::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
 use crate::app::App;
 use crate::icons;
@@ -17,7 +17,8 @@ use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
 
 /// The screen's horizontal padding: the pointer's local points include it, a cell does not.
-const PAD: f32 = 10.0;
+/// Kept small: a terminal wants its columns, and the pane's own edge already separates it.
+const PAD: f32 = 6.0;
 
 /// The search field's type, small enough to sit inside the header's 26-point bar instead of
 /// forcing the pane's chrome taller.

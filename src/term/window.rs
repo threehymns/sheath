@@ -98,8 +98,7 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         })
         .on_press(|s: &mut Window| s.term.set_focus(true))
         .on_layout_tx(|s: &mut Window, rect, tx: &mut Tx| {
-            let cell = s.term.cell;
-            s.term.layout(rect, cell);
+            crate::ui::terminal::layout_screen(&mut s.term, rect);
             tx.live_only();
         });
     s.built.set(s.built.get() + at.elapsed());

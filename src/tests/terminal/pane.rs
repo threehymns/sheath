@@ -127,6 +127,21 @@ fn the_grid_is_sized_from_the_rect_and_the_cell() {
     assert_eq!(pane.grid_size(), (2, 1));
 }
 
+/// The screen's layout box includes its horizontal padding, so the grid is sized from the space
+/// the padding leaves: the columns it asks for end where the content ends, not at the pane's edge.
+#[test]
+fn the_grid_fits_inside_the_screen_s_padding() {
+    let mut pane = Terminal::new();
+    pane.cell = 8.0;
+    pane.line = 16.0;
+    crate::ui::terminal::layout_screen(&mut pane, [0.0, 0.0, 800.0, 320.0]);
+    assert_eq!(
+        pane.grid_size(),
+        (98, 20),
+        "12 points of padding leave 788 for whole cells"
+    );
+}
+
 #[test]
 fn a_drag_at_the_minimum_does_not_flip_the_pane() {
     let dir = PathBuf::from("/tmp");
