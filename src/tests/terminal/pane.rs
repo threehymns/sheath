@@ -58,6 +58,21 @@ fn the_cursor_blinks_only_while_the_program_asked_and_the_pane_is_focused() {
     assert_eq!(pane.blink_wait(), None, "and stops waking the loop");
 }
 
+/// The search field opens with the keyboard in it, so the query is typed into the field and not
+/// the shell, and closing it leaves nothing to draw.
+#[test]
+fn the_search_field_opens_focused_and_closes_clean() {
+    let mut pane = Terminal::new();
+    assert!(!pane.searching());
+    pane.open_search();
+    assert!(pane.searching());
+    assert!(pane.search_field_focused());
+    pane.search_text_mut().text = "needle".to_owned();
+    assert_eq!(pane.search_text().text, "needle");
+    pane.close_search();
+    assert!(!pane.searching());
+}
+
 #[test]
 fn the_pane_toggles_and_keeps_its_height_in_range() {
     let mut pane = Terminal::new();
@@ -78,6 +93,26 @@ fn the_pane_toggles_and_keeps_its_height_in_range() {
         pane.height(),
         281.0,
         "a broken drag leaves the height alone"
+    );
+}
+
+/// A press on the same cell soon after the one before it is the second click, and the third
+/// the third: the pane turns those into a word and a line selection.
+#[test]
+fn a_press_in_the_same_cell_soon_after_is_a_double_click() {
+    let mut pane = Terminal::new();
+    assert_eq!(pane.click_count((3, 4)), 1);
+    assert_eq!(pane.click_count((3, 4)), 2, "the same cell is the double");
+    assert_eq!(pane.click_count((3, 4)), 3, "and the third the line");
+    assert_eq!(
+        pane.click_count((3, 4)),
+        1,
+        "a fourth press starts a new gesture"
+    );
+    assert_eq!(
+        pane.click_count((4, 4)),
+        1,
+        "another cell begins another count"
     );
 }
 

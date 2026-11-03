@@ -5,10 +5,10 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use ghostty_vt::terminal::{Event, ProgressState};
+use ghostty_vt::terminal::{ColorScheme, Event, ProgressState};
 
 use super::{Engine, PARSE_CHUNK};
-use crate::term::{Progress, ProgressKind};
+use crate::term::{Progress, ProgressKind, Theme};
 
 impl Engine {
     /// Parses what the reader brought, in chunks that respect the frame's time budget, and
@@ -93,6 +93,24 @@ impl Engine {
             }
         }
         false
+    }
+}
+
+/// Which side of a theme a background sits on, for the color-scheme report a program queries.
+pub(crate) fn scheme(theme: Theme) -> ColorScheme {
+    let lum = |c: u8| {
+        let value = f32::from(c) / 255.0;
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let luminance = 0.2126 * lum(theme.bg.r) + 0.7152 * lum(theme.bg.g) + 0.0722 * lum(theme.bg.b);
+    if luminance > 0.5 {
+        ColorScheme::Light
+    } else {
+        ColorScheme::Dark
     }
 }
 

@@ -11,12 +11,24 @@ use crate::term::grid::CursorShape;
 use crate::term::{MouseAction, Terminal};
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 use rune::SurfaceFit;
-use rune::{Drag, El, Phase, Spring, Transition, Tx, col, el, text};
+use rune::{Cursor, Drag, El, Phase, Spring, Transition, Tx, col, el, text};
 use rune_kit::Kit;
 
 pub(super) fn screen(s: &App, k: &'static Kit) -> El {
     screen_of(&s.term, s.scale.get(), k)
-        .on_wheel(|s: &mut App, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        .on_wheel(|s: &mut App, wheel, tx: &mut Tx| {
+            // A program that captured the mouse gets the notch and scrolls its own view, the way
+            // `less` and `vim` do. Shift is the modifier that takes the mouse back, as Ghostty's
+            // default `mouse-shift-capture` does, and scrolls the pane's history instead.
+            let shift = tx.mods().shift;
+            if !shift
+                && let Some(at) = s.term.hovered_cell()
+                && s.term.mouse_wheel(wheel.dy > 0.0, at, false)
+            {
+                return true;
+            }
+            s.term.wheel(wheel.dy)
+        })
         // The link under the pointer gets an underline, the way Ghostty shows which link a click
         // would open. A move inside the same cell is answered from the pane's last cell, so this
         // runs the terminal only when the pointer crosses into a new one.
@@ -30,7 +42,7 @@ pub(super) fn screen(s: &App, k: &'static Kit) -> El {
             }
         })
         .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))
-        .on_press(|s: &mut App| s.term.focus = true)
+        .on_press(|s: &mut App| s.term.set_focus(true))
         .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
             let cell = s.term.cell;
             s.term.layout(rect, cell);
@@ -185,6 +197,10 @@ pub(crate) fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
     } else {
         view = view.child(lines);
     }
+    if t.hovered().is_some() {
+        // A link under the pointer reads as something to click, the way Ghostty shows it.
+        view = view.cursor(Cursor::Pointer);
+    }
     view
 }
 
@@ -214,6 +230,7 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
             89
         },
         selection: crate::term::raster::rgb(k.c.text_accent),
+        search: crate::term::raster::rgb(k.c.text_accent),
     };
     let picture = crate::term::raster::picture(&t.frame, t.cell, t.line, scale, palette)?;
     Some(
@@ -254,14 +271,16 @@ pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag, tx: &mut Tx) {
         (drag.x / cell).floor().clamp(0.0, 4000.0) as u16,
         (drag.y / line).floor().clamp(0.0, 4000.0) as u16,
     );
-    // A program that asked for the mouse gets the gesture; otherwise a drag selects text.
-    let tracking = t.mouse_tracking();
+    let mods = tx.mods();
+    // A program that asked for the mouse gets the gesture; otherwise a drag selects text. Shift
+    // takes the mouse back for the selection, which is what Ghostty's `mouse-shift-capture`
+    // leaves off by default, so a drag over `tmux` or `vim` still copies.
+    let tracking = t.mouse_tracking() && !mods.shift;
     match drag.phase {
         Phase::Down => {
-            t.focus = true;
+            t.set_focus(true);
             // Cmd+click (Ctrl+click off macOS) opens the OSC 8 link under the pointer, the way
             // Ghostty does. The rest of this gesture belongs to the link, not to a selection.
-            let mods = tx.mods();
             if (mods.cmd || mods.ctrl)
                 && !tracking
                 && let Some(uri) = t.hyperlink_at(at)
@@ -273,8 +292,12 @@ pub(crate) fn terminal_drag(t: &mut Terminal, drag: &Drag, tx: &mut Tx) {
             if tracking {
                 t.mouse(MouseAction::Press, at, false);
             } else {
+                // A second press on the same cell is a double click, which takes the word under
+                // it, and a third takes its line, as they do in Ghostty. Alt turns the drag into
+                // a block over the columns between its ends.
+                let clicks = t.click_count(at);
                 t.clear_selection();
-                t.begin_selection(at);
+                t.begin_selection(at, clicks, mods.alt);
             }
         }
         Phase::Move => {

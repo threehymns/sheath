@@ -2,6 +2,7 @@
 //! asked for it, and pastes wrapped the way it asked for. Every path writes to the PTY and lets
 //! libghostty own the meaning.
 
+use ghostty_vt::focus;
 use ghostty_vt::key;
 use ghostty_vt::mouse;
 use ghostty_vt::terminal::Mode;
@@ -54,6 +55,25 @@ impl Engine {
         true
     }
 
+    /// Tells the program the pane gained or lost the keyboard, when it asked for focus events
+    /// (mode 1004). Ghostty encodes those as CSI I and CSI O, and editors, `tmux` and `htop`
+    /// repaint or dim themselves on them.
+    pub fn report_focus(&mut self, gained: bool) {
+        if !self.vt.mode(Mode::FOCUS_EVENT).unwrap_or(false) {
+            return;
+        }
+        let event = if gained {
+            focus::Event::Gained
+        } else {
+            focus::Event::Lost
+        };
+        let mut buf = [0u8; 8];
+        if let Ok(len) = event.encode(&mut buf) {
+            let _ = self.writer.write_all(&buf[..len]);
+            let _ = self.writer.flush();
+        }
+    }
+
     pub fn mouse(
         &mut self,
         action: mouse::Action,
@@ -75,6 +95,19 @@ impl Engine {
             event.set_mods(key::Mods::SHIFT);
         }
         self.mouse.set_options_from_terminal(&self.vt);
+        // The encoder drops a position outside the screen it was told about, and its default
+        // screen is one cell: telling it the grid the pane draws is what makes a click past the
+        // first cell reach the program at all. Positions go in as cells, so a cell is one unit.
+        self.mouse.set_size(mouse::EncoderSize {
+            screen_width: u32::from(self.cols),
+            screen_height: u32::from(self.rows),
+            cell_width: 1,
+            cell_height: 1,
+            padding_top: 0,
+            padding_bottom: 0,
+            padding_right: 0,
+            padding_left: 0,
+        });
         let mut out = Vec::new();
         if self.mouse.encode_to_vec(&event, &mut out).is_ok() {
             out

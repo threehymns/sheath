@@ -48,7 +48,7 @@ pub enum ProgressKind {
 /// The colours the terminal hands libghostty as its defaults: what an unstyled cell draws in,
 /// and what `OSC 10`/`11` report. The view paints the same pair, so the grid and the pane agree.
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Theme {
     #[cfg(not(target_arch = "wasm32"))]
     pub fg: RgbColor,

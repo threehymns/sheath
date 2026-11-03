@@ -19,6 +19,10 @@ pub(super) const GRIP_HEIGHT: f32 = 7.0;
 /// The screen's horizontal padding: the pointer's local points include it, a cell does not.
 const PAD: f32 = 10.0;
 
+/// The search field's type, small enough to sit inside the header's 26-point bar instead of
+/// forcing the pane's chrome taller.
+const SEARCH_TYPE: rune::TextStyle = rune::TextStyle::new(12.0, 500.0);
+
 // The pane's edge is its handle: dragging it sets the height, and the shell reflows to the grid
 // the new rect fits as it moves. Pushed past the minimum it collapses, and the same handle sits
 // at the bottom of the frame to drag the pane back open. It is pinned rather than laid out, so
@@ -48,7 +52,7 @@ pub(super) fn grip(s: &App, k: &'static Kit) -> El {
                     // is measured from zero, so the height follows the pointer.
                     drag.data = if s.term.is_open() { height } else { 0.0 };
                     s.term.begin_drag();
-                    s.term.focus = false;
+                    s.term.set_focus(false);
                 }
                 Phase::Move => {
                     // `dy` is travel from the press, not the handle's own position, so one
@@ -154,6 +158,9 @@ fn header(s: &App, k: &'static Kit) -> El {
                 .key("terminal-close")
                 .transition(Transition::none()),
         );
+    if s.term.searching() {
+        bar = bar.child(search_field(s, k));
+    }
     if let Some(report) = progress(&s.term, k) {
         bar = bar.child(report);
     }
@@ -176,6 +183,78 @@ fn header(s: &App, k: &'static Kit) -> El {
             el().w_full()
                 .h(1.0)
                 .fill(k.c.border_muted)
+                .transition(Transition::none()),
+        )
+}
+
+/// The search field, its match count and the two buttons that walk the matches: the same three
+/// pieces Ghostty's own search bar shows.
+fn search_field(s: &App, k: &'static Kit) -> El {
+    let (total, selected) = s.term.search_state().unwrap_or((0, None));
+    let label = match (total, selected) {
+        (0, _) => "No matches".to_owned(),
+        (total, Some(index)) => format!("{}/{total}", index + 1),
+        (total, None) => format!("{total} matches"),
+    };
+    row()
+        .key("terminal-search")
+        .gap(4.0)
+        .center_y()
+        .child(
+            rune_kit::TextInput::new(s.term.search_text())
+                .placeholder("Search the scrollback")
+                .width(Some(180.0))
+                .text_style(SEARCH_TYPE.lh(18.0))
+                .plain()
+                .on_edit(|s: &mut App| s.term.search_text_mut())
+                .on_change(|s: &mut App, _: &mut Tx| {
+                    s.term.apply_search();
+                })
+                .build(k)
+                .key("terminal-search-input"),
+        )
+        .child(
+            text(label)
+                .key("terminal-search-count")
+                .font(k.ty.caption())
+                .color(k.c.text_muted)
+                .transition(Transition::none()),
+        )
+        .child(
+            IconButton::new(&icons::ARROW_UP)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label("Previous match")
+                .help("Previous match")
+                .on_press(|s: &mut App| {
+                    s.term.search_prev();
+                })
+                .build(k)
+                .key("terminal-search-prev")
+                .transition(Transition::none()),
+        )
+        .child(
+            IconButton::new(&icons::CHEVRON_DOWN)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label("Next match")
+                .help("Next match")
+                .on_press(|s: &mut App| {
+                    s.term.search_next();
+                })
+                .build(k)
+                .key("terminal-search-next")
+                .transition(Transition::none()),
+        )
+        .child(
+            IconButton::new(&icons::X)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label("Close search")
+                .help("Close the search")
+                .on_press(|s: &mut App| s.term.close_search())
+                .build(k)
+                .key("terminal-search-close")
                 .transition(Transition::none()),
         )
 }
@@ -242,6 +321,15 @@ impl App {
         let shift = m.shift;
         if shift && event.is_command('c') {
             self.terminal_copy(tx);
+            return true;
+        }
+        if shift && event.is_command('a') {
+            self.term.select_all();
+            return true;
+        }
+        // Cmd/Ctrl+Shift+F finds in the scrollback, as Ghostty's own search does.
+        if shift && event.is_command('f') {
+            self.term.open_search();
             return true;
         }
         if shift && event.is_command('v') {

@@ -13,8 +13,23 @@ pub struct Pen {
     pub bold: bool,
     pub italic: bool,
     pub faint: bool,
-    pub underline: bool,
+    pub underline: UnderlineKind,
+    /// The colour the program gave the underline (SGR 58), when it gave one.
+    pub underline_color: Option<Color>,
     pub strike: bool,
+}
+
+/// How a run's underline is drawn, the styles SGR 4 selects. Ghostty draws all of them, so a
+/// spell checker's squiggle or a diff's doubled rule arrives as what the program asked for.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UnderlineKind {
+    #[default]
+    None,
+    Single,
+    Double,
+    Curly,
+    Dotted,
+    Dashed,
 }
 
 impl Default for Pen {
@@ -25,7 +40,8 @@ impl Default for Pen {
             bold: false,
             italic: false,
             faint: false,
-            underline: false,
+            underline: UnderlineKind::None,
+            underline_color: None,
             strike: false,
         }
     }
@@ -54,6 +70,15 @@ pub struct Shape {
     pub fg: Color,
 }
 
+/// One match a search found on a row: the columns it covers, and whether it is the match the
+/// search is currently on, which draws stronger than the rest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Highlight {
+    /// Inclusive first and last column.
+    pub cols: (u16, u16),
+    pub current: bool,
+}
+
 /// One terminal row: its text, the runs over it, the shapes under it, and the columns the
 /// selection covers.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -64,6 +89,8 @@ pub struct Line {
     pub shapes: Vec<Shape>,
     /// Inclusive first and last selected column.
     pub selection: Option<(u16, u16)>,
+    /// The search matches on this row, under the selection and the backgrounds.
+    pub matches: Vec<Highlight>,
 }
 
 /// How the cursor is drawn, the shapes DECSCUSR selects and Ghostty's renderer draws.

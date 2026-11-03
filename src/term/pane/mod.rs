@@ -4,12 +4,18 @@
 
 mod layout;
 mod link;
+mod metrics;
+mod mouse;
 mod protocol;
+mod search;
+mod select;
+
+pub use mouse::MouseAction;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use rune::{KeyEvent, Waker};
+use rune::{KeyEvent, TextEdit, Waker};
 
 use crate::term::Theme;
 #[cfg(not(target_arch = "wasm32"))]
@@ -19,6 +25,10 @@ use crate::term::grid::Frame;
 /// How long each half of the cursor's blink lasts, the rate xterm and Ghostty blink at. Only a
 /// cursor the program asked to blink blinks, so a plain shell costs no frames at all.
 const BLINK: Duration = Duration::from_millis(500);
+
+/// How soon a second press on the same cell counts as a double click. Ghostty reads the
+/// platform's own interval; the pane has no such answer, so this is the common one.
+const CLICK_INTERVAL: Duration = Duration::from_millis(400);
 
 pub const MIN_HEIGHT: f32 = 120.0;
 pub const MAX_HEIGHT: f32 = 720.0;
@@ -49,6 +59,10 @@ pub struct Terminal {
     pub frame: Frame,
     scroll: f32,
     pub focus: bool,
+    /// The last press the grid saw: when, on which cell, and how many in a row it was. A press
+    /// on the same cell soon after is the double click that selects a word, and a third the
+    /// line.
+    last_press: Option<(Instant, (u16, u16), u8)>,
     /// Whether the cursor is in its drawn half of the blink, and when the half started.
     blink_on: bool,
     blink_at: Instant,
@@ -75,6 +89,8 @@ pub struct Terminal {
     pub notice: Option<String>,
     fresh: bool,
     copies: Vec<String>,
+    /// The search field, while the pane is searching its scrollback.
+    search: Option<TextEdit>,
     /// The press that opened an OSC 8 link: the rest of its gesture is the link's, not a
     /// selection's.
     pub link_press: bool,
@@ -94,6 +110,7 @@ impl Default for Terminal {
             frame: Frame::default(),
             scroll: 0.0,
             focus: false,
+            last_press: None,
             blink_on: true,
             blink_at: Instant::now(),
             opened: false,
@@ -109,6 +126,7 @@ impl Default for Terminal {
             notice: None,
             fresh: false,
             copies: Vec::new(),
+            search: None,
             link_press: false,
             hover: None,
             hover_cell: None,
@@ -124,44 +142,6 @@ impl Default for Terminal {
 impl Terminal {
     pub fn new() -> Terminal {
         Terminal::default()
-    }
-
-    /// Reads the cell from the mono font itself, the way a terminal does: the advance is the
-    /// cell's width and the font's own line box its height, both rounded to whole device pixels.
-    /// The theme's line height is a paragraph measure, taller than the glyphs, and a fractional
-    /// cell puts every glyph edge on a fractional pixel, which leaves a hairline wherever two
-    /// cell-filling glyphs (a block, a box rule) meet.
-    ///
-    /// It runs on every poll, over the style the rows are drawn with, so changing the font (or a
-    /// window moving to a display at another scale) takes effect without a restart.
-    pub fn measure(&mut self, style: rune::TextStyle, scale: f32) {
-        if self.fixed {
-            return;
-        }
-        let natural = style.lh(0.0);
-        let advance = rune::text::advance("M", natural);
-        let (_, box_height) = rune::text::measure("M", &[], natural, None);
-        if advance <= 1.0 || box_height <= 4.0 {
-            return;
-        }
-        let scale = if scale > 0.0 { scale } else { 1.0 };
-        self.scale = scale;
-        self.cell = (advance * scale).round().max(1.0) / scale;
-        self.line = (box_height * scale).round().max(1.0) / scale;
-        // The shaper advances by the font's own width; tracking it to the pixel-aligned cell is
-        // how the glyphs land on the same grid the pane draws and points at. Only the text
-        // renderer shapes again, so the raster build does not carry it.
-        #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-        {
-            self.tracking = self.cell - advance;
-        }
-    }
-
-    /// The style the rows are drawn in: the font's own line box, tracked to the pixel-aligned
-    /// cell so a glyph's advance and a cell are the same width.
-    #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-    pub fn text_style(&self, style: rune::TextStyle) -> rune::TextStyle {
-        style.lh(self.line).tracking(self.tracking)
     }
 
     /// Whether the cursor blinks at all: the program asked for a blinking cursor, the pane is
@@ -218,7 +198,16 @@ impl Terminal {
             let Some(engine) = self.engine.as_mut() else {
                 return blinked;
             };
+            // A switch between light and dark while the shell runs belongs on the screen too,
+            // not just on the next shell that starts.
+            engine.set_theme(theme);
             let mut redraw = engine.drain();
+            // A search scrolls the viewport from the engine's side; the pane's fractional
+            // scroll follows it so the rows drawn are the rows the match is on.
+            if engine.searching() {
+                self.scroll = engine.scroll_position() as f32;
+                redraw = true;
+            }
             redraw |= blinked;
             redraw |= engine.resize(cols, rows, (self.cell, self.line), self.scale);
             if engine.take_bell() {
@@ -378,90 +367,23 @@ impl Terminal {
         self.rect = [0.0, 0.0, 1160.0, 224.0];
     }
 
-    /// The screen's rect, from its layout. The grid is sized from it, so a pane drag reflows
-    /// the shell as it moves.
-    pub fn layout(&mut self, rect: [f32; 4], cell: f32) {
-        self.rect = rect;
-        if cell > 1.0 {
-            self.cell = cell;
-        }
-    }
-
-    pub fn grid_size(&self) -> (u16, u16) {
-        let cols = (self.rect[2] / self.cell).floor();
-        let rows = (self.rect[3] / self.line).floor();
-        (cols.max(2.0) as u16, rows.max(1.0) as u16)
-    }
-
     /// What the pane is behind by: bytes queued, the oldest one's wait, and bytes parsed.
     #[cfg(not(target_arch = "wasm32"))]
     pub fn stats(&self) -> Option<crate::term::engine::Stats> {
         self.engine.as_ref().map(|engine| engine.stats())
     }
 
-    pub fn copy_selection(&mut self) -> Option<String> {
+    /// Gives the keyboard to the shell, or takes it away, telling a program that asked for
+    /// focus reports (mode 1004) either way.
+    pub fn set_focus(&mut self, focus: bool) {
+        if self.focus == focus {
+            return;
+        }
+        self.focus = focus;
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(engine) = self.engine.as_mut() {
-            return engine.selected();
+            engine.report_focus(focus);
         }
-        None
-    }
-
-    pub fn begin_selection(&mut self, at: (u16, u16)) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = self.engine.as_mut() {
-            return engine.begin_selection(at);
-        }
-        let _ = at;
-        false
-    }
-
-    pub fn extend_selection(&mut self, at: (u16, u16)) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = self.engine.as_mut() {
-            return engine.select_to(at);
-        }
-        let _ = at;
-        false
-    }
-
-    pub fn clear_selection(&mut self) {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = self.engine.as_mut() {
-            engine.clear_selection();
-        }
-    }
-
-    pub fn mouse_tracking(&self) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = &self.engine {
-            return engine.mouse_tracking();
-        }
-        false
-    }
-
-    pub fn mouse(&mut self, action: MouseAction, at: (u16, u16), shift: bool) -> bool {
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(engine) = self.engine.as_mut() {
-            let (action, button) = match action {
-                MouseAction::Press => (
-                    ghostty_vt::mouse::Action::Press,
-                    Some(ghostty_vt::mouse::Button::Left),
-                ),
-                MouseAction::Drag => (
-                    ghostty_vt::mouse::Action::Motion,
-                    Some(ghostty_vt::mouse::Button::Left),
-                ),
-                MouseAction::Release => (ghostty_vt::mouse::Action::Release, None),
-            };
-            let bytes = engine.mouse(action, button, at, shift);
-            if !bytes.is_empty() {
-                engine.write(&bytes);
-                return true;
-            }
-        }
-        let _ = (action, at, shift);
-        false
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -489,12 +411,4 @@ impl Terminal {
             Err(err) => self.error = Some(err),
         }
     }
-}
-
-/// Which mouse gesture the pane is reporting.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MouseAction {
-    Press,
-    Drag,
-    Release,
 }

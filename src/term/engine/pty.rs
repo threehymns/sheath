@@ -149,8 +149,26 @@ pub(super) fn spawn(
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_owned());
     let mut command = CommandBuilder::new(&shell);
     command.cwd(dir);
-    command.env("TERM", "xterm-256color");
+    // The screen is Ghostty's VT core, so the shell is told it is on that terminal. Its
+    // terminfo entry is what makes programs use synchronized output, the kitty keyboard
+    // protocol and the rest of what the core answers; without the entry on disk, the plain
+    // xterm the core also speaks is the honest fallback.
+    match ghostty_vt::terminfo::dir() {
+        Ok(terminfo) => {
+            command.env("TERM", ghostty_vt::terminfo::TERM);
+            command.env("TERMINFO", terminfo);
+        }
+        Err(_) => {
+            command.env("TERM", "xterm-256color");
+        }
+    }
     command.env("COLORTERM", "truecolor");
+    // Programs read these to pick a terminal's own behaviours, the way they do in Ghostty.
+    command.env("TERM_PROGRAM", "ghostty");
+    command.env(
+        "TERM_PROGRAM_VERSION",
+        ghostty_vt::build_info::pinned_version(),
+    );
     let child = pair
         .slave
         .spawn_command(command)

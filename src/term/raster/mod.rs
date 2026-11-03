@@ -36,6 +36,8 @@ pub(crate) struct Palette {
     /// unfocused one's, matching the text path's two fills.
     pub cursor_alpha: u8,
     pub selection: [u8; 3],
+    /// The wash under a search match, stronger on the one the search is on.
+    pub search: [u8; 3],
 }
 
 /// A colour as sRGB bytes, the way the texture holds pixels.

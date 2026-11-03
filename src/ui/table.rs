@@ -40,7 +40,7 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .focusable(true)
         .no_focus_ring()
         .on_key(|s: &mut App, event, tx| crate::app::list_key(s, event, tx))
-        .on_press(|s: &mut App| s.term.focus = false)
+        .on_press(|s: &mut App| s.term.set_focus(false))
         .on_drag(|s: &mut App, drag, tx| crate::app::list_drag(s, drag, tx))
         .on_secondary_press(|s: &mut App, press, _: &mut Tx| s.row_menu_at(press))
         .transition(mount(cut));

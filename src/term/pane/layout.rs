@@ -28,7 +28,7 @@ impl Terminal {
     /// same session. [`close`](Terminal::close) is what ends the shell.
     pub fn collapse(&mut self) {
         self.open = false;
-        self.focus = false;
+        self.set_focus(false);
         self.pending = None;
         self.clear_selection();
     }
@@ -66,7 +66,7 @@ impl Terminal {
                 );
             }
         }
-        self.focus = true;
+        self.set_focus(true);
     }
 
     pub fn toggle(&mut self, dir: PathBuf) {
@@ -83,7 +83,7 @@ impl Terminal {
     pub fn expand(&mut self, dir: PathBuf, height: f32) {
         self.open(dir);
         self.opened = true;
-        self.focus = false;
+        self.set_focus(false);
         self.set_height(height);
     }
 

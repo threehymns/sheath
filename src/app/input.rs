@@ -42,9 +42,32 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.place_rename.is_some() {
         return false;
     }
+    // The terminal's search field takes the keys it needs while it has them: Escape closes it,
+    // Return walks the matches, and everything else is text for the field, not the shell.
+    let terminal_search = s.term.searching() && s.term.search_field_focused();
+    if terminal_search {
+        match event.key {
+            Key::Escape => {
+                s.term.close_search();
+                return true;
+            }
+            Key::Enter => {
+                if event.mods.shift {
+                    s.term.search_prev();
+                } else {
+                    s.term.search_next();
+                }
+                return true;
+            }
+            _ => {}
+        }
+        if !event.mods.cmd && !event.mods.ctrl && !event.mods.alt {
+            return false;
+        }
+    }
     // A shell with the keyboard keeps every key, Ctrl-C and Escape included. Only the pane's own
     // chords and the commands that leave the pane reach the app while it has focus.
-    if s.term.is_open() && s.term.focus {
+    if s.term.is_open() && s.term.focus && !terminal_search {
         if s.terminal_chord(event, tx) {
             return true;
         }

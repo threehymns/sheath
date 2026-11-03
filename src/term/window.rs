@@ -72,7 +72,18 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     s.scale.set(cx.env().scale.max(1.0));
     let at = Instant::now();
     let screen = screen_of(&s.term, s.scale.get(), k)
-        .on_wheel(|s: &mut Window, wheel, _: &mut Tx| s.term.wheel(wheel.dy))
+        .on_wheel(|s: &mut Window, wheel, tx: &mut Tx| {
+            // The same split the app's pane makes: a program that captured the mouse scrolls its
+            // own view, and shift takes the mouse back for the history.
+            let shift = tx.mods().shift;
+            if !shift
+                && let Some(at) = s.term.hovered_cell()
+                && s.term.mouse_wheel(wheel.dy > 0.0, at, false)
+            {
+                return true;
+            }
+            s.term.wheel(wheel.dy)
+        })
         .on_pointer_move_local(|s: &mut Window, p, _: &mut Tx| {
             let at = terminal_cell(&s.term, (p.x, p.y));
             s.term.hover(at);
@@ -85,7 +96,7 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         .on_drag(|s: &mut Window, drag: &mut Drag, tx: &mut Tx| {
             terminal_drag(&mut s.term, drag, tx)
         })
-        .on_press(|s: &mut Window| s.term.focus = true)
+        .on_press(|s: &mut Window| s.term.set_focus(true))
         .on_layout_tx(|s: &mut Window, rect, tx: &mut Tx| {
             let cell = s.term.cell;
             s.term.layout(rect, cell);
@@ -155,6 +166,10 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
         {
             tx.copy(text);
         }
+        return true;
+    }
+    if event.mods.shift && event.is_command('a') {
+        s.term.select_all();
         return true;
     }
     if event.mods.shift && event.is_command('v') {

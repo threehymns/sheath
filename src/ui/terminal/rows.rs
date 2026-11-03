@@ -4,7 +4,7 @@
 
 #![cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 
-use crate::term::grid::Line;
+use crate::term::grid::{Line, UnderlineKind};
 use rune::{El, Span, Transition, el, text};
 use rune_kit::Kit;
 
@@ -24,6 +24,19 @@ pub(super) fn line_row(
         .w_full()
         .h(height)
         .transition(Transition::none());
+    // Search matches go in first, so the selection and the cell backgrounds draw over them, the
+    // order the texture uses too.
+    for mark in &line.matches {
+        let width = f32::from(mark.cols.1.saturating_sub(mark.cols.0) + 1) * cell;
+        element = element.child(
+            el().key(format!("match{}", mark.cols.0))
+                .absolute(f32::from(mark.cols.0) * cell, 0.0)
+                .w(width)
+                .h(height)
+                .transition(Transition::none())
+                .fill(k.alpha(k.c.text_accent, if mark.current { 0.42 } else { 0.18 })),
+        );
+    }
     if let Some((start, end)) = line.selection {
         let width = f32::from(end.saturating_sub(start) + 1) * cell;
         element = element.child(
@@ -97,7 +110,10 @@ pub(super) fn line_row(
             color: Some(run.pen.fg),
             bg: None,
             bg_pad: 0.0,
-            underline: run.pen.underline.then_some(run.pen.fg),
+            // A span can carry one rule, not the style SGR 4 asked for: the raster renderer
+            // draws the squiggle and the doubled rule, and this one underlines the text.
+            underline: (run.pen.underline != UnderlineKind::None)
+                .then(|| run.pen.underline_color.unwrap_or(run.pen.fg)),
             italic: run.pen.italic,
         });
     }

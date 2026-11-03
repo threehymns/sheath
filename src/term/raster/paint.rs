@@ -4,7 +4,7 @@
 
 use super::atlas::{Atlas, Glyph};
 use super::{Palette, rgb};
-use crate::term::grid::{CursorShape, Line, Pen};
+use crate::term::grid::{CursorShape, Line, Pen, UnderlineKind};
 
 /// The glyph's em box as a fraction of the row, and the baseline's place down the row. Both are
 /// the same numbers the text path's font box produces at the sizes the pane measures.
@@ -213,6 +213,20 @@ pub(super) fn paint_line(
     palette: Palette,
 ) {
     let bottom = line_px as i32;
+    // Search matches sit under everything: the cell's own background and the selection both
+    // stay visible over them, as they do in Ghostty's own renderer.
+    for mark in &line.matches {
+        surface.blend(
+            Rect {
+                x0: i32::from(mark.cols.0) * cell_px as i32,
+                y0: 0,
+                x1: (i32::from(mark.cols.1) + 1) * cell_px as i32,
+                y1: bottom,
+            },
+            palette.search,
+            if mark.current { 132 } else { 56 },
+        );
+    }
     // The selection sits under the cell backgrounds, the order the text path paints them in: a
     // selected cell that also carries a background shows the background.
     if let Some((start, end)) = line.selection {
@@ -294,17 +308,63 @@ pub(super) fn paint_line(
         }
         let x0 = i32::from(run.cols.0) * cell_px as i32;
         let x1 = i32::from(run.cols.1) * cell_px as i32;
-        if run.pen.underline {
+        if run.pen.underline != UnderlineKind::None {
             let thickness = (line_px / 14).max(1) as i32;
-            surface.fill(
-                Rect {
-                    x0,
-                    y0: baseline + thickness,
-                    x1,
-                    y1: baseline + thickness * 2,
-                },
-                color,
-            );
+            let top = baseline + thickness;
+            let ink = run.pen.underline_color.map(rgb).unwrap_or(color);
+            let mut rule = |y: i32, left: i32, right: i32| {
+                surface.fill(
+                    Rect {
+                        x0: left,
+                        y0: y,
+                        x1: right,
+                        y1: y + thickness,
+                    },
+                    ink,
+                );
+            };
+            match run.pen.underline {
+                UnderlineKind::None => {}
+                UnderlineKind::Single => rule(top, x0, x1),
+                UnderlineKind::Double => {
+                    rule(top, x0, x1);
+                    rule(top + thickness + 1, x0, x1);
+                }
+                // Each cell gets a couple of dashes or dots, so the pattern reads as one
+                // under a word instead of restarting on every cell its run covers.
+                UnderlineKind::Dotted => {
+                    let period = (cell_px as i32 / 2).max(2);
+                    let ink = thickness.max(1);
+                    let mut x = x0;
+                    while x < x1 {
+                        rule(top, x, (x + ink).min(x1));
+                        x += period;
+                    }
+                }
+                UnderlineKind::Dashed => {
+                    let period = cell_px as i32;
+                    let dash = (period / 2).max(2);
+                    let mut x = x0;
+                    while x < x1 {
+                        rule(top, x, (x + dash).min(x1));
+                        x += period;
+                    }
+                }
+                // A saw of one-thickness steps: at terminal sizes it reads as the squiggle a
+                // spell checker draws, and it stays sharp at any scale.
+                UnderlineKind::Curly => {
+                    let step = thickness.max(1);
+                    let rise = (thickness * 2).max(2);
+                    let mut x = x0;
+                    let mut up = true;
+                    while x < x1 {
+                        let y = if up { top } else { top + rise };
+                        rule(y, x, (x + step).min(x1));
+                        x += step;
+                        up = !up;
+                    }
+                }
+            }
         }
         if run.pen.strike {
             let thickness = (line_px / 14).max(1) as i32;

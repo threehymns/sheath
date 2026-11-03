@@ -9,7 +9,7 @@ use ghostty_vt::style::{RgbColor, StyleColor, Underline};
 use rune::Color;
 
 use super::Engine;
-use crate::term::grid::{CursorShape, Frame, Line, Pen, Run, Shape};
+use crate::term::grid::{CursorShape, Frame, Line, Pen, Run, Shape, UnderlineKind};
 use crate::term::shapes::{self, Metrics};
 
 impl Engine {
@@ -176,6 +176,10 @@ impl Engine {
             out.lead = None;
             out.trail = None;
         }
+        // Search matches come from the search, not the render state: they move with the query
+        // or the selected match while the grid itself does not change. Read last, so the
+        // snapshot's borrow of the terminal is over.
+        super::find::fill_matches(self, out);
     }
 }
 
@@ -218,8 +222,11 @@ fn read_cells(
                 bold: style.bold,
                 italic: style.italic,
                 faint: style.faint,
-                underline: !matches!(style.underline, Underline::None)
-                    || matches!(style.underline_color, StyleColor::Rgb(_)),
+                underline: underline_kind(style.underline),
+                underline_color: match style.underline_color {
+                    StyleColor::Rgb(rgb) => Some(color(rgb)),
+                    _ => None,
+                },
                 strike: style.strikethrough,
             }
         } else {
@@ -287,6 +294,19 @@ fn read_cells(
         if let Some(last) = line.runs.last_mut() {
             last.end = last.end.min(used);
         }
+    }
+}
+
+/// SGR 4's underline styles, in the renderer's own terms. A style a later libghostty adds
+/// draws as the single rule rather than nothing.
+fn underline_kind(style: Underline) -> UnderlineKind {
+    match style {
+        Underline::None => UnderlineKind::None,
+        Underline::Double => UnderlineKind::Double,
+        Underline::Curly => UnderlineKind::Curly,
+        Underline::Dotted => UnderlineKind::Dotted,
+        Underline::Dashed => UnderlineKind::Dashed,
+        _ => UnderlineKind::Single,
     }
 }
 

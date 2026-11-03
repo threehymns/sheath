@@ -139,18 +139,26 @@ build always uses it.
   handle opens it at the height it had.
 - **Scrolling.** The wheel and a trackpad scroll the history smoothly, pixel by pixel rather than
   a row at a time. Anything you type jumps back to the live tail.
-- **Selecting.** Drag over the grid to select; **Ctrl+Shift+C** (Cmd+Shift+C on macOS) copies it.
-  **Ctrl+Shift+V** pastes, wrapping in bracketed paste when the program asked for it.
+- **Selecting.** Drag over the grid to select, double-click a word, triple-click a line, or
+  Alt+drag a block of columns; **Ctrl+Shift+A** (Cmd+Shift+A on macOS) selects it all.
+  **Ctrl+Shift+C** (Cmd+Shift+C on macOS) copies the selection, and **Ctrl+Shift+V** pastes,
+  wrapping in bracketed paste when the program asked for it.
+- **Searching its history.** **Ctrl+Shift+F** (Cmd+Shift+F on macOS) opens a field over the grid:
+  every match is marked, Return and Shift+Return walk them, and Escape closes it.
 - **Links.** Cmd+click (Ctrl+click off macOS) opens the link under the pointer when a program
   printed one with OSC 8. `http`/`https`, `mailto` and `file` links go to the system's launcher;
   any other scheme is left alone rather than handed to an arbitrary handler.
-- **Programs that want the mouse** get the clicks and drags instead of a selection, so `htop`,
-  `vim` and `less` behave as they do in Ghostty.
+- **Programs that want the mouse** get the clicks, drags and wheel instead of a selection, so
+  `htop`, `vim` and `less` behave as they do in Ghostty. Hold Shift to take the mouse back and
+  select text.
 - **What a program can ask it for.** Titles (OSC 0/2), the shell's directory (OSC 7, which the
   header falls back to), notifications for the desktop (OSC 9 and 777, as toasts), its own
   progress (OSC 9;4, drawn in the pane's header), its own background and colours (OSC 10/11),
-  links over its text (OSC 8), the clipboard (OSC 52) and synchronized output (mode 2026), so a
-  screen a TUI redraws never shows its half-written frame.
+  links over its text (OSC 8), the clipboard (OSC 52), focus in and out (mode 1004), which
+  light or dark side of the theme it is drawing on, the `xterm-ghostty` terminfo entry, and
+  synchronized output (mode 2026), so a screen a TUI redraws never shows its half-written
+  frame. Underlines keep the style and colour they were given: single, doubled, curly, dotted
+  or dashed, in SGR 58's colour when it set one.
 - **Which keys reach the shell.** While the pane has focus it keeps everything, Ctrl-C included;
   only the command bar, Settings and the pane's own shortcut reach the app. Clicking the file list
   takes the keyboard back.
@@ -364,5 +372,5 @@ built-in places.
 ## Not there yet
 
 No per-entry icons or badges. Copy and paste use the app's own clipboard rather than the system
-one. The terminal draws text and colours but not Kitty graphics or images, has no IME
-pre-editing, and selects by dragging only (no word or line selection).
+one. The terminal draws text, colours, underline styles and search matches, but not Kitty
+graphics or images, and has no IME pre-editing.

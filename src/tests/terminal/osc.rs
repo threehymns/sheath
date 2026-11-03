@@ -159,6 +159,34 @@ fn a_directory_report_decodes_into_the_path_it_names() {
     assert_eq!(directory(""), None);
 }
 
+/// A program asks which side of the theme it is drawing on (CSI ? 996 n), and the answer is the
+/// one Ghostty gives: the background's luminance decides, not a setting the program can see.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn the_color_scheme_answer_follows_the_background() {
+    use crate::term::Theme;
+    use crate::term::engine::scheme;
+    use ghostty_vt::style::RgbColor;
+    use ghostty_vt::terminal::ColorScheme;
+    let theme = |bg: u8| Theme {
+        fg: RgbColor {
+            r: 255 - bg,
+            g: 255 - bg,
+            b: 255 - bg,
+        },
+        bg: RgbColor {
+            r: bg,
+            g: bg,
+            b: bg,
+        },
+        cursor: RgbColor { r: 0, g: 0, b: 0 },
+    };
+    assert_eq!(scheme(theme(0)), ColorScheme::Dark);
+    assert_eq!(scheme(theme(32)), ColorScheme::Dark);
+    assert_eq!(scheme(theme(255)), ColorScheme::Light);
+    assert_eq!(scheme(theme(230)), ColorScheme::Light);
+}
+
 /// OSC 9;4 reports which state the program is in and how far along it is; the header has a
 /// shape for each, and a removed report leaves none.
 #[cfg(not(target_arch = "wasm32"))]

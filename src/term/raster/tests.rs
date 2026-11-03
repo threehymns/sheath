@@ -3,7 +3,7 @@
 //! image is a `Pixels` the runtime uploads rather than bytes a test can inspect.
 
 use super::*;
-use crate::term::grid::{Pen, Run, Shape};
+use crate::term::grid::{Pen, Run, Shape, UnderlineKind};
 
 fn palette() -> Palette {
     Palette {
@@ -11,6 +11,7 @@ fn palette() -> Palette {
         cursor: [255, 255, 255],
         cursor_alpha: 140,
         selection: [255, 255, 255],
+        search: [255, 255, 0],
     }
 }
 
@@ -213,6 +214,78 @@ fn a_glyph_is_drawn_in_its_run_colour() {
         "but not the overscan row above it"
     );
     assert_eq!(height, 60);
+}
+
+/// SGR 4's underline styles draw what they ask for, in the colour SGR 58 gave them: a doubled
+/// rule, dashes with gaps, or the saw a spell checker's squiggle is made of.
+#[test]
+fn underline_styles_are_drawn_as_the_style_and_colour_they_ask_for() {
+    let red = rune::Color {
+        r: 1.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    let compose = |kind: UnderlineKind| {
+        let mut line = Line {
+            text: "  ".to_owned(),
+            ..Line::default()
+        };
+        line.runs.push(run(
+            Pen {
+                underline: kind,
+                underline_color: Some(red),
+                ..Pen::default()
+            },
+            (0, 2),
+            0,
+            2,
+        ));
+        let frame = Frame {
+            cols: 2,
+            rows: 1,
+            lines: vec![line],
+            ..Frame::default()
+        };
+        Raster::new()
+            .compose(&frame, 10.0, 20.0, 1.0, palette())
+            .expect("an image")
+    };
+    // The viewport row's band starts one overscan row down: the baseline is at 16 in the row,
+    // and the rule one thickness below that.
+    let under = 20 + 17;
+    let (width, _, single) = compose(UnderlineKind::Single);
+    assert_eq!(
+        pixel(&single, width, 5, under),
+        [255, 0, 0, 255],
+        "a single rule sits under the baseline, in SGR 58's colour"
+    );
+    let (_, _, double) = compose(UnderlineKind::Double);
+    assert_eq!(pixel(&double, width, 5, under), [255, 0, 0, 255]);
+    assert_eq!(
+        pixel(&double, width, 5, under + 2),
+        [255, 0, 0, 255],
+        "the second rule is a gap below the first"
+    );
+    assert_eq!(
+        pixel(&double, width, 5, under + 1),
+        [0, 0, 0, 0],
+        "and the gap stays empty"
+    );
+    let (_, _, dotted) = compose(UnderlineKind::Dotted);
+    assert_eq!(pixel(&dotted, width, 5, under), [255, 0, 0, 255]);
+    assert_eq!(
+        pixel(&dotted, width, 6, under),
+        [0, 0, 0, 0],
+        "a dot is followed by a gap"
+    );
+    let (_, _, curly) = compose(UnderlineKind::Curly);
+    assert_eq!(pixel(&curly, width, 0, under), [255, 0, 0, 255]);
+    assert_eq!(
+        pixel(&curly, width, 1, under + 2),
+        [255, 0, 0, 255],
+        "the squiggle steps down on the next column"
+    );
 }
 
 /// The streamed image is sized to the grid and its two overscan rows, and a same-pane
