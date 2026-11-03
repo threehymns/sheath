@@ -9,7 +9,7 @@ impl Terminal {
     /// Tracks the link under the pointer, or clears it when `at` is `None` (the pointer left the
     /// grid). Says whether the answer changed, which is the only thing the view has to know: a
     /// pointer moving across one link is a hit test and no frame.
-    pub fn hover(&mut self, at: Option<(u16, u16)>) -> bool {
+    pub fn hover(&mut self, at: Option<(u16, u16)>, shift: bool) -> bool {
         // Moving inside one cell is the common case, dozens of times a second: answering it from
         // the last cell is what keeps a pointer crossing the grid from hitting the terminal at
         // all. Only a move to another cell scans the row.
@@ -17,6 +17,13 @@ impl Terminal {
             return false;
         }
         self.hover_cell = at;
+        // The same cell a frame was drawn for is also the unit a program sees motion in: a
+        // program tracking every motion (mode 1003) gets one move per cell crossed, which is
+        // what its hover highlight and its own pointer cursor are drawn from. Shift keeps the
+        // mouse for the pane, as it does for a drag.
+        if !shift && let Some(at) = at {
+            self.mouse(super::MouseAction::Hover, at, false);
+        }
         #[cfg(not(target_arch = "wasm32"))]
         let span = at.and_then(|at| {
             self.engine

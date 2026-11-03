@@ -84,13 +84,13 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
             }
             s.term.wheel(wheel.dy)
         })
-        .on_pointer_move_local(|s: &mut Window, p, _: &mut Tx| {
+        .on_pointer_move_local(|s: &mut Window, p, tx: &mut Tx| {
             let at = terminal_cell(&s.term, (p.x, p.y));
-            s.term.hover(at);
+            s.term.hover(at, tx.mods().shift);
         })
         .on_hover_change(|s: &mut Window, inside: bool, _: &mut Tx| {
             if !inside {
-                s.term.hover(None);
+                s.term.hover(None, false);
             }
         })
         .on_drag(|s: &mut Window, drag: &mut Drag, tx: &mut Tx| {

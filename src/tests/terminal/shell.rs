@@ -46,6 +46,20 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
         b"\x1b[<0;4;3m",
         "the release names the button that ended, not a motion with none"
     );
+
+    // A move with no button held is how a program hears a hover: any-event tracking (1003)
+    // carries it as button 35, and the modes that only report motion while a button is down
+    // do not ask for it at all.
+    assert!(
+        engine.mouse(Action::Motion, None, (5, 1), false).is_empty(),
+        "press/release tracking (1000) has no motion to report"
+    );
+    engine.feed(b"\x1b[?1003h");
+    assert_eq!(
+        engine.mouse(Action::Motion, None, (5, 1), false),
+        b"\x1b[<35;6;2M",
+        "a bare move names no button"
+    );
 }
 
 /// A shell that exits is reported, which is what closes the pane, and the standalone terminal

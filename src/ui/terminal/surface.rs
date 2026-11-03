@@ -32,13 +32,13 @@ pub(super) fn screen(s: &App, k: &'static Kit) -> El {
         // The link under the pointer gets an underline, the way Ghostty shows which link a click
         // would open. A move inside the same cell is answered from the pane's last cell, so this
         // runs the terminal only when the pointer crosses into a new one.
-        .on_pointer_move_local(|s: &mut App, p, _: &mut Tx| {
+        .on_pointer_move_local(|s: &mut App, p, tx: &mut Tx| {
             let at = terminal_cell(&s.term, (p.x, p.y));
-            s.term.hover(at);
+            s.term.hover(at, tx.mods().shift);
         })
         .on_hover_change(|s: &mut App, inside: bool, _: &mut Tx| {
             if !inside {
-                s.term.hover(None);
+                s.term.hover(None, false);
             }
         })
         .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))

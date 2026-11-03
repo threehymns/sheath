@@ -10,6 +10,10 @@ pub enum MouseAction {
     Press,
     Drag,
     Release,
+    /// The pointer crossed into another cell without a button held. Programs tracking every
+    /// motion (mode 1003) draw hovers from this; the encoder drops it for the modes that only
+    /// carry motion while a button is down.
+    Hover,
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
@@ -38,6 +42,9 @@ impl Terminal {
                     ghostty_vt::mouse::Action::Release,
                     Some(ghostty_vt::mouse::Button::Left),
                 ),
+                // No button names a bare move: SGR carries it as button 35, which is what
+                // `less`, `htop` and `yazi` read for a hover.
+                MouseAction::Hover => (ghostty_vt::mouse::Action::Motion, None),
             };
             let bytes = engine.mouse(action, button, at, shift);
             if !bytes.is_empty() {
