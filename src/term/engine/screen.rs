@@ -88,9 +88,10 @@ impl Engine {
             out.lead = None;
             return;
         };
+        let defaults = (color(colors.foreground), color(colors.background));
         // A program that set its own background with OSC 11 (a TUI matching its theme, say)
         // draws on that colour, not on the one the pane started with.
-        out.background = Some(color(colors.background));
+        out.background = Some(defaults.1);
         let cols = snapshot.cols().unwrap_or(self.cols);
         let rows = snapshot.rows().unwrap_or(self.rows);
         if out.cols != cols || out.rows != rows || out.lines.len() != rows as usize {
@@ -104,11 +105,22 @@ impl Engine {
         // `force_full` instead, so a clean state is the frame a smooth scroll draws for most of
         // its notches, and re-reading the whole screen for it was the largest thing the pane did
         // per frame.
+        // OSC 10 and 11 move the default colours under rows that are already on screen, and
+        // libghostty marks no row dirty for either: a row read before the move holds the colour
+        // it was read in, so the whole grid is read again when the pair changes. A theme switch
+        // arrives here too, since it sets the same two defaults.
+        if self.defaults.is_some_and(|drawn| drawn != defaults) {
+            self.force_full = true;
+            // The rows above and below the viewport were read against the old pair as well.
+            self.edges_at = None;
+            self.lead = None;
+            self.trail = None;
+        }
+        self.defaults = Some(defaults);
         let full = self.force_full
             || !matches!(snapshot.dirty().ok(), Some(Dirty::Partial | Dirty::Clean));
         self.force_full = false;
-        let default_fg = color(colors.foreground);
-        let default_bg = color(colors.background);
+        let (default_fg, default_bg) = defaults;
         while out.lines.len() < rows as usize {
             out.lines.push(Line::default());
         }
