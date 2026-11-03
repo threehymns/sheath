@@ -100,6 +100,46 @@ fn the_program_s_cursor_colour_and_shape_reach_the_frame() {
     );
 }
 
+/// OSC 10 and OSC 11 move the default colours under rows that are already on screen, and
+/// libghostty marks no row dirty for it: the pane reads the grid again, so a row it read before
+/// the move does not keep drawing the colour it was read in. One frame is reused for both reads,
+/// as the pane reuses it; a fresh one would be read in full and hide the difference.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_program_s_default_colours_reach_the_rows_already_drawn() {
+    use crate::term::engine::Engine;
+    use crate::term::grid::Frame;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    engine.feed(b"\x1b[2J\x1b[Hplain text");
+    let mut frame = Frame::default();
+    engine.fill(&mut frame);
+    let before = frame.lines[0].runs[0].pen.fg;
+    engine.feed(b"\x1b]10;#ff0000\x1b\\");
+    engine.fill(&mut frame);
+    let after = frame.lines[0].runs[0].pen.fg;
+    assert_ne!(
+        after, before,
+        "a row read before the program moved the default draws the new one"
+    );
+    let byte = |value: f32| (rune::color::srgb_encode(value) * 255.0).round() as u8;
+    assert_eq!(
+        (byte(after.r), byte(after.g), byte(after.b)),
+        (255, 0, 0),
+        "OSC 10's colour"
+    );
+}
+
 /// OSC 52 hands the clipboard what the program copied, with the trailing whitespace Ghostty
 /// trims by default (`clipboard-trim-trailing-spaces`): a yank ends in a newline, and keeping it
 /// pastes a blank line wherever the copy lands.

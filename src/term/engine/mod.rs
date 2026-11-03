@@ -37,7 +37,7 @@ use ghostty_vt::mouse;
 use ghostty_vt::terminal::{Event, Mode};
 use ghostty_vt::{RenderState, Terminal as Vt, TerminalOptions};
 use portable_pty::MasterPty;
-use rune::Waker;
+use rune::{Color, Waker};
 
 use crate::term::grid::Line;
 use crate::term::shapes::Metrics;
@@ -122,6 +122,9 @@ pub struct Engine {
     edges_at: Option<usize>,
     /// Set when the viewport, the selection or the size moved: every row is read again.
     force_full: bool,
+    /// The default colours the rows in the frame were read in. A program moves them with OSC 10
+    /// and 11 without marking a row dirty, and a row keeps the colour it was read in.
+    defaults: Option<(Color, Color)>,
     /// Cached libghostty answers, which are otherwise a call per frame, per drag or per key.
     history: usize,
     tracking: bool,
@@ -259,6 +262,7 @@ impl Engine {
             trail: None,
             edges_at: None,
             force_full: true,
+            defaults: None,
             history,
             tracking,
             keys_stale: true,
