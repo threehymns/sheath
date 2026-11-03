@@ -373,9 +373,13 @@ impl Raster {
         self.atlas.preload(frame, size, pass.bands);
         let atlas = &self.atlas;
         let row_bytes = width as usize * 4 * line_px as usize;
-        // Only a band per frame is the common case (an echo, a scroll), and spawning workers for
-        // it costs more than the row does.
-        let workers = if pass.bands.len() < 8 {
+        // Spawning a thread costs more than painting a band of a pane-sized grid. On an eight-core
+        // machine a 140x14 pane at 2x paints a whole screen in 0.51 ms on one thread and 0.79 ms
+        // on eight, because the spawns and the joins outweigh the pixels; a fullscreened 274x72
+        // grid still comes out ahead with workers (26.8 ms against 33.7 ms). The two cross at
+        // about two megapixels, which is what this counts, so a pane's rows stay on this thread.
+        let pixels = pass.bands.len() as u64 * u64::from(width) * u64::from(line_px);
+        let workers = if pixels < 2_000_000 {
             1
         } else {
             std::thread::available_parallelism()
