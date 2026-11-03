@@ -109,9 +109,13 @@ impl Engine {
         // libghostty marks no row dirty for either: a row read before the move holds the colour
         // it was read in, so the whole grid is read again when the pair changes. A theme switch
         // arrives here too, since it sets the same two defaults.
+        let mut edges_stale = false;
         if self.defaults.is_some_and(|drawn| drawn != defaults) {
             self.force_full = true;
             // The rows above and below the viewport were read against the old pair as well.
+            // They are read again at the end of this fill, once the snapshot is done with, so
+            // this frame draws them in the new colour instead of a blank strip.
+            edges_stale = self.lead.is_some() || self.trail.is_some();
             self.edges_at = None;
             self.lead = None;
             self.trail = None;
@@ -125,13 +129,19 @@ impl Engine {
             out.lines.push(Line::default());
         }
         out.lines.truncate(rows as usize);
+        // An iterator that cannot be made, or a row whose cells cannot be walked, leaves this
+        // frame without rows it never read, and the snapshot is marked clean either way: the
+        // next fill reads all of it rather than trusting rows this one did not reach.
         let Ok(mut rows_iter) = RowIterator::new() else {
+            self.force_full = true;
             return;
         };
         let Ok(mut iter) = rows_iter.update(&snapshot) else {
+            self.force_full = true;
             return;
         };
         let Ok(mut cells_iter) = CellIterator::new() else {
+            self.force_full = true;
             return;
         };
         let mut scratch = std::mem::take(&mut self.scratch);
@@ -148,6 +158,7 @@ impl Engine {
                 .flatten()
                 .map(|range| (range.start_x, range.end_x));
             let Ok(mut cells) = cells_iter.update(row) else {
+                self.force_full = true;
                 break;
             };
             let line = &mut out.lines[index];
@@ -193,6 +204,10 @@ impl Engine {
             .flatten()
             .filter(|set| Some(*set) != default_cursor)
             .map(color);
+        if edges_stale {
+            self.edges_at = Some(self.applied);
+            self.fetch_edges();
+        }
         if self.edges_at == Some(self.applied) {
             out.lead.clone_from(&self.lead);
             out.trail.clone_from(&self.trail);
