@@ -45,6 +45,17 @@ impl Terminal {
         self.scroll = 0.0;
         self.fresh = true;
         self.copies.clear();
+        self.search = None;
+    }
+
+    /// Whether the shell behind the pane has exited, which closes the pane: a dead shell has no
+    /// prompt to type at, and opening the pane again starts a fresh one.
+    pub fn shell_exited(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(engine) = &self.engine {
+            return engine.shell_exited();
+        }
+        false
     }
 
     /// Shows the pane in `dir`, starting a shell there the first time and keeping the one it

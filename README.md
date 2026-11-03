@@ -132,13 +132,14 @@ build always uses it.
 
 - **Collapsing, and closing.** The header's chevron (or the pane's own shortcut) collapses the
   pane; the shell keeps running and the same session comes back. The close button ends the
-  shell, so opening the pane again starts a fresh one.
+  shell, so opening the pane again starts a fresh one. A shell that exits closes the pane too,
+  and the standalone `terminal` window with it.
 - **Resizing.** Drag the pane's top edge; the shell reflows as it moves. A drag stops at the
   minimum height; pushing a little further past it collapses the pane, and dragging the handle
   up from the bottom opens it again once the drag reaches the minimum. A click on the collapsed
   handle opens it at the height it had.
-- **Scrolling.** The wheel and a trackpad scroll the history smoothly, pixel by pixel rather than
-  a row at a time. Anything you type jumps back to the live tail.
+- **Scrolling.** The wheel and a trackpad scroll the history smoothly, a pixel at a time rather
+  than a row. Anything you type jumps back to the live tail.
 - **Selecting.** Drag over the grid to select, double-click a word, triple-click a line, or
   Alt+drag a block of columns; **Ctrl+Shift+A** (Cmd+Shift+A on macOS) selects it all.
   **Ctrl+Shift+C** (Cmd+Shift+C on macOS) copies the selection, and **Ctrl+Shift+V** pastes,
@@ -157,14 +158,12 @@ build always uses it.
   links over its text (OSC 8), the clipboard (OSC 52), focus in and out (mode 1004), which
   light or dark side of the theme it is drawing on, the `xterm-ghostty` terminfo entry, and
   synchronized output (mode 2026), so a screen a TUI redraws never shows its half-written
-  frame. Underlines keep the style and colour they were given: single, doubled, curly, dotted
-  or dashed, in SGR 58's colour when it set one.
+  frame. Underlines keep their style and colour: single, doubled, curly, dotted or dashed.
 - **Which keys reach the shell.** While the pane has focus it keeps everything, Ctrl-C included;
   only the command bar, Settings and the pane's own shortcut reach the app. Clicking the file list
   takes the keyboard back.
 
-The pane's height is remembered in `session.kdl`, so it opens at the size it was left. The web
-build has no shell and says so.
+Its height is remembered in `session.kdl`. The web build has no shell and says so.
 
 ## Controls
 

@@ -186,6 +186,15 @@ impl Terminal {
         #[cfg(not(target_arch = "wasm32"))]
         {
             if !self.open {
+                // A collapsed pane still notices its shell ending, so opening it again starts a
+                // fresh shell instead of showing one that already exited.
+                if let Some(engine) = self.engine.as_mut() {
+                    engine.drain();
+                    if engine.shell_exited() {
+                        self.engine = None;
+                        self.fresh = true;
+                    }
+                }
                 return false;
             }
             if let Some(dir) = self.pending.take() {

@@ -48,6 +48,41 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
     );
 }
 
+/// A shell that exits is reported, which is what closes the pane, and the standalone terminal
+/// window with it.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_shell_that_exits_is_reported() {
+    use crate::term::engine::Engine;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    assert!(
+        !engine.shell_exited(),
+        "a shell that just started is running"
+    );
+    engine.write(b"exit\r");
+    let mut seen = false;
+    for _ in 0..240 {
+        engine.drain();
+        if engine.shell_exited() {
+            seen = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    assert!(seen, "the shell's exit reached the pane");
+}
+
 /// The shell is started with the terminal Ghostty's core actually is, not the plain xterm the
 /// pane used to claim: programs read `TERM` and `TERM_PROGRAM` to decide which of its features
 /// they may use.

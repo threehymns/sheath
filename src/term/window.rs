@@ -124,6 +124,13 @@ pub fn poll(s: &mut Window, _t: f64, tx: &mut Tx) -> bool {
     // The window is only the grid, with no toasts to put a program's OSC 9 or 777 notification
     // in: drained so they do not pile up behind it, and otherwise dropped.
     s.term.take_notifications();
+    // The window is only its shell: when the shell exits there is nothing left to show, so it
+    // closes the way Ghostty's window does when its command ends. This binary is the window, so
+    // ending the process is closing it.
+    if s.term.shell_exited() {
+        s.term.close();
+        std::process::exit(0);
+    }
     if let Some(wait) = s.term.blink_wait() {
         tx.wake_after(wait);
     }

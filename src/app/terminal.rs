@@ -45,12 +45,20 @@ impl App {
             // the rows are actually drawn at.
             self.term
                 .measure(rune_theme_opencode::kit(dark).ty.mono, self.scale.get());
-            let redraw = self.term.poll(self.wake.as_ref(), theme);
+            let mut redraw = self.term.poll(self.wake.as_ref(), theme);
             for text in self.term.take_copies() {
                 tx.copy(text);
             }
             for (title, body) in self.term.take_notifications() {
                 self.raise_terminal_notice(title, body);
+            }
+            // A shell that exited closes its pane, the way Ghostty closes when its command ends:
+            // there is no prompt left to type at, and the next open starts a fresh shell. The
+            // clipboard and notifications above are drained first, so a program that copied
+            // something on its way out still reaches the app.
+            if self.term.shell_exited() {
+                self.term.close();
+                redraw = true;
             }
             // A blinking cursor asks for the frame that shows its next half, and nothing else:
             // a solid cursor leaves the loop idle.

@@ -345,6 +345,12 @@ impl Engine {
         self.hold.is_some()
     }
 
+    /// Whether the shell behind the pane has exited, so the pane can close itself the way
+    /// Ghostty does when its command ends.
+    pub fn shell_exited(&self) -> bool {
+        self.exited
+    }
+
     /// The directory the running program reported (OSC 7), if it reported one.
     pub fn pwd(&self) -> Option<&Path> {
         self.pwd.as_deref()
