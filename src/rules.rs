@@ -397,6 +397,12 @@ impl Rules {
             .position(|rule| rule.applies_to_entry(entry))
     }
 
+    /// Whether any rule is about entries, so a filter can skip the rows' paths entirely when
+    /// none is.
+    pub fn has_entries(&self) -> bool {
+        self.rules.iter().any(|rule| rule.kind == Kind::Entry)
+    }
+
     pub fn hidden(&self, entry: &EntryRef<'_>) -> Option<bool> {
         let mut hidden = None;
         for rule in &self.rules {

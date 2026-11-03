@@ -222,13 +222,19 @@ impl App {
     }
 
     pub fn entry_hidden(&self, entry: &Entry) -> bool {
-        let path = entry.path.to_string_lossy();
-        let rule_hidden = self.rules.hidden(&crate::rules::EntryRef {
-            path: &path,
-            name: &entry.name,
-            is_dir: entry.is_dir,
-        });
-        rule_hidden.unwrap_or(!self.show_hidden && entry.hidden())
+        // A folder with no entry rules hides nothing by rule, and turning every row's path into a
+        // string to look for one costs more than the rest of the filter does.
+        if self.rules.has_entries() {
+            let path = entry.path.to_string_lossy();
+            if let Some(hidden) = self.rules.hidden(&crate::rules::EntryRef {
+                path: &path,
+                name: &entry.name,
+                is_dir: entry.is_dir,
+            }) {
+                return hidden;
+            }
+        }
+        !self.show_hidden && entry.hidden()
     }
 
     /// Shows the matches from the folder on screen and the folders below it, and puts the
@@ -258,43 +264,58 @@ impl App {
         // The search has already chosen the matches, so only the folder's own rows need the
         // name check; the path bar keeps counting the folder, not what was found below it.
         let searching = self.parked.is_some();
-        let counted = self.parked.as_deref().unwrap_or(&self.entries);
-        let unhidden = counted
-            .iter()
-            .filter(|entry| !self.entry_hidden(entry))
-            .count();
-        self.unhidden = unhidden;
-        let hidden: Vec<bool> = self
-            .entries
-            .iter()
-            .map(|entry| self.entry_hidden(entry))
-            .collect();
-        self.visible = (0..self.entries.len())
-            .filter(|&i| {
-                let entry = &self.entries[i];
-                !hidden[i]
-                    && (query.is_empty() || searching || contains_folded(&entry.name, &query))
-            })
-            .collect();
+        let mut visible = Vec::with_capacity(self.entries.len());
+        let mut unhidden = 0;
+        for (index, entry) in self.entries.iter().enumerate() {
+            if self.entry_hidden(entry) {
+                continue;
+            }
+            unhidden += 1;
+            if query.is_empty() || searching || contains_folded(&entry.name, &query) {
+                visible.push(index);
+            }
+        }
+        self.visible = visible;
+        // A search below the folder shows its matches, not the folder's rows, so the count comes
+        // from the listing that was parked rather than from what is on screen.
+        self.unhidden = if searching {
+            self.parked
+                .iter()
+                .flatten()
+                .filter(|entry| !self.entry_hidden(entry))
+                .count()
+        } else {
+            unhidden
+        };
         self.keys_version = self.keys_version.wrapping_add(1);
-        let visible: HashSet<&str> = self
-            .visible
-            .iter()
-            .map(|&i| self.entries[i].id.as_str())
-            .collect();
-        self.selection.retain(|id| visible.contains(id.as_str()));
-        if self
-            .anchor
-            .as_ref()
-            .is_some_and(|id| !visible.contains(id.as_str()))
-        {
+        self.prune_to_visible();
+    }
+
+    /// Drops the rows a filter no longer shows from the selection, the anchor and the preview.
+    /// `visible` keeps the entries' own order, so one id is found in it by a scan; only a
+    /// selection too large for that pays for a set of every visible id, which is what a folder of
+    /// 20,000 rows would otherwise build on every keystroke.
+    fn prune_to_visible(&mut self) {
+        if self.selection.is_empty() && self.anchor.is_none() && self.selected.is_none() {
+            return;
+        }
+        let kept: Option<HashSet<&str>> = (self.selection.len() > 8).then(|| {
+            self.visible
+                .iter()
+                .map(|&i| self.entries[i].id.as_str())
+                .collect()
+        });
+        let entries = &self.entries;
+        let visible = &self.visible;
+        let shown = |id: &str| match &kept {
+            Some(set) => set.contains(id),
+            None => visible.iter().any(|&i| entries[i].id == id),
+        };
+        self.selection.retain(|id| shown(id));
+        if self.anchor.as_deref().is_some_and(|id| !shown(id)) {
             self.anchor = None;
         }
-        if self
-            .selected
-            .as_ref()
-            .is_some_and(|id| !self.is_visible(id))
-        {
+        if self.selected.as_deref().is_some_and(|id| !shown(id)) {
             self.selected = None;
             self.preview = None;
             self.selection.clear();
