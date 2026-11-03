@@ -209,6 +209,14 @@ impl Engine {
         // Programs ask which side of the theme they are drawing on (CSI ? 996 n) and pick their
         // own colours from the answer, as they do in Ghostty.
         vt.set_color_scheme(Some(parse::scheme(theme)));
+        // Programs identify the terminal by the name in its XTVERSION answer before they trust it
+        // with anything beyond the basics: notcurses, for one, recognizes `ghostty ` and picks
+        // its Ghostty heuristics from it. Answering as the core's own `libghostty` looked like an
+        // unknown terminal, so the pane answers as Ghostty, whose version the core pins.
+        vt.set_xtversion(Some(format!(
+            "ghostty {}",
+            ghostty_vt::build_info::pinned_version()
+        )));
         // The pixel size of a cell as well as the grid's: image placements and the pixel size a
         // program can query (CSI 14/16/18 t, and the in-band reports of mode 2048) are answered
         // in these units, and a terminal that never resized has a cell of no pixels at all.
@@ -415,10 +423,13 @@ impl Engine {
     /// the way the parse loop would. Tests use it to put an exact screen in front of the render
     /// path, and an exact clipboard, title or progress report in front of the app.
     #[cfg(test)]
-    pub fn feed(&mut self, bytes: &[u8]) {
+    pub fn feed(&mut self, bytes: &[u8]) -> Vec<u8> {
         self.vt.vt_write(bytes);
         let mut replies = Vec::new();
         self.absorb_all(&mut replies);
+        // The replies the query asked for, which a test has no pty to write them to. Tests that
+        // are only feeding output are free to drop them.
+        replies
     }
 
     pub fn write(&mut self, bytes: &[u8]) {

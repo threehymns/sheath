@@ -3,6 +3,7 @@
 //! characters come from.
 
 mod box_drawing;
+mod capabilities;
 mod images;
 mod integration;
 mod metrics;
