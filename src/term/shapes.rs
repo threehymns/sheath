@@ -1,5 +1,6 @@
-//! Cell-filling characters as geometry: box rules, blocks and quadrants described as rectangles
-//! inside one cell, so the pane draws them instead of asking the font for a glyph.
+//! Cell-filling characters as geometry: box rules, blocks, quadrants, sextants and octants
+//! described as rectangles inside one cell, so the pane draws them instead of asking the font for
+//! a glyph.
 //!
 //! A font's glyph for `█` or `┼` is only exactly one cell if the family was designed that way,
 //! and a hairline where two of them meet reads as a broken bar or a rule that does not join.

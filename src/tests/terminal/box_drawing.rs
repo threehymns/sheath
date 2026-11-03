@@ -211,3 +211,44 @@ fn only_cell_filling_characters_get_shapes() {
         );
     }
 }
+
+/// The sextants and octants divide the cell into sixths and eighths, which is what the finer
+/// image blitters draw with (notcurses' `3x2` and `4x2`): every piece is the same size, so a
+/// character covers exactly the sub-cells its Unicode name lists, and none leaves the cell.
+#[test]
+fn a_sextant_and_an_octant_tile_their_cell() {
+    for (first, count, rows) in [(0x1FB00u32, 60u32, 3u32), (0x1CD00, 230, 4)] {
+        for cp in first..first + count {
+            let c = char::from_u32(cp).expect("a printable code point");
+            let pieces = rects(c);
+            let want = f64::from(pieces.len() as u32) / f64::from(rows) / 2.0;
+            let area: f64 = pieces
+                .iter()
+                .map(|r| f64::from(r[2] - r[0]) * f64::from(r[3] - r[1]))
+                .sum();
+            assert!(
+                (area - want).abs() < 1e-5,
+                "{cp:#x} covers {area} of the cell in {} pieces",
+                pieces.len()
+            );
+            for r in &pieces {
+                assert!(
+                    r[0] >= 0.0 && r[1] >= 0.0 && r[2] <= 1.0 && r[3] <= 1.0,
+                    "{cp:#x} stays inside its cell: {r:?}"
+                );
+            }
+        }
+    }
+    // U+1FB00 names the upper-left sixth and U+1FB3B every sixth but that one. The octants count
+    // the same way, so U+1CD00 is the middle-left eighth and U+1CDE5 all but the upper-left one.
+    assert_eq!(rects('\u{1FB00}'), vec![[0.0, 0.0, 0.5, 1.0 / 3.0]]);
+    let five = rects('\u{1FB3B}');
+    assert_eq!(five.len(), 5);
+    assert!(!covers(&five, 0.1, 0.1), "the upper-left sixth is empty");
+    assert!(covers(&five, 0.9, 0.1) && covers(&five, 0.1, 0.9));
+    assert_eq!(rects('\u{1CD00}'), vec![[0.0, 0.25, 0.5, 0.5]]);
+    let seven = rects('\u{1CDE5}');
+    assert_eq!(seven.len(), 7);
+    assert!(!covers(&seven, 0.1, 0.1), "the upper-left octant is empty");
+    assert!(covers(&seven, 0.1, 0.3));
+}
