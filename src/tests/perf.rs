@@ -10,7 +10,9 @@
 use super::helpers::*;
 use crate::app::App;
 use rune::text::TextSystem;
-use rune::{Env, Runtime, WheelEvent};
+use rune::{Env, Key, KeyEvent, Mods, Runtime, TextEdit, WheelEvent};
+use std::collections::HashSet;
+use std::hint::black_box;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
@@ -149,6 +151,109 @@ fn perf_forced_commit() {
     print(&reports);
 }
 
+// Where the filter's milliseconds go: the rules check on every row, the visible list, the set of
+// ids the selection is pruned against, and the name match a query and typeahead both do.
+#[test]
+#[ignore]
+fn perf_filter_parts() {
+    let (_dir, rt) = list_runtime(20_000);
+    let app = &rt.state;
+    let (entries, visible) = (&app.entries, &app.visible);
+    let rows = entries.len();
+    let time = |label: &str, mut each: Box<dyn FnMut()>| {
+        each();
+        let at = Instant::now();
+        for _ in 0..20 {
+            each();
+        }
+        println!(
+            "{label:<28} {rows:>6} rows: {:.3} ms",
+            at.elapsed().as_secs_f64() * 1e3 / 20.0
+        );
+    };
+    time(
+        "rules check per row",
+        Box::new(|| {
+            black_box(
+                entries
+                    .iter()
+                    .filter(|entry| app.entry_hidden(entry))
+                    .count(),
+            );
+        }),
+    );
+    time(
+        "visible list",
+        Box::new(|| {
+            black_box((0..entries.len()).collect::<Vec<usize>>());
+        }),
+    );
+    time(
+        "id set",
+        Box::new(|| {
+            black_box(
+                visible
+                    .iter()
+                    .map(|&i| entries[i].id.as_str())
+                    .collect::<HashSet<&str>>(),
+            );
+        }),
+    );
+    time(
+        "name lowercase, starts_with",
+        Box::new(|| {
+            black_box(
+                visible
+                    .iter()
+                    .filter(|&&i| entries[i].name.to_lowercase().starts_with('m'))
+                    .count(),
+            );
+        }),
+    );
+    time(
+        "name folded, starts_with",
+        Box::new(|| {
+            black_box(
+                visible
+                    .iter()
+                    .filter(|&&i| {
+                        entries[i]
+                            .name
+                            .as_bytes()
+                            .first()
+                            .is_some_and(|b| b.eq_ignore_ascii_case(&b'm'))
+                    })
+                    .count(),
+            );
+        }),
+    );
+}
+
+// Typing in the search field filters the whole folder on every keystroke, so the frame that
+// takes the key pays for every row rather than for the window on screen. Typeahead does the same
+// walk for its first letter. This times the app's half of that, without Rune's layout.
+#[test]
+#[ignore]
+fn perf_typing() {
+    for count in [200usize, 20_000] {
+        let (_dir, mut rt) = list_runtime(count);
+        for query in ["", "z", "zz", "zzz"] {
+            rt.state.search = TextEdit::new(query);
+            rt.state.apply_filter();
+            let at = Instant::now();
+            for _ in 0..20 {
+                rt.state.apply_filter();
+            }
+            println!(
+                "apply_filter {count:>6} `{query}`: {:.3} ms",
+                at.elapsed().as_secs_f64() * 1e3 / 20.0
+            );
+        }
+        rt.state.search = TextEdit::new("");
+        rt.state.apply_filter();
+    }
+}
+
 #[test]
 #[ignore]
 fn perf_phrase_count() {
@@ -229,4 +334,40 @@ fn perf_coast() {
         ));
     }
     print(&reports);
+}
+
+// Typeahead: the letters of a name, matched against every row of the folder in the frame that
+// takes the key. `rt.key` queues the event, so the frame after it is the one that pays. A match
+// also selects the row and reads its preview, which is why the whole frame is timed.
+#[test]
+#[ignore]
+fn perf_typeahead() {
+    let (_dir, mut rt) = list_runtime(20_000);
+    rt.frame(0.0);
+    for letter in ["m", "f"] {
+        for _ in 0..10 {
+            rt.key(KeyEvent {
+                key: Key::Text(letter.into()),
+                mods: Mods::default(),
+            });
+            rt.frame(1.0 / 60.0);
+            rt.state.clear_typeahead();
+        }
+        let mut samples = Vec::new();
+        for _ in 0..40 {
+            rt.key(KeyEvent {
+                key: Key::Text(letter.into()),
+                mods: Mods::default(),
+            });
+            rt.state.clear_typeahead();
+            let at = Instant::now();
+            rt.frame(1.0 / 60.0);
+            samples.push(at.elapsed().as_secs_f64() * 1e3);
+        }
+        samples.sort_by(f64::total_cmp);
+        println!(
+            "typeahead `{letter}` 20000: {:.2} ms for the frame that takes the key",
+            samples[samples.len() / 2]
+        );
+    }
 }

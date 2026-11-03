@@ -5,7 +5,7 @@ use rune_kit::SortDir;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::scan::{SEARCH_LIMIT, SYNC_SCAN_LIMIT, Scan, sort_rows};
+use super::scan::{SEARCH_LIMIT, SYNC_SCAN_LIMIT, Scan, contains_folded, sort_rows};
 
 use super::*;
 
@@ -273,7 +273,7 @@ impl App {
             .filter(|&i| {
                 let entry = &self.entries[i];
                 !hidden[i]
-                    && (query.is_empty() || searching || entry.name.to_lowercase().contains(&query))
+                    && (query.is_empty() || searching || contains_folded(&entry.name, &query))
             })
             .collect();
         self.keys_version = self.keys_version.wrapping_add(1);

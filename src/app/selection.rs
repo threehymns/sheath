@@ -8,6 +8,7 @@ use std::time::Duration;
 use super::entry::read_preview;
 use super::paths::open_external;
 use super::preview::Finished;
+use super::scan::starts_with_folded;
 
 use super::*;
 
@@ -216,12 +217,7 @@ impl App {
             0
         };
         let matches: Vec<usize> = (0..self.visible.len())
-            .filter(|&i| {
-                self.entries[self.visible[i]]
-                    .name
-                    .to_lowercase()
-                    .starts_with(&query)
-            })
+            .filter(|&i| starts_with_folded(&self.entries[self.visible[i]].name, &query))
             .collect();
         let Some(&index) = matches.get(skip % matches.len().max(1)) else {
             return false;

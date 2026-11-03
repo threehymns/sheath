@@ -9,6 +9,32 @@ use std::path::Path;
 
 use super::entry::compare_time;
 
+/// Whether `name` holds `query`, ignoring case the way `name.to_lowercase().contains(&query)`
+/// does. A plain ASCII name is compared against the lowercased query byte by byte: a keystroke
+/// runs this on every row of the folder, and a lowercased copy of each name costs more than the
+/// comparison does. Anything else takes the copy.
+pub(super) fn contains_folded(name: &str, query: &str) -> bool {
+    if name.is_ascii() && query.is_ascii() {
+        query.is_empty()
+            || name
+                .as_bytes()
+                .windows(query.len())
+                .any(|window| window.eq_ignore_ascii_case(query.as_bytes()))
+    } else {
+        name.to_lowercase().contains(query)
+    }
+}
+
+/// The same fold, for the start of a name: typeahead matches its first letters against every row.
+pub(super) fn starts_with_folded(name: &str, query: &str) -> bool {
+    if name.is_ascii() && query.is_ascii() {
+        name.len() >= query.len()
+            && name.as_bytes()[..query.len()].eq_ignore_ascii_case(query.as_bytes())
+    } else {
+        name.to_lowercase().starts_with(query)
+    }
+}
+
 pub(super) struct Scan {
     pub(super) path: PathBuf,
     pub(super) entries: Vec<Entry>,
