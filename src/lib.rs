@@ -57,7 +57,7 @@ pub fn launch() {
 }
 
 /// Opens a window that is only the terminal pane: the same engine, rows and scroll as the pane
-/// inside the app, with none of the file manager around it. `cargo run --bin terminal` starts it.
+/// inside the app, with none of the file manager around it. `cargo run --example terminal` starts it.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn launch_terminal() {
     term::window::launch();

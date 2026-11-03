@@ -1,5 +1,5 @@
 //! A window that is only the terminal: the same engine, rows and scroll as the pane inside the
-//! app, with none of the file manager around it. `cargo run --bin terminal` opens it, which is
+//! app, with none of the file manager around it. `cargo run --example terminal` opens it, which is
 //! how the pane is looked at on its own — a shell, a full-window grid, and the wheel and drag
 //! that go with it.
 

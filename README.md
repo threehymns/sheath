@@ -23,8 +23,8 @@ The terminal pane is also a window of its own — the same engine, rows and scro
 manager around them:
 
 ```sh
-cargo run --bin terminal           # a shell in the folder you are in
-cargo run --bin terminal -- ~/src  # ... or in another one
+cargo run --example terminal           # a shell in the folder you are in
+cargo run --example terminal -- ~/src  # ... or in another one
 ```
 
 Arguments after `--` go to the app; Rune parses its own flags first. The framework is pinned

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Build the browser bundle with Rune's wasm packager from the Rune checkout Cargo fetched.
 # See "Web build" in README.md.
+#
+# The packager needs the package to have exactly one binary target (or one cdylib), so an extra
+# entry point that is only for the desktop belongs in examples/, not src/bin/.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
