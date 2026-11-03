@@ -6,11 +6,7 @@ pub(crate) use surface::{layout_screen, screen_of, terminal_cell, terminal_drag}
 
 use crate::app::App;
 use crate::icons;
-#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-use crate::term::grid::CursorShape;
 use crate::term::{ProgressKind, Terminal};
-#[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
-use rows::line_row;
 use rune::{Cursor, Drag, El, Key, Phase, Transition, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 
