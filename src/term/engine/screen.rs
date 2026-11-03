@@ -98,7 +98,14 @@ impl Engine {
         }
         out.cols = cols;
         out.rows = rows;
-        let full = self.force_full || !matches!(snapshot.dirty().ok(), Some(Dirty::Partial));
+        // Only a partial render state is worth walking: a clean one has marked nothing dirty
+        // since the last readback, so every row is the row the frame already holds. Anything
+        // that changes what the viewport shows (a scroll, a resize, the theme) says so through
+        // `force_full` instead, so a clean state is the frame a smooth scroll draws for most of
+        // its notches, and re-reading the whole screen for it was the largest thing the pane did
+        // per frame.
+        let full = self.force_full
+            || !matches!(snapshot.dirty().ok(), Some(Dirty::Partial | Dirty::Clean));
         self.force_full = false;
         let default_fg = color(colors.foreground);
         let default_bg = color(colors.background);

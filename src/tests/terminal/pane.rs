@@ -205,3 +205,43 @@ fn a_drag_that_collapses_again_is_not_a_click() {
     pane.begin_drag();
     assert!(!pane.did_open());
 }
+
+/// A selection made after the grid settled reaches the rows the view draws. A drag extends one
+/// every cell the pointer crosses, and none of those moves arrives with a byte from the shell:
+/// the wash has to come from the readback that follows the selection, not from new output.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_selection_reaches_the_frame_without_new_output() {
+    use crate::term::engine::Engine;
+    use crate::term::grid::Frame;
+
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        20,
+        4,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .expect("an engine");
+    engine.feed(b"abc\r\ndef");
+    let mut frame = Frame::default();
+    engine.fill(&mut frame);
+    assert_eq!(frame.lines[0].selection, None, "nothing is selected yet");
+
+    engine.begin_selection((0, 0), 1, false);
+    engine.select_to((2, 0));
+    engine.fill(&mut frame);
+    assert_eq!(
+        frame.lines[0].selection,
+        Some((0, 2)),
+        "the row the drag covers is drawn with its wash"
+    );
+    assert_eq!(
+        frame.lines[1].selection, None,
+        "and a row it does not cover is left alone"
+    );
+}
