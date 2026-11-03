@@ -114,15 +114,15 @@ impl Atlas {
         atlas
     }
 
-    /// Shapes and rasterizes every cluster the frame needs before the row workers read the
-    /// atlas. A blank cell has no glyph, and a cluster of only format characters rasterizes to
-    /// nothing anyway.
-    pub(super) fn preload(&mut self, frame: &Frame, size: u32) {
-        for line in std::iter::once(frame.lead.as_ref())
-            .chain(frame.lines.iter().take(frame.rows as usize).map(Some))
-            .chain(std::iter::once(frame.trail.as_ref()))
-            .flatten()
-        {
+    /// Shapes and rasterizes every cluster the bands being painted need before the row workers
+    /// read the atlas, and only those: a frame that repaints one row does not walk the screen. A
+    /// blank cell has no glyph, and a cluster of only format characters rasterizes to nothing
+    /// anyway.
+    pub(super) fn preload(&mut self, frame: &Frame, size: u32, bands: &[usize]) {
+        for &band in bands {
+            let Some(line) = super::band_line(frame, band) else {
+                continue;
+            };
             for run in &line.runs {
                 let text = line.text.get(run.start..run.end).unwrap_or_default();
                 for cluster in text.graphemes(true) {

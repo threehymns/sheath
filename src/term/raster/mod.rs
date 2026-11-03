@@ -11,6 +11,10 @@
 //! A wide character is one glyph over two columns: the row carries which columns those are
 //! ([`Line::wide`](crate::term::grid::Line::wide)), so the glyph after it starts in its own cell
 //! rather than in the one the wide glyph also covers.
+//!
+//! The image is kept between frames: a row whose [`Line`] did not change keeps the pixels it was
+//! painted with, so an echo or a fractional scroll costs the bands that actually changed instead
+//! of the whole screen.
 
 mod atlas;
 mod image;
@@ -24,7 +28,7 @@ use std::cell::RefCell;
 use rune::Pixels;
 use rune::color::srgb_encode;
 
-use crate::term::grid::{Frame, ImageLayer, Line};
+use crate::term::grid::{CursorShape, Frame, ImageLayer, Line};
 
 use atlas::Atlas;
 use image::paint_image;
@@ -52,27 +56,78 @@ struct Raster {
     atlas: Atlas,
 }
 
-/// What the cached image currently holds. A view build that changed nothing about the grid (a
-/// hover underline, a moved element) leaves all of this equal and reuses the pixels.
+/// What the cached image was made in. A view build that changed nothing about the grid (a moved
+/// element, a hover underline) leaves all of this equal and reuses the pixels.
 #[derive(Clone, Copy, PartialEq, Eq)]
 struct Stamp {
-    generation: u64,
     cols: u16,
     rows: u16,
     cell_px: u32,
     line_px: u32,
     palette: Palette,
+    cursor: Option<(u16, u16)>,
+    cursor_shape: CursorShape,
+    /// The colour a program gave the cursor with OSC 12, when it gave one.
+    cursor_color: Option<[u8; 3]>,
 }
 
 /// The raster and the image it last produced, which the pane streams until the grid changes.
 struct Cache {
     raster: Raster,
     pixels: Pixels,
+    /// The pixels of the image last handed to [`Pixels`], kept so the rows that did not change
+    /// keep theirs: only the bands that changed are painted again.
+    rgba: Vec<u8>,
+    width: u32,
+    height: u32,
+    /// The geometry and palette the pixels are in. `None` until an image is drawn.
     drawn: Option<Stamp>,
+    /// The rows as the image holds them, for telling which ones changed.
+    rows: Vec<Line>,
+    lead: Option<Line>,
+    trail: Option<Line>,
+    /// Whether the image holds kitty graphics placements, which span rows and are painted whole.
+    images: bool,
+    /// The frame's generation the image was painted at: the engine bumps it on every readback,
+    /// so an equal one means no row can have changed since.
+    generation: u64,
     /// The font generation the atlas was built in. The Nerd Font fallback is found on a thread
     /// while the window is already drawing, so a cache built before it landed is rebuilt once
     /// with the face, rather than keeping the bundled one for the session.
     face: u64,
+}
+
+impl Cache {
+    fn new(face: u64) -> Cache {
+        Cache {
+            raster: Raster::new(),
+            pixels: Pixels::new(),
+            rgba: Vec::new(),
+            width: 0,
+            height: 0,
+            drawn: None,
+            rows: Vec::new(),
+            lead: None,
+            trail: None,
+            images: false,
+            generation: 0,
+            face,
+        }
+    }
+
+    /// Sizes the buffer to a whole image, zeroed. A frame that is not the same size as the last
+    /// one, or is painted in another palette, is composed whole, so nothing of the old image may
+    /// survive in it.
+    fn reset(&mut self, width: u32, height: u32) {
+        self.width = width;
+        self.height = height;
+        let len = (width * height * 4) as usize;
+        if self.rgba.len() == len {
+            self.rgba.fill(0);
+        } else {
+            self.rgba = vec![0u8; len];
+        }
+    }
 }
 
 thread_local! {
@@ -96,32 +151,154 @@ pub(crate) fn picture(
         let mut slot = slot.borrow_mut();
         let face = crate::term::fonts::generation();
         if slot.as_ref().is_none_or(|cache| cache.face != face) {
-            *slot = Some(Cache {
-                raster: Raster::new(),
-                pixels: Pixels::new(),
-                drawn: None,
-                face,
-            });
+            *slot = Some(Cache::new(face));
         }
         let cache = slot.as_mut().expect("the cache was just filled");
+        let cell_px = (cell * scale).round().max(1.0) as u32;
+        let line_px = (line * scale).round().max(1.0) as u32;
+        let width = u32::from(frame.cols) * cell_px;
+        let height = (u32::from(frame.rows) + 2) * line_px;
+        if width == 0 || height == 0 {
+            return None;
+        }
         let stamp = Stamp {
-            generation: frame.generation,
             cols: frame.cols,
             rows: frame.rows,
-            cell_px: (cell * scale).round().max(1.0) as u32,
-            line_px: (line * scale).round().max(1.0) as u32,
+            cell_px,
+            line_px,
             palette,
+            cursor: on_screen(frame),
+            cursor_shape: frame.cursor_shape,
+            cursor_color: frame.cursor_color.map(rgb),
         };
-        // Generation zero is a frame the engine did not build (the tests compose those), so it
-        // is never reused: only a readback says the image is still current.
-        if frame.generation > 0 && cache.drawn == Some(stamp) {
+        let images = !frame.images.is_empty();
+        let geometry_same = cache.drawn == Some(stamp)
+            && cache.width == width
+            && cache.height == height
+            && cache.rows.len() == usize::from(frame.rows);
+        // An equal generation says this is the frame the image was painted from: the engine
+        // bumps it on every readback, so no row can have changed. A test's composed frame has
+        // generation zero and is always diffed.
+        let settled = geometry_same && frame.generation > 0 && cache.generation == frame.generation;
+        // A placement spans rows, so a frame that carries one (or one the image still holds) is
+        // painted whole; the rest are only ever painted where they changed.
+        let full = !geometry_same || images || cache.images;
+        let mut bands: Vec<usize> = Vec::new();
+        if full {
+            cache.reset(width, height);
+            bands.extend(0..usize::from(frame.rows) + 2);
+        } else if !settled {
+            for (index, line) in frame.lines.iter().enumerate() {
+                if cache.rows.get(index) != Some(line) {
+                    bands.push(index + 1);
+                }
+            }
+            if cache.lead.as_ref() != frame.lead.as_ref() {
+                bands.push(0);
+            }
+            if cache.trail.as_ref() != frame.trail.as_ref() {
+                bands.push(usize::from(frame.rows) + 1);
+            }
+        }
+        if bands.is_empty() {
+            cache.generation = frame.generation;
             return Some(cache.pixels.clone());
         }
-        let (width, height, rgba) = cache.raster.compose(frame, cell, line, scale, palette)?;
-        cache.pixels.set(width, height, rgba);
-        cache.drawn = (frame.generation > 0).then_some(stamp);
+        let row_bytes = width as usize * line_px as usize * 4;
+        if !full {
+            // A repainted band starts from nothing, the way the whole image does: the pane's fill
+            // shows through wherever no glyph, wash or background wrote a pixel.
+            for &band in &bands {
+                let at = band * row_bytes;
+                if let Some(band) = cache.rgba.get_mut(at..at + row_bytes) {
+                    band.fill(0);
+                }
+            }
+        }
+        let geometry = Geometry {
+            width,
+            height,
+            cell_px,
+            line_px,
+            scale,
+        };
+        cache.raster.paint(
+            frame,
+            geometry,
+            Pass {
+                palette,
+                bands: &bands,
+                full,
+            },
+            &mut cache.rgba,
+        );
+        // Remember what was painted, so the next frame can tell its rows from these.
+        cache.rows.clone_from(&frame.lines);
+        cache.lead.clone_from(&frame.lead);
+        cache.trail.clone_from(&frame.trail);
+        cache.images = images;
+        cache.drawn = Some(stamp);
+        cache.generation = frame.generation;
+        cache.pixels.set(width, height, cache.rgba.clone());
         Some(cache.pixels.clone())
     })
+}
+
+/// The cursor's cell, when it is on the screen instead of past an edge.
+fn on_screen(frame: &Frame) -> Option<(u16, u16)> {
+    frame
+        .cursor
+        .filter(|(x, y)| *x < frame.cols && *y < frame.rows)
+}
+
+/// The band the cursor's cell is in: the lead row is band zero, so a viewport row is one past
+/// it.
+fn cursor_band(frame: &Frame) -> Option<usize> {
+    on_screen(frame).map(|(_, y)| usize::from(y) + 1)
+}
+
+/// The line a band holds: the overscan row above the viewport, the viewport's rows, then the one
+/// below it.
+fn band_line(frame: &Frame, band: usize) -> Option<&Line> {
+    if band == 0 {
+        frame.lead.as_ref()
+    } else if band <= usize::from(frame.rows) {
+        frame.lines.get(band - 1)
+    } else {
+        frame.trail.as_ref()
+    }
+}
+
+/// Paints one band: one row of the image and the line that belongs on it.
+fn paint_band(
+    atlas: &Atlas,
+    pixels: &mut [u8],
+    width: u32,
+    line_px: u32,
+    cell_px: u32,
+    palette: Palette,
+    line: &Line,
+) {
+    let mut surface = Surface::new(pixels, width, line_px, palette.bg);
+    paint_line(atlas, &mut surface, line, cell_px, line_px, palette);
+}
+
+/// The pixel geometry one image is painted at.
+#[derive(Clone, Copy)]
+struct Geometry {
+    width: u32,
+    height: u32,
+    cell_px: u32,
+    line_px: u32,
+    scale: f32,
+}
+
+/// What one paint pass covers: every band, or only the bands that changed, and the cursor drawn
+/// last.
+struct Pass<'a> {
+    palette: Palette,
+    bands: &'a [usize],
+    full: bool,
 }
 
 impl Raster {
@@ -131,6 +308,8 @@ impl Raster {
         }
     }
 
+    /// Composes the whole frame into a fresh image, for a test that reads the pixels back.
+    #[cfg(test)]
     fn compose(
         &mut self,
         frame: &Frame,
@@ -142,68 +321,110 @@ impl Raster {
         let cell_px = (cell * scale).round().max(1.0) as u32;
         let line_px = (line * scale).round().max(1.0) as u32;
         let width = u32::from(frame.cols) * cell_px;
-        let row_count = u32::from(frame.rows) + 2;
-        let height = row_count * line_px;
+        let height = (u32::from(frame.rows) + 2) * line_px;
         if width == 0 || height == 0 {
             return None;
         }
-        // Untouched pixels stay transparent: the pane already fills its background, so the
-        // image only has to carry what is drawn on top of it. Writing the default background
-        // into every pixel would touch all 40 MB of a fullscreened grid each frame, which costs
-        // more than all the glyphs together.
         let mut rgba = vec![0u8; (width * height * 4) as usize];
+        let bands: Vec<usize> = (0..usize::from(frame.rows) + 2).collect();
+        self.paint(
+            frame,
+            Geometry {
+                width,
+                height,
+                cell_px,
+                line_px,
+                scale,
+            },
+            Pass {
+                palette,
+                bands: &bands,
+                full: true,
+            },
+            &mut rgba,
+        );
+        Some((width, height, rgba))
+    }
+
+    /// Paints `pass.bands` of the frame into `rgba`, which holds the whole image: untouched
+    /// bands keep the pixels they were painted with.
+    fn paint(&mut self, frame: &Frame, geometry: Geometry, pass: Pass, rgba: &mut [u8]) {
+        let Geometry {
+            width,
+            height,
+            cell_px,
+            line_px,
+            scale,
+        } = geometry;
         // The images a program placed go under the text when their z-index says so: under the
         // cell backgrounds for the smallest values, under the glyphs for the other negatives.
         // Painting them before the rows is what keeps text over an image readable, and it is
         // the order Ghostty's own renderer uses.
         let overscan = line_px as i32;
-        for placement in frame
-            .images
-            .iter()
-            .filter(|placement| placement.layer != ImageLayer::AboveText)
-        {
-            paint_image(
-                &mut rgba, width, height, placement, scale, overscan, palette.bg,
-            );
+        if pass.full {
+            for placement in frame
+                .images
+                .iter()
+                .filter(|placement| placement.layer != ImageLayer::AboveText)
+            {
+                paint_image(
+                    rgba,
+                    width,
+                    height,
+                    placement,
+                    scale,
+                    overscan,
+                    pass.palette.bg,
+                );
+            }
         }
         let size = glyph_size(line_px);
-        // The atlas is the only mutable state, so it is filled once and then read by the row
-        // workers. Spawning them per frame is cheap next to the blending, and a grid this size
-        // is what makes the difference between a 35 ms and a 10 ms compose.
-        self.atlas.preload(frame, size);
+        self.atlas.preload(frame, size, pass.bands);
         let atlas = &self.atlas;
-        let mut grid: Vec<Option<&Line>> = Vec::with_capacity(row_count as usize);
-        grid.push(frame.lead.as_ref());
-        for index in 0..usize::from(frame.rows) {
-            grid.push(frame.lines.get(index));
-        }
-        grid.push(frame.trail.as_ref());
         let row_bytes = width as usize * 4 * line_px as usize;
-        let workers = if grid.len() < 8 {
+        // Only a band per frame is the common case (an echo, a cursor), and spawning workers for
+        // it costs more than the row does.
+        let workers = if pass.bands.len() < 8 {
             1
         } else {
             std::thread::available_parallelism()
                 .map(|count| count.get())
                 .unwrap_or(1)
-                .min(grid.len())
+                .min(pass.bands.len())
         };
         if workers <= 1 {
-            for (pixels, line) in rgba.chunks_mut(row_bytes).zip(&grid) {
-                let Some(line) = line else { continue };
-                let mut surface = Surface::new(pixels, width, line_px, palette.bg);
-                paint_line(atlas, &mut surface, line, cell_px, line_px, palette);
+            for &band in pass.bands {
+                let Some(line) = band_line(frame, band) else {
+                    continue;
+                };
+                let at = band * row_bytes;
+                paint_band(
+                    atlas,
+                    &mut rgba[at..at + row_bytes],
+                    width,
+                    line_px,
+                    cell_px,
+                    pass.palette,
+                    line,
+                );
             }
         } else {
-            let per = grid.len().div_ceil(workers);
+            let bands = pass.bands;
+            let palette = pass.palette;
+            let per = (usize::from(frame.rows) + 2).div_ceil(workers);
             std::thread::scope(|scope| {
-                for (band, pixels) in rgba.chunks_mut(per * row_bytes).enumerate() {
-                    let first = band * per;
-                    let band = &grid[first..(first + per).min(grid.len())];
+                for (index, pixels) in rgba.chunks_mut(per * row_bytes).enumerate() {
+                    let first = index * per;
                     scope.spawn(move || {
-                        for (pixels, line) in pixels.chunks_mut(row_bytes).zip(band) {
-                            let Some(line) = line else { continue };
-                            let mut surface = Surface::new(pixels, width, line_px, palette.bg);
-                            paint_line(atlas, &mut surface, line, cell_px, line_px, palette);
+                        for (offset, pixels) in pixels.chunks_mut(row_bytes).enumerate() {
+                            let band = first + offset;
+                            if !bands.contains(&band) {
+                                continue;
+                            }
+                            let Some(line) = band_line(frame, band) else {
+                                continue;
+                            };
+                            paint_band(atlas, pixels, width, line_px, cell_px, palette, line);
                         }
                     });
                 }
@@ -212,34 +433,44 @@ impl Raster {
         // A placement above the text is drawn last, over the glyphs, which is where a plain
         // `a=T` image lands. The cursor goes after even that, so the pane always shows where the
         // cursor is.
-        for placement in frame
-            .images
-            .iter()
-            .filter(|placement| placement.layer == ImageLayer::AboveText)
-        {
-            paint_image(
-                &mut rgba, width, height, placement, scale, overscan, palette.bg,
-            );
+        if pass.full {
+            for placement in frame
+                .images
+                .iter()
+                .filter(|placement| placement.layer == ImageLayer::AboveText)
+            {
+                paint_image(
+                    rgba,
+                    width,
+                    height,
+                    placement,
+                    scale,
+                    overscan,
+                    pass.palette.bg,
+                );
+            }
         }
-        if let Some((x, y)) = frame.cursor
-            && x < frame.cols
-            && y < frame.rows
+        if let (Some(band), Some((x, _))) = (cursor_band(frame), on_screen(frame))
+            && (pass.full || pass.bands.contains(&band))
         {
-            let at = (usize::from(y) + 1) * row_bytes;
-            let mut surface =
-                Surface::new(&mut rgba[at..at + row_bytes], width, line_px, palette.bg);
+            let at = band * row_bytes;
+            let mut surface = Surface::new(
+                &mut rgba[at..at + row_bytes],
+                width,
+                line_px,
+                pass.palette.bg,
+            );
             // A program that set a cursor colour with OSC 12 draws it in that, not in the
             // theme's; the theme's is only the colour the shell starts with.
-            let color = frame.cursor_color.map(rgb).unwrap_or(palette.cursor);
+            let color = frame.cursor_color.map(rgb).unwrap_or(pass.palette.cursor);
             surface.cursor(
                 x,
                 cell_px,
                 line_px,
                 color,
-                palette.cursor_alpha,
+                pass.palette.cursor_alpha,
                 frame.cursor_shape,
             );
         }
-        Some((width, height, rgba))
     }
 }
