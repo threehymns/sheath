@@ -45,6 +45,11 @@ ghostty-vt = { version = "0.8.0", default-features = false, features = [
 ] }
 # The texture prototype rasterizes the pane's glyphs itself, from the same mono face.
 swash = "0.2.10"
+# A cell holds a whole grapheme cluster, so its glyphs come from shaping it: the emoji font's
+# ligatures for `👍🏽` and the placement of a combining mark both need a shaper. Both crates
+# are already in Rune's graph, so this adds no download.
+harfrust = "0.12"
+unicode-segmentation = "1.13"
 # Reading the clipboard for a paste into the shell; Rune's own clipboard is write-only from the
 # app side, and a terminal's paste is a read.
 arboard = "3"

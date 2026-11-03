@@ -2,6 +2,8 @@
 //! and the rules a pen asks for, plus the pixel fills, blends and mask blits they are made of.
 //! The band is one image row, so the painter has no idea where the row sits in the grid.
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use super::atlas::{Atlas, Glyph};
 use super::{Palette, rgb};
 use crate::term::grid::{CursorShape, Line, Pen, UnderlineKind};
@@ -309,30 +311,28 @@ pub(super) fn paint_line(
         let color = pen_color(run.pen, palette);
         let text = line.text.get(run.start..run.end).unwrap_or_default();
         let mut col = u32::from(run.cols.0);
-        for ch in text.chars() {
-            // A wide character covers two cells and the frame says which ones, so the glyph
-            // after it starts where the grid puts it instead of in the cell it also covers.
+        // One cell holds one grapheme cluster, so the text is walked by cluster: a `👍🏽` or an
+        // `é` written as two codepoints is one cell, one advance, however many characters it
+        // takes to write.
+        for cluster in text.graphemes(true) {
+            // A wide cluster covers two cells and the frame says which ones, so the cell after
+            // it starts where the grid puts it instead of in the cell it also covers.
             let wide = line
                 .wide
                 .binary_search_by_key(&col, |column| u32::from(*column))
                 .is_ok();
             let advance = if wide { 2 } else { 1 };
-            if ch.is_control() || ch == ' ' {
-                if !format_char(ch) {
-                    col = col.saturating_add(advance);
-                }
+            let mut chars = cluster.chars();
+            let first = chars.next();
+            if first.is_none_or(|first| first.is_control() || first == ' ' || format_char(first)) {
+                col = col.saturating_add(advance);
                 continue;
             }
-            if format_char(ch) {
-                continue;
-            }
-            // A combining mark has no advance of its own: it belongs to the cell before it.
-            let at = if combining(ch) {
-                col.saturating_sub(1)
-            } else {
-                col
-            };
-            if let Some(glyph) = atlas.glyph(ch, size, run.pen.bold) {
+            for placed in atlas.cluster(cluster, size, run.pen.bold) {
+                let Some(glyph) = atlas.glyph(placed.slot) else {
+                    continue;
+                };
+                let at = col;
                 // A wide glyph owns two cells. A colour emoji's font advances it by one, so it
                 // is centred across both rather than drawn against the left edge of two.
                 let left = if wide && glyph.color {
@@ -341,7 +341,7 @@ pub(super) fn paint_line(
                     at as i32 * cell_px as i32 + glyph.left
                 };
                 surface.blit(
-                    left,
+                    left + placed.x,
                     baseline - glyph.top,
                     glyph,
                     color,
@@ -352,9 +352,7 @@ pub(super) fn paint_line(
                     },
                 );
             }
-            if !combining(ch) {
-                col = col.saturating_add(advance);
-            }
+            col = col.saturating_add(advance);
         }
         let x0 = i32::from(run.cols.0) * cell_px as i32;
         let x1 = i32::from(run.cols.1) * cell_px as i32;
@@ -444,36 +442,6 @@ fn pen_color(pen: Pen, palette: Palette) -> [u8; 3] {
     } else {
         color
     }
-}
-
-/// A mark that sits on the cell before it instead of advancing one of its own.
-fn combining(c: char) -> bool {
-    matches!(
-        c as u32,
-        0x0300..=0x036F
-            | 0x0483..=0x0489
-            | 0x0591..=0x05BD
-            | 0x05BF
-            | 0x05C1..=0x05C2
-            | 0x05C4..=0x05C5
-            | 0x05C7
-            | 0x0610..=0x061A
-            | 0x064B..=0x065F
-            | 0x0670
-            | 0x06D6..=0x06DC
-            | 0x06DF..=0x06E4
-            | 0x06E7..=0x06E8
-            | 0x06EA..=0x06ED
-            | 0x0711
-            | 0x0730..=0x074A
-            | 0x0E31
-            | 0x0E34..=0x0E3A
-            | 0x0E47..=0x0E4E
-            | 0x1AB0..=0x1AFF
-            | 0x1DC0..=0x1DFF
-            | 0x20D0..=0x20FF
-            | 0xFE20..=0xFE2F
-    )
 }
 
 /// A zero-width character that is not drawn as a mark: joiners, variation selectors and the

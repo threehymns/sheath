@@ -1,15 +1,23 @@
-//! The glyph atlas: swash rasterizes the pane's mono face and caches masks by character, size
-//! and weight. Composition asks for a glyph and never sees the font or the scaler.
+//! The glyph atlas: swash rasterizes the pane's faces and caches images by glyph, size and
+//! weight. Composition asks for a cell's cluster and never sees the font, the shaper or the
+//! scaler.
 //!
-//! A character the mono cannot draw comes from a system fallback: the colour emoji font first,
-//! since emoji draw in their own colours (swash's COLR layers or embedded bitmaps, the same
-//! sources Rune uses), then the Nerd Font for a prompt's private-use icons.
+//! A cell holds a whole grapheme cluster: `é` may be two codepoints, `👍🏽` two, a family emoji
+//! several. A cluster is shaped rather than walked one character at a time, because shaping is
+//! what picks the emoji font's ligature for `👍🏽` and places a combining mark on its base; one
+//! character at a time put the modifier in a column of its own and drew the cell after it a
+//! column too far along. A character the mono cannot draw comes from a system fallback: the
+//! colour emoji font first, since emoji draw in their own colours (swash's COLR layers or
+//! embedded bitmaps, the same sources Rune uses), then the Nerd Font for a prompt's private-use
+//! icons.
 
 use std::collections::HashMap;
 
+use harfrust::{FontRef as ShapeFace, ShapeOptions, ShaperData, UnicodeBuffer};
 use swash::FontRef;
 use swash::scale::image::Content;
 use swash::scale::{Render, ScaleContext, Scaler, Source, StrikeWith};
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::term::grid::Frame;
 
@@ -17,6 +25,7 @@ use crate::term::grid::Frame;
 /// would have drawn: the theme's mono, which draws every ordinary cell.
 const PRIMARY: &[u8] = crate::FONTS[1];
 
+/// One glyph's image, placed around the pen.
 pub(super) struct Glyph {
     pub(super) left: i32,
     pub(super) top: i32,
@@ -29,30 +38,85 @@ pub(super) struct Glyph {
     pub(super) color: bool,
 }
 
+/// One glyph of a shaped cluster: its pen offset across the cell, in device pixels, and the
+/// image it draws.
+pub(super) struct Placed {
+    pub(super) x: i32,
+    /// The image, as a slot in the atlas's own list: the painter reads it by index instead of
+    /// hashing a font, a glyph, a size and a weight for every cell it draws.
+    pub(super) slot: usize,
+}
+
+/// A face the atlas draws from: swash's view of it, and the bytes the shaper reads.
+struct Face {
+    swash: FontRef<'static>,
+    bytes: &'static [u8],
+}
+
+/// A cluster as one size and weight drew it: the size, the weight, and the glyphs it placed.
+struct Drawn {
+    size: u32,
+    bold: bool,
+    placed: Vec<Placed>,
+}
+
+/// A cluster shaped once, whatever size it is drawn at: the face that draws it, that face's
+/// units per em, and each glyph with the pen it starts at in font units.
+#[derive(Clone)]
+struct Shape {
+    face: usize,
+    upem: u16,
+    glyphs: Vec<(u16, i32)>,
+}
+
 pub(super) struct Atlas {
-    font: FontRef<'static>,
-    /// The system's colour emoji font, for the emoji the mono has none of.
-    emoji: Option<FontRef<'static>>,
-    /// The Nerd Font the system has, for the private-use glyphs the mono has none of.
-    fallback: Option<FontRef<'static>>,
+    /// The theme's mono first, then the fallbacks.
+    faces: Vec<Face>,
+    /// The colour emoji face among `faces`, when the system has one.
+    emoji: Option<usize>,
+    /// The Nerd Font among `faces`, when the system has one.
+    fallback: Option<usize>,
     context: ScaleContext,
-    glyphs: HashMap<(char, u32, bool), Option<Glyph>>,
+    /// Shaped clusters, by their text.
+    shapes: HashMap<Box<str>, Option<Shape>>,
+    /// The slot of each rasterized image, by face, glyph, size and weight.
+    images: HashMap<(usize, u16, u32, bool), Option<usize>>,
+    /// The images themselves, in the order they were first drawn.
+    slots: Vec<Option<Glyph>>,
+    /// Each cluster's glyphs, by cluster text, then by the size and weight they were drawn at:
+    /// one string hash per cell and a scan over one or two entries, which is what keeps
+    /// ordinary text as cheap as it was before clusters.
+    placed: HashMap<Box<str>, Vec<Drawn>>,
 }
 
 impl Atlas {
     pub(super) fn new() -> Atlas {
-        Atlas {
-            font: FontRef::from_index(PRIMARY, 0).expect("the pane's mono face"),
-            emoji: crate::term::fonts::emoji_face().and_then(|bytes| FontRef::from_index(bytes, 0)),
-            fallback: crate::term::fonts::fallback_face()
-                .and_then(|bytes| FontRef::from_index(bytes, 0)),
+        let mut atlas = Atlas {
+            faces: vec![face(PRIMARY).expect("the pane's mono face")],
+            emoji: None,
+            fallback: None,
             context: ScaleContext::new(),
-            glyphs: HashMap::new(),
+            shapes: HashMap::new(),
+            images: HashMap::new(),
+            slots: Vec::new(),
+            placed: HashMap::new(),
+        };
+        // The colour emoji face before the Nerd Font: an emoji is drawn by the font made for
+        // it, and the private-use icons a prompt prints by the font patched for them.
+        if let Some(emoji) = crate::term::fonts::emoji_face().and_then(face) {
+            atlas.emoji = Some(atlas.faces.len());
+            atlas.faces.push(emoji);
         }
+        if let Some(fallback) = crate::term::fonts::fallback_face().and_then(face) {
+            atlas.fallback = Some(atlas.faces.len());
+            atlas.faces.push(fallback);
+        }
+        atlas
     }
 
-    /// Rasterizes every glyph the frame needs before the row workers read the atlas. A blank
-    /// cell has no glyph, and a zero-width format character rasterizes to nothing anyway.
+    /// Shapes and rasterizes every cluster the frame needs before the row workers read the
+    /// atlas. A blank cell has no glyph, and a cluster of only format characters rasterizes to
+    /// nothing anyway.
     pub(super) fn preload(&mut self, frame: &Frame, size: u32) {
         for line in std::iter::once(frame.lead.as_ref())
             .chain(frame.lines.iter().take(frame.rows as usize).map(Some))
@@ -61,32 +125,130 @@ impl Atlas {
         {
             for run in &line.runs {
                 let text = line.text.get(run.start..run.end).unwrap_or_default();
-                for ch in text.chars() {
-                    if ch.is_control() || ch == ' ' {
-                        continue;
-                    }
-                    let _ = self.load(ch, size, run.pen.bold);
+                for cluster in text.graphemes(true) {
+                    self.load(cluster, size, run.pen.bold);
                 }
             }
         }
     }
 
-    /// A glyph the frame was preloaded with, or `None` when the face has no outline for it.
-    pub(super) fn glyph(&self, ch: char, size: u32, bold: bool) -> Option<&Glyph> {
-        self.glyphs.get(&(ch, size, bold)).and_then(Option::as_ref)
+    /// The glyphs a cell's cluster draws, as preloaded. Empty when no face has a glyph for it.
+    pub(super) fn cluster(&self, cluster: &str, size: u32, bold: bool) -> &[Placed] {
+        let Some(drawn) = self.placed.get(cluster) else {
+            return &[];
+        };
+        drawn
+            .iter()
+            .find(|drawn| drawn.size == size && drawn.bold == bold)
+            .map_or(&[], |drawn| drawn.placed.as_slice())
     }
 
-    fn load(&mut self, ch: char, size: u32, bold: bool) -> Option<&Glyph> {
-        let key = (ch, size, bold);
-        if !self.glyphs.contains_key(&key) {
-            let glyph = self.rasterize(ch, size, bold);
-            self.glyphs.insert(key, glyph);
+    /// A cluster's glyph image, as preloaded.
+    pub(super) fn glyph(&self, slot: usize) -> Option<&Glyph> {
+        self.slots.get(slot).and_then(Option::as_ref)
+    }
+
+    fn load(&mut self, cluster: &str, size: u32, bold: bool) {
+        let drawn = self.placed.get(cluster).is_some_and(|drawn| {
+            drawn
+                .iter()
+                .any(|drawn| drawn.size == size && drawn.bold == bold)
+        });
+        if drawn {
+            return;
         }
-        self.glyphs.get(&key).and_then(Option::as_ref)
+        let placed = self.place(cluster, size, bold);
+        self.placed
+            .entry(cluster.into())
+            .or_default()
+            .push(Drawn { size, bold, placed });
     }
 
-    fn rasterize(&mut self, ch: char, size: u32, bold: bool) -> Option<Glyph> {
-        let (font, id) = self.face_for(ch)?;
+    fn place(&mut self, cluster: &str, size: u32, bold: bool) -> Vec<Placed> {
+        let Some(shape) = self.shape(cluster) else {
+            return Vec::new();
+        };
+        let scale = size as f32 / f32::from(shape.upem);
+        let mut placed = Vec::with_capacity(shape.glyphs.len());
+        for (id, pen) in shape.glyphs {
+            if let Some(slot) = self.image(shape.face, id, size, bold) {
+                placed.push(Placed {
+                    x: (pen as f32 * scale).round() as i32,
+                    slot,
+                });
+            }
+        }
+        placed
+    }
+
+    fn shape(&mut self, cluster: &str) -> Option<Shape> {
+        if let Some(shape) = self.shapes.get(cluster) {
+            return shape.clone();
+        }
+        let shape = self.shaped(cluster);
+        self.shapes.insert(cluster.into(), shape.clone());
+        shape
+    }
+
+    /// The face and glyphs for `cluster`. A one-character cluster is a charmap lookup, the work
+    /// the atlas did before it shaped anything: a single codepoint's glyph is what the charmap
+    /// holds, so only a sequence — a combining mark, a skin tone, a ZWJ emoji — needs the shaper.
+    fn shaped(&self, cluster: &str) -> Option<Shape> {
+        let mut chars = cluster.chars();
+        if let (Some(ch), None) = (chars.next(), chars.next()) {
+            return self.faces_for(cluster).into_iter().find_map(|face| {
+                let font = &self.faces[face];
+                let id = font.swash.charmap().map(ch);
+                (id != 0).then(|| Shape {
+                    face,
+                    upem: font.swash.metrics(&[]).units_per_em,
+                    glyphs: vec![(id, 0)],
+                })
+            });
+        }
+        self.faces_for(cluster).into_iter().find_map(|face| {
+            let (glyphs, upem) = shape(&self.faces[face], cluster)?;
+            Some(Shape { face, upem, glyphs })
+        })
+    }
+
+    /// The faces to try for `cluster`, most wanted first. A selector asking for emoji
+    /// presentation (`❤️`) goes to the colour emoji font before a text font that also has the
+    /// base character; anything else tries the mono first, so text keeps the theme's face.
+    fn faces_for(&self, cluster: &str) -> Vec<usize> {
+        let emoji_first = cluster.contains('\u{fe0f}');
+        let mut faces = Vec::with_capacity(self.faces.len());
+        if emoji_first && let Some(emoji) = self.emoji {
+            faces.push(emoji);
+        }
+        faces.push(0);
+        if !emoji_first && let Some(emoji) = self.emoji {
+            faces.push(emoji);
+        }
+        if let Some(fallback) = self.fallback
+            && !faces.contains(&fallback)
+        {
+            faces.push(fallback);
+        }
+        faces
+    }
+
+    /// `id`'s image at `size` and `bold`, rasterized the first time and then read by slot.
+    fn image(&mut self, face: usize, id: u16, size: u32, bold: bool) -> Option<usize> {
+        let key = (face, id, size, bold);
+        if let Some(slot) = self.images.get(&key) {
+            return *slot;
+        }
+        let slot = self.rasterize(face, id, size, bold).map(|glyph| {
+            self.slots.push(Some(glyph));
+            self.slots.len() - 1
+        });
+        self.images.insert(key, slot);
+        slot
+    }
+
+    fn rasterize(&mut self, face: usize, id: u16, size: u32, bold: bool) -> Option<Glyph> {
+        let font = self.faces[face].swash;
         let mut scaler = self.context.builder(font).size(size as f32).build();
         // An emoji font draws the glyph as COLR layers or an embedded bitmap, in colours the pen
         // has no say over; the same two sources Rune rasterizes its emoji with.
@@ -115,24 +277,39 @@ impl Atlas {
             color: false,
         })
     }
+}
 
-    /// The face that draws `ch`: the theme's mono, and only for a character it has no glyph for,
-    /// the system's colour emoji font and then the installed Nerd Font. Ordinary text never
-    /// changes face; an emoji comes from the font made for it, and the private-use icons a prompt
-    /// prints from the font that was patched for them.
-    fn face_for(&self, ch: char) -> Option<(FontRef<'static>, u16)> {
-        let id = self.font.charmap().map(ch);
-        if id != 0 {
-            return Some((self.font, id));
+/// The face's bytes, as swash's view of it and as the shaper's.
+fn face(bytes: &'static [u8]) -> Option<Face> {
+    Some(Face {
+        swash: FontRef::from_index(bytes, 0)?,
+        bytes,
+    })
+}
+
+/// The glyphs `cluster` shapes to in `face`, each with the pen it starts at in font units, and
+/// the face's units per em. `None` when the face has no glyph for one of the characters: a
+/// `.notdef` is not a fallback's answer to a sequence it cannot draw.
+fn shape(face: &Face, cluster: &str) -> Option<(Vec<(u16, i32)>, u16)> {
+    let font = ShapeFace::from_index(face.bytes, 0).ok()?;
+    let data = ShaperData::new(&font);
+    let shaper = data.shaper(&font).build();
+    let mut buffer = UnicodeBuffer::new();
+    buffer.push_str(cluster);
+    buffer.guess_segment_properties();
+    let shaped = shaper.shape(buffer, ShapeOptions::new());
+    let mut glyphs = Vec::with_capacity(shaped.glyph_infos().len());
+    let mut pen = 0;
+    for (info, position) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
+        let id = u16::try_from(info.glyph_id).ok()?;
+        if id == 0 {
+            return None;
         }
-        for font in [self.emoji, self.fallback].into_iter().flatten() {
-            let id = font.charmap().map(ch);
-            if id != 0 {
-                return Some((font, id));
-            }
-        }
-        None
+        glyphs.push((id, pen + position.x_offset));
+        pen += position.x_advance;
     }
+    let upem = face.swash.metrics(&[]).units_per_em;
+    (!glyphs.is_empty()).then_some((glyphs, upem))
 }
 
 /// A colour image of `id`, when the face draws it as COLR layers or an embedded bitmap. `None`
