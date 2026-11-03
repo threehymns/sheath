@@ -88,12 +88,17 @@ impl Engine {
         let Ok(mut event) = mouse::Event::new() else {
             return Vec::new();
         };
+        // A cell in device pixels, which is the unit the encoder both places the pointer and
+        // answers in: cell tracking modes divide it back out, and mode 1016 (SGR-Pixels) reports
+        // it as it is, the way Ghostty does.
+        let cell_px = (self.metrics.cell * self.metrics.scale).round().max(1.0) as u32;
+        let line_px = (self.metrics.line * self.metrics.scale).round().max(1.0) as u32;
         event
             .set_action(action)
             .set_button(button)
             .set_position(mouse::Position {
-                x: at.0 as f32,
-                y: at.1 as f32,
+                x: f32::from(at.0) * cell_px as f32,
+                y: f32::from(at.1) * line_px as f32,
             });
         if shift {
             event.set_mods(key::Mods::SHIFT);
@@ -101,12 +106,12 @@ impl Engine {
         self.mouse.set_options_from_terminal(&self.vt);
         // The encoder drops a position outside the screen it was told about, and its default
         // screen is one cell: telling it the grid the pane draws is what makes a click past the
-        // first cell reach the program at all. Positions go in as cells, so a cell is one unit.
+        // first cell reach the program at all.
         self.mouse.set_size(mouse::EncoderSize {
-            screen_width: u32::from(self.cols),
-            screen_height: u32::from(self.rows),
-            cell_width: 1,
-            cell_height: 1,
+            screen_width: u32::from(self.cols) * cell_px,
+            screen_height: u32::from(self.rows) * line_px,
+            cell_width: cell_px,
+            cell_height: line_px,
             padding_top: 0,
             padding_bottom: 0,
             padding_right: 0,

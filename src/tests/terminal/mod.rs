@@ -5,6 +5,7 @@
 mod box_drawing;
 mod images;
 mod metrics;
+mod mouse;
 mod osc;
 mod paint;
 mod pane;
