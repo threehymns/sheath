@@ -22,6 +22,8 @@ mod image;
 mod paint;
 
 #[cfg(test)]
+mod perf;
+#[cfg(test)]
 mod tests;
 
 use std::cell::RefCell;
@@ -222,10 +224,23 @@ pub(crate) fn picture(
             },
             &mut cache.rgba,
         );
-        // Remember what was painted, so the next frame can tell its rows from these.
-        cache.rows.clone_from(&frame.lines);
-        cache.lead.clone_from(&frame.lead);
-        cache.trail.clone_from(&frame.trail);
+        // Remember what was painted, so the next frame can tell its rows from these. Only the
+        // rows that changed are cloned: the rest are already the line this frame carries, and
+        // an echo that rewrote one row should not copy the whole screen's text and allocations.
+        for (index, line) in frame.lines.iter().enumerate() {
+            match cache.rows.get_mut(index) {
+                Some(slot) if slot == line => {}
+                Some(slot) => slot.clone_from(line),
+                None => cache.rows.push(line.clone()),
+            }
+        }
+        cache.rows.truncate(frame.lines.len());
+        if cache.lead.as_ref() != frame.lead.as_ref() {
+            cache.lead.clone_from(&frame.lead);
+        }
+        if cache.trail.as_ref() != frame.trail.as_ref() {
+            cache.trail.clone_from(&frame.trail);
+        }
         cache.images = images;
         cache.drawn = Some(stamp);
         cache.generation = frame.generation;
