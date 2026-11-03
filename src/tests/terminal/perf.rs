@@ -209,7 +209,9 @@ fn perf_terminal_unchanged_frame() {
         std::hint::black_box(&frame);
     }
     let (median, p95) = stats(samples);
-    println!("unchanged frame {cols}x{rows} (a smooth scroll): median {median:.1} us, p95 {p95:.1} us");
+    println!(
+        "unchanged frame {cols}x{rows} (a smooth scroll): median {median:.1} us, p95 {p95:.1} us"
+    );
 }
 
 /// A long folder beside the pane, to show what the terminal's frames cost on top of a list.

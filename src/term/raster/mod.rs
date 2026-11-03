@@ -175,10 +175,12 @@ pub(crate) fn picture(
         // A placement spans rows, so a frame that carries one (or one the image still holds) is
         // painted whole; the rest are only ever painted where they changed.
         let full = !geometry_same || images || cache.images;
+        let bands_total = usize::from(frame.rows) + 2;
+        let row_bytes = width as usize * line_px as usize * 4;
         let mut bands: Vec<usize> = Vec::new();
         if full {
             cache.reset(width, height);
-            bands.extend(0..usize::from(frame.rows) + 2);
+            bands.extend(0..bands_total);
         } else if !settled {
             for (index, line) in frame.lines.iter().enumerate() {
                 if cache.rows.get(index) != Some(line) {
@@ -189,14 +191,24 @@ pub(crate) fn picture(
                 bands.push(0);
             }
             if cache.trail.as_ref() != frame.trail.as_ref() {
-                bands.push(usize::from(frame.rows) + 1);
+                bands.push(bands_total - 1);
+            }
+            // A viewport that stepped by whole rows is still showing the rows it was showing,
+            // one band over: a wheel notch, or a line of a program's output scrolling the
+            // screen. The pixels move with it and only the bands that have no source are
+            // painted, which is what a scroll costs instead of the whole grid.
+            if bands.len() * 2 > bands_total
+                && let Some((step, paints)) = stepped(cache, frame, bands_total)
+                && paints.len() + 2 < bands_total
+            {
+                shift_pixels(&mut cache.rgba, row_bytes, bands_total, step);
+                bands = paints;
             }
         }
         if bands.is_empty() {
             cache.generation = frame.generation;
             return Some(cache.pixels.clone());
         }
-        let row_bytes = width as usize * line_px as usize * 4;
         if !full {
             // A repainted band starts from nothing, the way the whole image does: the pane's fill
             // shows through wherever no glyph, wash or background wrote a pixel.
@@ -249,6 +261,18 @@ pub(crate) fn picture(
     })
 }
 
+/// The image the last [`picture`] composed, for a test that compares it with a whole compose: the
+/// streamed [`Pixels`] belongs to the runtime, and its bytes are not readable from here.
+#[cfg(test)]
+fn streamed_for_test() -> Vec<u8> {
+    CACHE.with(|slot| {
+        slot.borrow()
+            .as_ref()
+            .map(|cache| cache.rgba.clone())
+            .unwrap_or_default()
+    })
+}
+
 /// The line a band holds: the overscan row above the viewport, the viewport's rows, then the one
 /// below it.
 fn band_line(frame: &Frame, band: usize) -> Option<&Line> {
@@ -258,6 +282,68 @@ fn band_line(frame: &Frame, band: usize) -> Option<&Line> {
         frame.lines.get(band - 1)
     } else {
         frame.trail.as_ref()
+    }
+}
+
+/// How far the viewport stepped between two frames, in bands, with the bands that do not line up
+/// with the image it already holds. Positive is the content moving down the image, which is the
+/// viewport going back into history; negative is content moving up, which is a program's output
+/// scrolling the screen. `None` when no step fits.
+///
+/// Every band it does not list holds exactly what the band it moves there holds: a line that
+/// compares equal is painted equal, which is the rule the per-row diff already trusts.
+fn stepped(cache: &Cache, frame: &Frame, total: usize) -> Option<(isize, Vec<usize>)> {
+    // A step big enough to be a jump (a scrollbar, a page of history) is cheaper painted whole.
+    const MAX_STEP: isize = 8;
+    let last = total as isize;
+    let old = |band: isize| -> Option<&Line> {
+        if band < 0 || band >= last {
+            return None;
+        }
+        let band = band as usize;
+        if band == 0 {
+            cache.lead.as_ref()
+        } else if band + 1 == total {
+            cache.trail.as_ref()
+        } else {
+            cache.rows.get(band - 1)
+        }
+    };
+    let new = |band: usize| -> Option<&Line> { band_line(frame, band) };
+    for step in (1..=MAX_STEP).flat_map(|step| [step, -step]) {
+        if step.abs() >= last {
+            continue;
+        }
+        let mut paints = Vec::new();
+        for band in 0..total {
+            let source = band as isize - step;
+            let same = source >= 0
+                && source < last
+                && match (old(source), new(band)) {
+                    (None, None) => true,
+                    (Some(was), Some(now)) => was == now,
+                    _ => false,
+                };
+            if !same {
+                paints.push(band);
+            }
+        }
+        // A scroll paints the bands that entered at an edge; anything past that is not a step.
+        if paints.len() as isize <= step.abs() + 2 {
+            return Some((step, paints));
+        }
+    }
+    None
+}
+
+/// Moves the image by `step` bands in place: what a scroll keeps is the pixels it already has.
+fn shift_pixels(rgba: &mut [u8], row_bytes: usize, total: usize, step: isize) {
+    if step > 0 {
+        let step = step as usize;
+        rgba.copy_within(0..(total - step) * row_bytes, step * row_bytes);
+    } else {
+        let step = (-step) as usize;
+        rgba.copy_within(step * row_bytes..total * row_bytes, 0);
     }
 }
 
