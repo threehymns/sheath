@@ -6,7 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use super::atlas::{Atlas, Glyph};
 use super::{Palette, rgb};
-use crate::term::grid::{CursorShape, Line, Pen, UnderlineKind};
+use crate::term::grid::{Line, Pen, UnderlineKind};
 
 /// The glyph's em box as a fraction of the row, and the baseline's place down the row. Both are
 /// the same numbers the text path's font box produces at the sizes the pane measures.
@@ -46,94 +46,6 @@ impl<'a> Surface<'a> {
             width,
             height,
             bg,
-        }
-    }
-
-    /// Draws the cursor cell as a wash over what is already in it, in the shape the program
-    /// selected: a block, a hollow block's edges, a bar at the cell's left, or a bottom rule.
-    pub(super) fn cursor(
-        &mut self,
-        cell: u16,
-        cell_px: u32,
-        line_px: u32,
-        color: [u8; 3],
-        alpha: u8,
-        shape: CursorShape,
-    ) {
-        let x0 = i32::from(cell) * cell_px as i32;
-        let x1 = x0 + cell_px as i32;
-        let y1 = line_px as i32;
-        match shape {
-            CursorShape::Block => self.blend(Rect { x0, y0: 0, x1, y1 }, color, alpha),
-            CursorShape::Hollow => {
-                let edge = (cell_px / 12).max(2) as i32;
-                self.blend(
-                    Rect {
-                        x0,
-                        y0: 0,
-                        x1,
-                        y1: edge,
-                    },
-                    color,
-                    alpha,
-                );
-                self.blend(
-                    Rect {
-                        x0,
-                        y0: y1 - edge,
-                        x1,
-                        y1,
-                    },
-                    color,
-                    alpha,
-                );
-                self.blend(
-                    Rect {
-                        x0,
-                        y0: 0,
-                        x1: x0 + edge,
-                        y1,
-                    },
-                    color,
-                    alpha,
-                );
-                self.blend(
-                    Rect {
-                        x0: x1 - edge,
-                        y0: 0,
-                        x1,
-                        y1,
-                    },
-                    color,
-                    alpha,
-                );
-            }
-            CursorShape::Bar => {
-                let width = (cell_px / 8).max(2) as i32;
-                self.blend(
-                    Rect {
-                        x0,
-                        y0: 0,
-                        x1: x0 + width,
-                        y1,
-                    },
-                    color,
-                    alpha,
-                );
-            }
-            CursorShape::Underline => {
-                let thickness = (line_px / 14).max(2) as i32;
-                self.blend(
-                    Rect {
-                        x0,
-                        y0: y1 - thickness,
-                        x1,
-                        y1,
-                    },
-                    color,
-                    alpha,
-                );
-            }
         }
     }
 

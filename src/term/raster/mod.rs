@@ -14,7 +14,8 @@
 //!
 //! The image is kept between frames: a row whose [`Line`] did not change keeps the pixels it was
 //! painted with, so an echo or a fractional scroll costs the bands that actually changed instead
-//! of the whole screen.
+//! of the whole screen. The cursor is not part of it — the view draws that over the image — so
+//! its blink and its moves cost no upload at all.
 
 mod atlas;
 mod image;
@@ -28,7 +29,7 @@ use std::cell::RefCell;
 use rune::Pixels;
 use rune::color::srgb_encode;
 
-use crate::term::grid::{CursorShape, Frame, ImageLayer, Line};
+use crate::term::grid::{Frame, ImageLayer, Line};
 
 use atlas::Atlas;
 use image::paint_image;
@@ -37,10 +38,6 @@ use paint::{Surface, glyph_size, paint_line};
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Palette {
     pub bg: [u8; 3],
-    pub cursor: [u8; 3],
-    /// Alpha, 0-255, of the cursor over the cell. A focused pane's cursor is stronger than an
-    /// unfocused one's, matching the text path's two fills.
-    pub cursor_alpha: u8,
     pub selection: [u8; 3],
     /// The wash under a search match, stronger on the one the search is on.
     pub search: [u8; 3],
@@ -65,10 +62,6 @@ struct Stamp {
     cell_px: u32,
     line_px: u32,
     palette: Palette,
-    cursor: Option<(u16, u16)>,
-    cursor_shape: CursorShape,
-    /// The colour a program gave the cursor with OSC 12, when it gave one.
-    cursor_color: Option<[u8; 3]>,
 }
 
 /// The raster and the image it last produced, which the pane streams until the grid changes.
@@ -167,9 +160,6 @@ pub(crate) fn picture(
             cell_px,
             line_px,
             palette,
-            cursor: on_screen(frame),
-            cursor_shape: frame.cursor_shape,
-            cursor_color: frame.cursor_color.map(rgb),
         };
         let images = !frame.images.is_empty();
         let geometry_same = cache.drawn == Some(stamp)
@@ -244,19 +234,6 @@ pub(crate) fn picture(
     })
 }
 
-/// The cursor's cell, when it is on the screen instead of past an edge.
-fn on_screen(frame: &Frame) -> Option<(u16, u16)> {
-    frame
-        .cursor
-        .filter(|(x, y)| *x < frame.cols && *y < frame.rows)
-}
-
-/// The band the cursor's cell is in: the lead row is band zero, so a viewport row is one past
-/// it.
-fn cursor_band(frame: &Frame) -> Option<usize> {
-    on_screen(frame).map(|(_, y)| usize::from(y) + 1)
-}
-
 /// The line a band holds: the overscan row above the viewport, the viewport's rows, then the one
 /// below it.
 fn band_line(frame: &Frame, band: usize) -> Option<&Line> {
@@ -293,8 +270,7 @@ struct Geometry {
     scale: f32,
 }
 
-/// What one paint pass covers: every band, or only the bands that changed, and the cursor drawn
-/// last.
+/// What one paint pass covers: every band, or only the bands that changed.
 struct Pass<'a> {
     palette: Palette,
     bands: &'a [usize],
@@ -382,7 +358,7 @@ impl Raster {
         self.atlas.preload(frame, size, pass.bands);
         let atlas = &self.atlas;
         let row_bytes = width as usize * 4 * line_px as usize;
-        // Only a band per frame is the common case (an echo, a cursor), and spawning workers for
+        // Only a band per frame is the common case (an echo, a scroll), and spawning workers for
         // it costs more than the row does.
         let workers = if pass.bands.len() < 8 {
             1
@@ -431,8 +407,7 @@ impl Raster {
             });
         }
         // A placement above the text is drawn last, over the glyphs, which is where a plain
-        // `a=T` image lands. The cursor goes after even that, so the pane always shows where the
-        // cursor is.
+        // `a=T` image lands.
         if pass.full {
             for placement in frame
                 .images
@@ -449,28 +424,6 @@ impl Raster {
                     pass.palette.bg,
                 );
             }
-        }
-        if let (Some(band), Some((x, _))) = (cursor_band(frame), on_screen(frame))
-            && (pass.full || pass.bands.contains(&band))
-        {
-            let at = band * row_bytes;
-            let mut surface = Surface::new(
-                &mut rgba[at..at + row_bytes],
-                width,
-                line_px,
-                pass.palette.bg,
-            );
-            // A program that set a cursor colour with OSC 12 draws it in that, not in the
-            // theme's; the theme's is only the colour the shell starts with.
-            let color = frame.cursor_color.map(rgb).unwrap_or(pass.palette.cursor);
-            surface.cursor(
-                x,
-                cell_px,
-                line_px,
-                color,
-                pass.palette.cursor_alpha,
-                frame.cursor_shape,
-            );
         }
     }
 }

@@ -8,8 +8,6 @@ use crate::term::grid::{Pen, Run, Shape, UnderlineKind};
 fn palette() -> Palette {
     Palette {
         bg: [0, 0, 0],
-        cursor: [255, 255, 255],
-        cursor_alpha: 140,
         selection: [255, 255, 255],
         search: [255, 255, 0],
     }
@@ -249,9 +247,10 @@ fn a_shape_and_a_background_cover_their_cells() {
     );
 }
 
-/// The selection is a wash and the cursor a stronger one, both over the cell beneath them.
+/// The selection is a wash over the cell beneath it. The cursor is an element of the view drawn
+/// over the grid, so the image leaves its cell untouched.
 #[test]
-fn selection_and_cursor_are_washes_over_the_cell() {
+fn the_selection_is_a_wash_over_the_cell() {
     let mut line = Line {
         text: "  ".to_owned(),
         ..Line::default()
@@ -274,13 +273,8 @@ fn selection_and_cursor_are_washes_over_the_cell() {
     );
     assert_eq!(
         pixel(&rgba, width, 12, 22),
-        [140, 140, 140, 255],
-        "the cursor's 55% wash, on the row below the overscan"
-    );
-    assert_eq!(
-        pixel(&rgba, width, 12, 2),
         [0, 0, 0, 0],
-        "and an untouched cell stays transparent for the pane's fill"
+        "the cursor's cell is left transparent for the view to draw"
     );
 }
 
