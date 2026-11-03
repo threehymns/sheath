@@ -58,12 +58,14 @@ impl Engine {
         // shapes even though the grid's size is the same, so every row is read again.
         self.metrics = metrics;
         let _ = self.vt.resize(cols, rows, self.cell.0, self.cell.1);
-        let _ = self.master.resize(PtySize {
-            rows,
-            cols,
-            pixel_width: (cols as f32 * cell.0) as u16,
-            pixel_height: (rows as f32 * cell.1) as u16,
-        });
+        if let Some(master) = self.master.as_mut() {
+            let _ = master.resize(PtySize {
+                rows,
+                cols,
+                pixel_width: (cols as f32 * cell.0) as u16,
+                pixel_height: (rows as f32 * cell.1) as u16,
+            });
+        }
         self.applied = 0;
         self.anchor = None;
         self.lead = None;

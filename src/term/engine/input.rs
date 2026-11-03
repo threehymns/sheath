@@ -48,9 +48,11 @@ impl Engine {
         {
             self.keybuf.clear();
         }
-        if !self.keybuf.is_empty() {
-            let _ = self.writer.write_all(&self.keybuf);
-            let _ = self.writer.flush();
+        if !self.keybuf.is_empty()
+            && let Some(writer) = self.writer.as_mut()
+        {
+            let _ = writer.write_all(&self.keybuf);
+            let _ = writer.flush();
         }
         true
     }
@@ -68,9 +70,11 @@ impl Engine {
             focus::Event::Lost
         };
         let mut buf = [0u8; 8];
-        if let Ok(len) = event.encode(&mut buf) {
-            let _ = self.writer.write_all(&buf[..len]);
-            let _ = self.writer.flush();
+        if let Ok(len) = event.encode(&mut buf)
+            && let Some(writer) = self.writer.as_mut()
+        {
+            let _ = writer.write_all(&buf[..len]);
+            let _ = writer.flush();
         }
     }
 

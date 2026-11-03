@@ -61,9 +61,11 @@ pub struct Engine {
     render: RenderState,
     keys: KeyEncoder,
     mouse: mouse::Encoder,
-    master: Box<dyn MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
-    child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// The shell's process handles. They are options because [`kill`](Engine::kill) hands them
+    /// to a helper thread, leaving the engine without a process to talk to.
+    master: Option<Box<dyn MasterPty + Send>>,
+    writer: Option<Box<dyn Write + Send>>,
+    child: Option<Box<dyn portable_pty::Child + Send + Sync>>,
     /// Bytes the reader thread has taken off the PTY and not yet parsed.
     incoming: Arc<Incoming>,
     /// Bytes parsed since the shell started, for the frame-rate and lag measurement.
@@ -207,9 +209,9 @@ impl Engine {
             render: RenderState::new().map_err(|err| err.to_string())?,
             keys: KeyEncoder::new().map_err(|err| err.to_string())?,
             mouse: mouse::Encoder::new().map_err(|err| err.to_string())?,
-            master: session.master,
-            writer: session.writer,
-            child: session.child,
+            master: Some(session.master),
+            writer: Some(session.writer),
+            child: Some(session.child),
             incoming: session.incoming,
             parsed: 0,
             parse_time: Duration::ZERO,
@@ -277,10 +279,12 @@ impl Engine {
         let at = Instant::now();
         let mut replies = Vec::new();
         changed |= self.parse(&mut replies, at + PARSE_BUDGET);
-        if !replies.is_empty() {
-            let _ = self.writer.write_all(&replies);
+        if let Some(writer) = self.writer.as_mut() {
+            if !replies.is_empty() {
+                let _ = writer.write_all(&replies);
+            }
+            let _ = writer.flush();
         }
-        let _ = self.writer.flush();
         if let Ok(title) = self.vt.title()
             && title != self.title
         {
@@ -288,7 +292,8 @@ impl Engine {
             changed = true;
         }
         if !self.exited
-            && let Ok(Some(_)) = self.child.try_wait()
+            && let Some(child) = self.child.as_mut()
+            && let Ok(Some(_)) = child.try_wait()
         {
             self.exited = true;
             changed = true;
@@ -315,9 +320,25 @@ impl Engine {
     /// Ends the shell behind the pane, for a close rather than a collapse that leaves it
     /// running. Dropping the PTY hangs the child up, but a kill is what stops a program that
     /// ignores that.
+    ///
+    /// The press does not wait for any of it: the PTY handles and the child go to a helper
+    /// thread, which signals the shell and closes the descriptors there. Waiting for a process
+    /// to go is what a close would otherwise block the press on.
     pub fn kill(&mut self) {
         pty::close(&self.incoming);
-        let _ = self.child.kill();
+        let master = self.master.take();
+        let writer = self.writer.take();
+        let child = self.child.take();
+        if master.is_none() && writer.is_none() && child.is_none() {
+            return;
+        }
+        std::thread::spawn(move || {
+            if let Some(mut child) = child {
+                let _ = child.kill();
+            }
+            drop(writer);
+            drop(master);
+        });
     }
 
     pub fn take_bell(&self) -> bool {
@@ -367,8 +388,10 @@ impl Engine {
     }
 
     pub fn write(&mut self, bytes: &[u8]) {
-        let _ = self.writer.write_all(bytes);
-        let _ = self.writer.flush();
+        if let Some(writer) = self.writer.as_mut() {
+            let _ = writer.write_all(bytes);
+            let _ = writer.flush();
+        }
     }
 
     /// Applies the theme the app is drawing in, for a switch between light and dark while the

@@ -36,9 +36,13 @@ impl Terminal {
     /// Hides the pane and ends its shell, so opening it again starts a fresh session in the
     /// folder on screen.
     pub fn close(&mut self) {
+        // The engine leaves before the collapse, so losing focus does not write a report into a
+        // PTY that is about to be hung up.
+        #[cfg(not(target_arch = "wasm32"))]
+        let engine = self.engine.take();
         self.collapse();
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(mut engine) = self.engine.take() {
+        if let Some(mut engine) = engine {
             engine.kill();
         }
         self.frame = Frame::default();
