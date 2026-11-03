@@ -146,11 +146,8 @@ pub struct Engine {
     search_pending: bool,
     /// The kitty graphics placements, walked when a frame is read back.
     placements: Option<ghostty_vt::kitty::graphics::PlacementIterator>,
-    /// Decoded pixels per image id, with the image generation they were read at.
+    /// Decoded pixels per placed image id, with the image generation they were read at.
     images: graphics::ImageCache,
-    /// The image storage generation the last frame was read from. A transmit or a delete raises
-    /// no event, so this is how a drain notices that the screen changed.
-    graphics: u64,
 }
 
 /// What the pane is doing behind the frame it just drew. `lag` is the honest latency number: a
@@ -289,7 +286,6 @@ impl Engine {
             search_pending: false,
             placements: ghostty_vt::kitty::graphics::PlacementIterator::new().ok(),
             images: HashMap::new(),
-            graphics: 0,
         })
     }
 
@@ -327,18 +323,6 @@ impl Engine {
             && title != self.title
         {
             self.title = title.to_owned();
-            changed = true;
-        }
-        // A program that transmits, replaces or deletes an image raises no event: the storage's
-        // generation is the only sign, and without it an `icat` would stay invisible until the
-        // next keypress.
-        if self
-            .vt
-            .kitty_graphics()
-            .ok()
-            .and_then(|graphics| graphics.generation().ok())
-            .is_some_and(|generation| generation != self.graphics)
-        {
             changed = true;
         }
         if !self.exited

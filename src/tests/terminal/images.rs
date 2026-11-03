@@ -37,6 +37,7 @@ fn an_image_transmitted_at_the_cursor_reaches_the_frame() {
     let frame = engine.frame();
     assert_eq!(frame.images.len(), 1, "one image was placed");
     let placement = &frame.images[0];
+    assert_eq!(placement.image, 1, "the frame names the image it draws");
     assert_eq!((placement.data.width, placement.data.height), (1, 1));
     assert_eq!(placement.data.rgba, vec![255, 0, 0, 255]);
     assert_eq!(
@@ -117,6 +118,27 @@ fn deleting_the_images_empties_the_frame() {
         frame.images.is_empty(),
         "a delete-all leaves nothing to draw"
     );
+}
+
+/// A screen with no images asks for no redraw: the pane only learns that an image arrived from
+/// the bytes that carried it, so an idle terminal is not kept awake by the image storage.
+#[test]
+fn a_plain_screen_settles_with_nothing_to_redraw() {
+    let (_dir, mut engine) = engine(40, 10);
+    engine.feed(b"\x1b[2J\x1b[Hhello\r\n");
+    // The shell's own prompt can land for a moment after the pane opens; wait for the screen to
+    // settle, then check that an idle drain reports nothing.
+    let mut settled = false;
+    for _ in 0..100 {
+        if !engine.drain() {
+            settled = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    assert!(settled, "the pane settles");
+    assert!(!engine.drain(), "an idle drain reports no change");
+    assert!(!engine.drain(), "and keeps reporting none");
 }
 
 /// A transmit-only action stores the image without showing it, so nothing reaches the frame

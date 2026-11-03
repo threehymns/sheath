@@ -107,6 +107,9 @@ pub enum ImageLayer {
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 #[derive(Clone, Debug, PartialEq)]
 pub struct Placement {
+    /// The image it draws. The engine keeps decoded pixels only for the images still placed, so
+    /// it needs the id on the frame to tell a live copy from one that is gone.
+    pub image: u32,
     pub data: std::sync::Arc<ImagePixels>,
     pub layer: ImageLayer,
     /// The z-index that ordered it inside its layer.

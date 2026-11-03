@@ -33,17 +33,10 @@ impl Engine {
             return;
         };
         if generation == 0 {
-            // Nothing was ever transmitted, so nothing is cached and nothing is placed.
+            // Nothing was ever transmitted, so nothing is placed and nothing is cached.
             self.images.clear();
-            self.graphics = generation;
             return;
         }
-        if generation != self.graphics {
-            // A transmit or a delete invalidates the whole cache: an image that is gone would
-            // otherwise keep its decoded copy for the life of the shell.
-            self.images.clear();
-        }
-        self.graphics = generation;
         let Some(mut place) = self.placements.take() else {
             return;
         };
@@ -71,6 +64,7 @@ impl Engine {
                     continue;
                 };
                 out.images.push(Placement {
+                    image: id,
                     data,
                     layer: layer_of(z),
                     z,
@@ -90,6 +84,13 @@ impl Engine {
         self.placements = Some(place);
         out.images
             .sort_by_key(|placement| (placement.layer, placement.z));
+        // Keep the decoded pixels only for the images still on screen: a delete, or a placement
+        // that scrolled away, must not hold its pixels for the life of the shell, and an image
+        // that is still placed keeps its copy, so a new animation frame decodes only itself
+        // instead of the whole screen's worth.
+        let placed = &out.images;
+        self.images
+            .retain(|id, _| placed.iter().any(|placement| placement.image == *id));
     }
 }
 

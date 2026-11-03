@@ -104,6 +104,7 @@ fn images_are_drawn_at_their_place_size_and_layer() {
         rgba: [0u8, 255, 0, 255].repeat(4),
     });
     let placement = |layer, x, w| Placement {
+        image: 1,
         data: Arc::clone(&green),
         layer,
         z: 0,
