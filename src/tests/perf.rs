@@ -189,7 +189,13 @@ fn perf_filter_parts() {
         }),
     );
     time(
-        "id set",
+        "one id against visible",
+        Box::new(|| {
+            black_box(visible.iter().any(|&i| entries[i].id == "f:missing"));
+        }),
+    );
+    time(
+        "set of every visible id",
         Box::new(|| {
             black_box(
                 visible
@@ -200,7 +206,7 @@ fn perf_filter_parts() {
         }),
     );
     time(
-        "name lowercase, starts_with",
+        "name lowercase (the old way)",
         Box::new(|| {
             black_box(
                 visible
@@ -211,7 +217,7 @@ fn perf_filter_parts() {
         }),
     );
     time(
-        "name folded, starts_with",
+        "name folded (what runs)",
         Box::new(|| {
             black_box(
                 visible
