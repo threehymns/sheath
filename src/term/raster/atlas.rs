@@ -25,6 +25,13 @@ use crate::term::grid::Frame;
 /// would have drawn: the theme's mono, which draws every ordinary cell.
 const PRIMARY: &[u8] = crate::FONTS[1];
 
+/// Whether a run is printable ASCII: every cell is one narrow glyph, so it needs neither
+/// segmentation nor shaping, and its glyphs can be read by the byte.
+pub(super) fn ascii_run(text: &str) -> bool {
+    text.bytes()
+        .all(|byte| byte.is_ascii_graphic() || byte == b' ')
+}
+
 /// One glyph's image, placed around the pen.
 pub(super) struct Glyph {
     pub(super) left: i32,
@@ -69,6 +76,18 @@ struct Shape {
     glyphs: Vec<(u16, i32)>,
 }
 
+/// The glyph slot of each printable ASCII character, at one size and weight.
+struct AsciiGlyphs {
+    size: u32,
+    bold: bool,
+    slots: [u32; 128],
+}
+
+/// A slot never asked for, and one asked for that found no glyph: remembering the second is
+/// what keeps a character no face draws from being rasterized again on every frame.
+const ASCII_UNLOADED: u32 = u32::MAX;
+const ASCII_MISSING: u32 = u32::MAX - 1;
+
 pub(super) struct Atlas {
     /// The theme's mono first, then the fallbacks.
     faces: Vec<Face>,
@@ -87,6 +106,9 @@ pub(super) struct Atlas {
     /// one string hash per cell and a scan over one or two entries, which is what keeps
     /// ordinary text as cheap as it was before clusters.
     placed: HashMap<Box<str>, Vec<Drawn>>,
+    /// Printable ASCII glyphs by byte, at the sizes and weights they were drawn at: ordinary
+    /// terminal text, read with an index instead of a hash of a one-character string.
+    ascii: Vec<AsciiGlyphs>,
 }
 
 impl Atlas {
@@ -100,6 +122,7 @@ impl Atlas {
             images: HashMap::new(),
             slots: Vec::new(),
             placed: HashMap::new(),
+            ascii: Vec::new(),
         };
         // The colour emoji face before the Nerd Font: an emoji is drawn by the font made for
         // it, and the private-use icons a prompt prints by the font patched for them.
@@ -125,6 +148,10 @@ impl Atlas {
             };
             for run in &line.runs {
                 let text = line.text.get(run.start..run.end).unwrap_or_default();
+                if ascii_run(text) {
+                    self.preload_ascii(text, size, run.pen.bold);
+                    continue;
+                }
                 for cluster in text.graphemes(true) {
                     self.load(cluster, size, run.pen.bold);
                 }
@@ -146,6 +173,71 @@ impl Atlas {
     /// A cluster's glyph image, as preloaded.
     pub(super) fn glyph(&self, slot: usize) -> Option<&Glyph> {
         self.slots.get(slot).and_then(Option::as_ref)
+    }
+
+    /// A printable ASCII cell's glyph slot, as [`preload`](Self::preload) filled it.
+    pub(super) fn ascii_glyph(&self, byte: u8, size: u32, bold: bool) -> Option<usize> {
+        let set = self
+            .ascii
+            .iter()
+            .find(|set| set.size == size && set.bold == bold)?;
+        match set.slots.get(usize::from(byte)).copied()? {
+            ASCII_UNLOADED | ASCII_MISSING => None,
+            slot => Some(slot as usize),
+        }
+    }
+
+    /// Rasterizes the glyphs an ASCII run needs, before the row workers read the atlas.
+    fn preload_ascii(&mut self, text: &str, size: u32, bold: bool) {
+        for byte in text.bytes() {
+            if byte != b' ' {
+                self.ascii_slot(byte, size, bold);
+            }
+        }
+    }
+
+    /// `byte`'s slot at `size` and `bold`, rasterized the first time. The set is found by a
+    /// scan of one or two entries, which is cheaper than hashing a one-character string for
+    /// every cell of every row.
+    fn ascii_slot(&mut self, byte: u8, size: u32, bold: bool) -> u32 {
+        if !byte.is_ascii() {
+            return ASCII_MISSING;
+        }
+        let at = match self
+            .ascii
+            .iter()
+            .position(|set| set.size == size && set.bold == bold)
+        {
+            Some(at) => at,
+            None => {
+                self.ascii.push(AsciiGlyphs {
+                    size,
+                    bold,
+                    slots: [ASCII_UNLOADED; 128],
+                });
+                self.ascii.len() - 1
+            }
+        };
+        let slot = self.ascii[at].slots[usize::from(byte)];
+        if slot != ASCII_UNLOADED {
+            return slot;
+        }
+        let cluster = char::from(byte).to_string();
+        // Remember it where shaping would have put it as well: a frame that marks the cell's
+        // column wide draws the character through the cluster path, which reads `placed`.
+        let placed = self.place(&cluster, size, bold);
+        let slot = placed
+            .first()
+            .map_or(ASCII_MISSING, |placed| placed.slot as u32);
+        let drawn = self.placed.entry(cluster.into()).or_default();
+        if !drawn
+            .iter()
+            .any(|drawn| drawn.size == size && drawn.bold == bold)
+        {
+            drawn.push(Drawn { size, bold, placed });
+        }
+        self.ascii[at].slots[usize::from(byte)] = slot;
+        slot
     }
 
     fn load(&mut self, cluster: &str, size: u32, bold: bool) {

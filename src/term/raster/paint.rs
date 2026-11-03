@@ -4,7 +4,7 @@
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use super::atlas::{Atlas, Glyph};
+use super::atlas::{Atlas, Glyph, ascii_run};
 use super::{Palette, rgb};
 use crate::term::grid::{Line, Pen, UnderlineKind};
 
@@ -223,48 +223,83 @@ pub(super) fn paint_line(
         let color = pen_color(run.pen, palette);
         let text = line.text.get(run.start..run.end).unwrap_or_default();
         let mut col = u32::from(run.cols.0);
-        // One cell holds one grapheme cluster, so the text is walked by cluster: a `👍🏽` or an
-        // `é` written as two codepoints is one cell, one advance, however many characters it
-        // takes to write.
-        for cluster in text.graphemes(true) {
-            // A wide cluster covers two cells and the frame says which ones, so the cell after
-            // it starts where the grid puts it instead of in the cell it also covers.
-            let wide = line
-                .wide
-                .binary_search_by_key(&col, |column| u32::from(*column))
-                .is_ok();
-            let advance = if wide { 2 } else { 1 };
-            let mut chars = cluster.chars();
-            let first = chars.next();
-            if first.is_none_or(|first| first.is_control() || first == ' ' || format_char(first)) {
-                col = col.saturating_add(advance);
-                continue;
-            }
-            for placed in atlas.cluster(cluster, size, run.pen.bold) {
-                let Some(glyph) = atlas.glyph(placed.slot) else {
-                    continue;
-                };
-                let at = col;
-                // A wide glyph owns two cells. A colour emoji's font advances it by one, so it
-                // is centred across both rather than drawn against the left edge of two.
-                let left = if wide && glyph.color {
-                    at as i32 * cell_px as i32 + (2 * cell_px as i32 - glyph.width as i32) / 2
+        // A run with no wide column in it is one cell per character, which is every ordinary
+        // row: read the atlas by the byte instead of segmenting the text and hashing a
+        // one-character string for every cell.
+        let first_wide = line
+            .wide
+            .partition_point(|column| u32::from(*column) < u32::from(run.cols.0));
+        let wide_here = line
+            .wide
+            .get(first_wide)
+            .is_some_and(|column| u32::from(*column) < u32::from(run.cols.1));
+        if ascii_run(text) && !wide_here {
+            let shear = if run.pen.italic { ITALIC_SHEAR } else { 0.0 };
+            for byte in text.bytes() {
+                let glyph = if byte == b' ' {
+                    None
                 } else {
-                    at as i32 * cell_px as i32 + glyph.left
+                    atlas
+                        .ascii_glyph(byte, size, run.pen.bold)
+                        .and_then(|slot| atlas.glyph(slot))
                 };
-                surface.blit(
-                    left + placed.x,
-                    baseline - glyph.top,
-                    glyph,
-                    color,
-                    if run.pen.italic && !glyph.color {
-                        ITALIC_SHEAR
-                    } else {
-                        0.0
-                    },
-                );
+                if let Some(glyph) = glyph {
+                    surface.blit(
+                        col as i32 * cell_px as i32 + glyph.left,
+                        baseline - glyph.top,
+                        glyph,
+                        color,
+                        shear,
+                    );
+                }
+                col = col.saturating_add(1);
             }
-            col = col.saturating_add(advance);
+        } else {
+            // One cell holds one grapheme cluster, so the text is walked by cluster: a `👍🏽` or an
+            // `é` written as two codepoints is one cell, one advance, however many characters it
+            // takes to write.
+            for cluster in text.graphemes(true) {
+                // A wide cluster covers two cells and the frame says which ones, so the cell after
+                // it starts where the grid puts it instead of in the cell it also covers.
+                let wide = line
+                    .wide
+                    .binary_search_by_key(&col, |column| u32::from(*column))
+                    .is_ok();
+                let advance = if wide { 2 } else { 1 };
+                let mut chars = cluster.chars();
+                let first = chars.next();
+                if first
+                    .is_none_or(|first| first.is_control() || first == ' ' || format_char(first))
+                {
+                    col = col.saturating_add(advance);
+                    continue;
+                }
+                for placed in atlas.cluster(cluster, size, run.pen.bold) {
+                    let Some(glyph) = atlas.glyph(placed.slot) else {
+                        continue;
+                    };
+                    let at = col;
+                    // A wide glyph owns two cells. A colour emoji's font advances it by one, so it
+                    // is centred across both rather than drawn against the left edge of two.
+                    let left = if wide && glyph.color {
+                        at as i32 * cell_px as i32 + (2 * cell_px as i32 - glyph.width as i32) / 2
+                    } else {
+                        at as i32 * cell_px as i32 + glyph.left
+                    };
+                    surface.blit(
+                        left + placed.x,
+                        baseline - glyph.top,
+                        glyph,
+                        color,
+                        if run.pen.italic && !glyph.color {
+                            ITALIC_SHEAR
+                        } else {
+                            0.0
+                        },
+                    );
+                }
+                col = col.saturating_add(advance);
+            }
         }
         let x0 = i32::from(run.cols.0) * cell_px as i32;
         let x1 = i32::from(run.cols.1) * cell_px as i32;
