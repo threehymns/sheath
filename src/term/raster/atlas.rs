@@ -10,8 +10,8 @@ use swash::scale::{Render, ScaleContext, Source};
 use crate::term::grid::Frame;
 
 /// The face the pane registers as its mono font, so a glyph here is the glyph the text path
-/// would have drawn.
-const FONT: &[u8] = crate::FONTS[1];
+/// would have drawn: the theme's mono, which draws every ordinary cell.
+const PRIMARY: &[u8] = crate::FONTS[1];
 
 pub(super) struct Glyph {
     pub(super) left: i32,
@@ -23,6 +23,8 @@ pub(super) struct Glyph {
 
 pub(super) struct Atlas {
     font: FontRef<'static>,
+    /// The Nerd Font the system has, for the private-use glyphs the mono has none of.
+    fallback: Option<FontRef<'static>>,
     context: ScaleContext,
     glyphs: HashMap<(char, u32, bool), Option<Glyph>>,
 }
@@ -30,7 +32,9 @@ pub(super) struct Atlas {
 impl Atlas {
     pub(super) fn new() -> Atlas {
         Atlas {
-            font: FontRef::from_index(FONT, 0).expect("the pane's mono face"),
+            font: FontRef::from_index(PRIMARY, 0).expect("the pane's mono face"),
+            fallback: crate::term::fonts::fallback_face()
+                .and_then(|bytes| FontRef::from_index(bytes, 0)),
             context: ScaleContext::new(),
             glyphs: HashMap::new(),
         }
@@ -71,11 +75,8 @@ impl Atlas {
     }
 
     fn rasterize(&mut self, ch: char, size: u32, bold: bool) -> Option<Glyph> {
-        let id = self.font.charmap().map(ch);
-        if id == 0 {
-            return None;
-        }
-        let mut scaler = self.context.builder(self.font).size(size as f32).build();
+        let (font, id) = self.face_for(ch)?;
+        let mut scaler = self.context.builder(font).size(size as f32).build();
         let mut render = Render::new(&[Source::Outline]);
         if bold {
             // There is no bold mono face registered, so a bold run is the regular outline with
@@ -96,5 +97,18 @@ impl Atlas {
             height: image.placement.height,
             mask: image.data,
         })
+    }
+
+    /// The face that draws `ch`: the theme's mono, and only for a character it has no glyph for,
+    /// the installed Nerd Font. Ordinary text never changes face; the private-use icons a prompt
+    /// prints come from the font that was patched for them.
+    fn face_for(&self, ch: char) -> Option<(FontRef<'static>, u16)> {
+        let id = self.font.charmap().map(ch);
+        if id != 0 {
+            return Some((self.font, id));
+        }
+        let fallback = self.fallback?;
+        let id = fallback.charmap().map(ch);
+        (id != 0).then_some((fallback, id))
     }
 }

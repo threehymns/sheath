@@ -67,6 +67,10 @@ struct Cache {
     raster: Raster,
     pixels: Pixels,
     drawn: Option<Stamp>,
+    /// The font generation the atlas was built in. The Nerd Font fallback is found on a thread
+    /// while the window is already drawing, so a cache built before it landed is rebuilt once
+    /// with the face, rather than keeping the bundled one for the session.
+    face: u64,
 }
 
 thread_local! {
@@ -88,11 +92,16 @@ pub(crate) fn picture(
     }
     CACHE.with(|slot| {
         let mut slot = slot.borrow_mut();
-        let cache = slot.get_or_insert_with(|| Cache {
-            raster: Raster::new(),
-            pixels: Pixels::new(),
-            drawn: None,
-        });
+        let face = crate::term::fonts::generation();
+        if slot.as_ref().is_none_or(|cache| cache.face != face) {
+            *slot = Some(Cache {
+                raster: Raster::new(),
+                pixels: Pixels::new(),
+                drawn: None,
+                face,
+            });
+        }
+        let cache = slot.as_mut().expect("the cache was just filled");
         let stamp = Stamp {
             generation: frame.generation,
             cols: frame.cols,

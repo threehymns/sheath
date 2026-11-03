@@ -40,9 +40,10 @@ fn the_cell_is_the_font_cell() {
         (advance - rt.state.term.cell).abs() > 0.0001 || rt.state.term.cell == advance,
         "the cell comes from the font's advance: {advance}"
     );
+    let (_, box_height) = rune::text::measure("M", &[], natural, None);
     assert!(
-        rt.state.term.line < kit.ty.mono.line_height,
-        "the row is the font's box, not the theme's paragraph measure: {}",
+        (rt.state.term.line * scale - (box_height * scale).round()).abs() < 0.01,
+        "the row is the font's own box, not the theme's paragraph measure: {} vs {box_height}",
         rt.state.term.line
     );
 }

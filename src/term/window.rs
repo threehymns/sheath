@@ -191,10 +191,11 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
 
 pub fn launch() {
     rune::set_app_id("dev.sheath.Sheath.Terminal");
+    let (fonts, families) = crate::term::fonts::spec();
     rune::run(rune::AppSpec {
         min_size: Some((480.0, 240.0)),
-        fonts: crate::FONTS,
-        families: rune_theme_opencode::FAMILIES,
+        fonts,
+        families,
         on_key: Some(on_key),
         poll: Some(poll),
         setup: Some(setup),

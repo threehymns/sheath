@@ -2,6 +2,7 @@
 //! texture (or, behind the `text-renderer` feature, Rune text) for the grid. The engine is native
 //! only, so the web build keeps the pane's types and says where the terminal lives.
 
+pub(crate) mod fonts;
 pub(crate) mod grid;
 mod pane;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
