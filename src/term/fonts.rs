@@ -1,10 +1,16 @@
-//! The characters the terminal's own face cannot draw: an installed Nerd Font, as a fallback.
+//! The characters the terminal's own face cannot draw: an installed Nerd Font and the system's
+//! colour emoji font, as fallbacks.
 //!
 //! Prompt glyphs (a branch, a folder, a language mark) are private-use characters only a patched
 //! font draws, and whoever put one on their system did it for their shell. Nothing is bundled:
 //! the face is found in the platform's font directories, then named after the theme's mono in the
 //! family list, so the shaper reaches for it only for a character the mono has no glyph for.
 //! Ordinary text keeps the theme's face, and a machine without a Nerd Font is unchanged.
+//!
+//! The emoji face is looked up the way Rune looks for it — the same file names, in the same font
+//! directories — so a cell's emoji and a Rune text run's emoji come from the same font. Rune's
+//! text renderer finds it itself; the raster build draws cells with its own atlas, so it needs
+//! the bytes.
 //!
 //! Finding it means walking font directories and asking fontconfig, which can take long enough to
 //! be the first thing the user waits on. The walk therefore runs on a thread of its own while the
@@ -25,6 +31,10 @@ struct Face {
 
 #[cfg(not(target_arch = "wasm32"))]
 static FACE: OnceLock<Option<Face>> = OnceLock::new();
+
+/// The system's colour emoji font, found on the same walk as the Nerd Font.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+static EMOJI: OnceLock<Option<Face>> = OnceLock::new();
 
 /// Zero until the walk finishes, one after: the glyph atlas rebuilds with the fallback when this
 /// moves, so a face found after the first frame still reaches the grid. Only the raster build
@@ -67,6 +77,7 @@ pub(crate) fn start() {
                 .name("nerd-fonts".into())
                 .spawn(|| {
                     let _ = face();
+                    let _ = emoji();
                     RESOLVED.store(1, Ordering::Release);
                 });
             if worker.is_err() {
@@ -126,6 +137,13 @@ pub(crate) fn fallback_face() -> Option<&'static [u8]> {
     face_if_ready().map(|face| face.bytes)
 }
 
+/// The system's colour emoji font's bytes, for the atlas. Only the raster build asks: the text
+/// renderer shapes rows with Rune, which finds the emoji font itself.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+pub(crate) fn emoji_face() -> Option<&'static [u8]> {
+    emoji().map(|face| face.bytes)
+}
+
 /// The face when the walk has already found one. Never waits: launch asks this while the worker
 /// may still be walking, and must get the bundled fonts rather than stall on it.
 #[cfg(not(target_arch = "wasm32"))]
@@ -136,6 +154,54 @@ fn face_if_ready() -> Option<&'static Face> {
 #[cfg(not(target_arch = "wasm32"))]
 fn face() -> Option<&'static Face> {
     FACE.get_or_init(find).as_ref()
+}
+
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+fn emoji() -> Option<&'static Face> {
+    EMOJI.get_or_init(find_emoji).as_ref()
+}
+
+/// File-name fragments of the colour emoji font each platform ships, most preferred first. These
+/// are Rune's, so a cell and a Rune text run draw the same emoji.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+fn emoji_names() -> &'static [&'static str] {
+    if cfg!(target_vendor = "apple") {
+        &["applecoloremoji"]
+    } else if cfg!(windows) {
+        &["seguiemj"]
+    } else {
+        // Noto is what most desktops ship; Twemoji is what some distributions install instead.
+        &["notocoloremoji", "twemoji"]
+    }
+}
+
+/// Reads the system's colour emoji font, the first candidate by name then by path so a machine
+/// with several always picks the same one. Rune loads the same file into its font collection.
+#[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+fn find_emoji() -> Option<Face> {
+    let names = emoji_names();
+    let mut candidates: Vec<PathBuf> = font_files()
+        .into_iter()
+        .filter(|path| {
+            file_name(path).is_some_and(|name| names.iter().any(|fragment| name.contains(fragment)))
+        })
+        .collect();
+    candidates.sort();
+    candidates.dedup();
+    for path in candidates {
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let bytes: &'static [u8] = Box::leak(bytes.into_boxed_slice());
+        let Some(font) = swash::FontRef::from_index(bytes, 0) else {
+            continue;
+        };
+        let Some(family) = family(&font) else {
+            continue;
+        };
+        return Some(Face { family, bytes });
+    }
+    None
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -176,20 +242,13 @@ fn find() -> Option<Face> {
         let Some(font) = swash::FontRef::from_index(bytes, 0) else {
             continue;
         };
-        let Some(family) = font
-            .localized_strings()
-            .find(|string| string.id() == swash::StringId::Family)
-            .map(|string| string.to_string())
-        else {
+        let Some(family) = family(&font) else {
             continue;
         };
         if !family.to_lowercase().contains("nerd") {
             continue;
         }
-        return Some(Face {
-            family: Box::leak(family.into_boxed_str()),
-            bytes,
-        });
+        return Some(Face { family, bytes });
     }
     None
 }
@@ -297,6 +356,17 @@ fn font_files() -> Vec<PathBuf> {
         );
     }
     files
+}
+
+/// The font's family name, leaked for the life of the process: the fallback is named by it in
+/// the mono family list.
+#[cfg(not(target_arch = "wasm32"))]
+fn family(font: &swash::FontRef) -> Option<&'static str> {
+    let family = font
+        .localized_strings()
+        .find(|string| string.id() == swash::StringId::Family)
+        .map(|string| string.to_string())?;
+    Some(Box::leak(family.into_boxed_str()))
 }
 
 /// `path`'s file name, lowercased without spaces or dots, for a file a font can be: the way a

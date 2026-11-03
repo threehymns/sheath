@@ -172,9 +172,14 @@ impl<'a> Surface<'a> {
         }
     }
 
-    /// Draws a glyph mask in `color`, sheared to the right at the top for a faux italic. `x`
-    /// and `y` are the top-left of the image, already including the placement.
+    /// Draws a glyph in `color`, sheared to the right at the top for a faux italic. `x` and `y`
+    /// are the top-left of the image, already including the placement. A colour glyph brings its
+    /// own colours, so it is drawn as it is rather than in the run's ink.
     fn blit(&mut self, x: i32, y: i32, glyph: &Glyph, color: [u8; 3], shear: f32) {
+        if glyph.color {
+            self.blit_color(x, y, glyph);
+            return;
+        }
         for row in 0..glyph.height {
             let py = y + row as i32;
             if py < 0 || py >= self.height as i32 {
@@ -192,11 +197,38 @@ impl<'a> Surface<'a> {
                 continue;
             }
             let mask_start = (row * glyph.width + skip) as usize;
-            let mask = &glyph.mask[mask_start..mask_start + visible as usize];
+            let mask = &glyph.pixels[mask_start..mask_start + visible as usize];
             let at = ((py as u32 * self.width + (left + skip as i32) as u32) * 4) as usize;
             let line = &mut self.dst[at..at + visible as usize * 4];
             for (pixel, &alpha) in line.as_chunks_mut::<4>().0.iter_mut().zip(mask) {
                 over(pixel, color, alpha, self.bg);
+            }
+        }
+    }
+
+    /// Blits an RGBA glyph (an emoji) over what is already there, in its own colours.
+    fn blit_color(&mut self, x: i32, y: i32, glyph: &Glyph) {
+        for row in 0..glyph.height {
+            let py = y + row as i32;
+            if py < 0 || py >= self.height as i32 {
+                continue;
+            }
+            let skip = (-x).clamp(0, glyph.width as i32) as u32;
+            let visible = (glyph.width - skip).min((self.width as i32 - x.max(0)).max(0) as u32);
+            if visible == 0 {
+                continue;
+            }
+            let start = ((row * glyph.width + skip) * 4) as usize;
+            let src = &glyph.pixels[start..start + visible as usize * 4];
+            let at = ((py as u32 * self.width + (x + skip as i32) as u32) * 4) as usize;
+            let line = &mut self.dst[at..at + visible as usize * 4];
+            for (pixel, rgba) in line
+                .as_chunks_mut::<4>()
+                .0
+                .iter_mut()
+                .zip(src.as_chunks::<4>().0)
+            {
+                over_rgba(pixel, rgba, self.bg);
             }
         }
     }
@@ -301,12 +333,23 @@ pub(super) fn paint_line(
                 col
             };
             if let Some(glyph) = atlas.glyph(ch, size, run.pen.bold) {
+                // A wide glyph owns two cells. A colour emoji's font advances it by one, so it
+                // is centred across both rather than drawn against the left edge of two.
+                let left = if wide && glyph.color {
+                    at as i32 * cell_px as i32 + (2 * cell_px as i32 - glyph.width as i32) / 2
+                } else {
+                    at as i32 * cell_px as i32 + glyph.left
+                };
                 surface.blit(
-                    at as i32 * cell_px as i32 + glyph.left,
+                    left,
                     baseline - glyph.top,
                     glyph,
                     color,
-                    if run.pen.italic { ITALIC_SHEAR } else { 0.0 },
+                    if run.pen.italic && !glyph.color {
+                        ITALIC_SHEAR
+                    } else {
+                        0.0
+                    },
                 );
             }
             if !combining(ch) {
@@ -464,6 +507,26 @@ fn over(pixel: &mut [u8; 4], color: [u8; 3], alpha: u8, bg: [u8; 3]) {
             let under = u32::from(pixel[channel]);
             pixel[channel] = ((u32::from(color[channel]) * src + under * inv) / 255) as u8;
         }
+    }
+    pixel[3] = 255;
+}
+
+/// Blends a straight-alpha RGBA pixel onto one, flattening it onto the pane's fill when nothing
+/// has written the pixel yet, so the image stays opaque where a glyph was drawn.
+fn over_rgba(pixel: &mut [u8; 4], src: &[u8; 4], bg: [u8; 3]) {
+    let alpha = u32::from(src[3]);
+    if alpha == 0 {
+        return;
+    }
+    let inv = 255 - alpha;
+    let under = if pixel[3] == 0 {
+        bg
+    } else {
+        [pixel[0], pixel[1], pixel[2]]
+    };
+    for channel in 0..3 {
+        pixel[channel] =
+            ((u32::from(src[channel]) * alpha + u32::from(under[channel]) * inv) / 255) as u8;
     }
     pixel[3] = 255;
 }
