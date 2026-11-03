@@ -84,25 +84,79 @@ impl Engine {
         button: Option<mouse::Button>,
         at: (u16, u16),
         shift: bool,
+    ) -> bool {
+        self.prepare_mouse(action, button, at, shift);
+        let buffers = &mut self.buffers;
+        buffers.pointer_bytes.clear();
+        if self
+            .mouse
+            .encode_to_vec(&buffers.pointer, &mut buffers.pointer_bytes)
+            .is_err()
+        {
+            return false;
+        }
+        if buffers.pointer_bytes.is_empty() {
+            return false;
+        }
+        if let Some(writer) = self.writer.as_mut() {
+            let _ = writer.write_all(&buffers.pointer_bytes);
+            let _ = writer.flush();
+        }
+        true
+    }
+
+    /// The encoded form of the same event, without writing it: what a test reads back. The
+    /// pane's path writes those bytes straight from the buffer they were encoded into.
+    #[cfg(test)]
+    pub fn encode_mouse(
+        &mut self,
+        action: mouse::Action,
+        button: Option<mouse::Button>,
+        at: (u16, u16),
+        shift: bool,
     ) -> Vec<u8> {
-        let Ok(mut event) = mouse::Event::new() else {
-            return Vec::new();
-        };
+        self.prepare_mouse(action, button, at, shift);
+        let mut out = Vec::new();
+        if self
+            .mouse
+            .encode_to_vec(&self.buffers.pointer, &mut out)
+            .is_ok()
+        {
+            out
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// Patches the reused event with this gesture, and tells the encoder the modes and the grid
+    /// it answers in: the setup the writing and encoding paths share.
+    fn prepare_mouse(
+        &mut self,
+        action: mouse::Action,
+        button: Option<mouse::Button>,
+        at: (u16, u16),
+        shift: bool,
+    ) {
         // A cell in device pixels, which is the unit the encoder both places the pointer and
         // answers in: cell tracking modes divide it back out, and mode 1016 (SGR-Pixels) reports
         // it as it is, the way Ghostty does.
         let cell_px = (self.metrics.cell * self.metrics.scale).round().max(1.0) as u32;
         let line_px = (self.metrics.line * self.metrics.scale).round().max(1.0) as u32;
-        event
+        // The event and its buffer are reused, as the key path reuses its own: a drag over a
+        // program that tracks the mouse is one of these per cell the pointer crosses.
+        self.buffers
+            .pointer
             .set_action(action)
             .set_button(button)
             .set_position(mouse::Position {
                 x: f32::from(at.0) * cell_px as f32,
                 y: f32::from(at.1) * line_px as f32,
+            })
+            .set_mods(if shift {
+                key::Mods::SHIFT
+            } else {
+                key::Mods::empty()
             });
-        if shift {
-            event.set_mods(key::Mods::SHIFT);
-        }
         self.mouse.set_options_from_terminal(&self.vt);
         // The encoder drops a position outside the screen it was told about, and its default
         // screen is one cell: telling it the grid the pane draws is what makes a click past the
@@ -117,12 +171,6 @@ impl Engine {
             padding_right: 0,
             padding_left: 0,
         });
-        let mut out = Vec::new();
-        if self.mouse.encode_to_vec(&event, &mut out).is_ok() {
-            out
-        } else {
-            Vec::new()
-        }
     }
 
     pub fn paste(&mut self, text: &str) {

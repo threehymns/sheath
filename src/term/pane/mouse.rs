@@ -46,11 +46,7 @@ impl Terminal {
                 // `less`, `htop` and `yazi` read for a hover.
                 MouseAction::Hover => (ghostty_vt::mouse::Action::Motion, None),
             };
-            let bytes = engine.mouse(action, button, at, shift);
-            if !bytes.is_empty() {
-                engine.write(&bytes);
-                return true;
-            }
+            return engine.mouse(action, button, at, shift);
         }
         let _ = (action, at, shift);
         false
@@ -73,11 +69,7 @@ impl Terminal {
             // A whole notch is a press in the mouse protocols: the encoder turns button 4 or 5
             // into the wheel code the program reads, and a release for it would read as a
             // second notch in some programs.
-            let bytes = engine.mouse(ghostty_vt::mouse::Action::Press, Some(button), at, shift);
-            if !bytes.is_empty() {
-                engine.write(&bytes);
-                return true;
-            }
+            return engine.mouse(ghostty_vt::mouse::Action::Press, Some(button), at, shift);
         }
         let _ = (up, at, shift);
         false

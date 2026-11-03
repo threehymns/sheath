@@ -6,6 +6,7 @@
 //! and keeps its bytes coming, `screen` reads libghostty's render state into the lines the view
 //! draws, and `input` encodes keys, mouse and paste into what the program reads.
 
+mod buffers;
 mod find;
 mod graphics;
 mod input;
@@ -14,6 +15,7 @@ mod parse;
 mod pty;
 mod screen;
 mod selection;
+mod stats;
 mod viewport;
 
 use std::cell::Cell;
@@ -25,8 +27,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
+use buffers::Buffers;
 use find::SEARCH_BUDGET;
 use pty::Incoming;
+pub use stats::Stats;
 
 use ghostty_vt::key::{Encoder as KeyEncoder, Event as EncoderEvent};
 use ghostty_vt::mouse;
@@ -108,6 +112,8 @@ pub struct Engine {
     scratch: String,
     key_event: EncoderEvent,
     keybuf: Vec<u8>,
+    /// The parse, reply and pointer buffers, reused between frames.
+    buffers: Buffers,
     /// The rows just above and just below the viewport, drawn outside the first and last lines
     /// while a fractional scroll shows part of a row at an edge. Without them the strips there
     /// are background that fills in all at once when the viewport steps, which reads as a jump.
@@ -150,23 +156,6 @@ pub struct Engine {
     images: graphics::ImageCache,
 }
 
-/// What the pane is doing behind the frame it just drew. `lag` is the honest latency number: a
-/// frame showing a screen whose oldest byte has waited 20 seconds is twenty seconds stale, no
-/// matter what frame rate the program reports about its own writes.
-#[derive(Clone, Copy, Debug)]
-pub struct Stats {
-    /// Bytes read from the pty and not parsed yet.
-    pub queued: usize,
-    /// How long the oldest of those has waited.
-    pub lag: Duration,
-    /// Bytes parsed since the shell started.
-    pub parsed: u64,
-    /// Time spent in the parser.
-    pub parse: Duration,
-    /// Time spent reading the screen back out of libghostty into the frame.
-    pub readback: Duration,
-}
-
 impl Drop for Engine {
     fn drop(&mut self) {
         pty::close(&self.incoming);
@@ -174,16 +163,6 @@ impl Drop for Engine {
 }
 
 impl Engine {
-    pub fn stats(&self) -> Stats {
-        Stats {
-            queued: self.incoming.len(),
-            lag: self.incoming.lag(),
-            parsed: self.parsed,
-            parse: self.parse_time,
-            readback: self.readback_time,
-        }
-    }
-
     pub fn spawn(
         dir: &Path,
         cols: u16,
@@ -275,6 +254,7 @@ impl Engine {
             scratch: String::new(),
             key_event: EncoderEvent::new().map_err(|err| err.to_string())?,
             keybuf: Vec::new(),
+            buffers: Buffers::new().map_err(|err| err.to_string())?,
             lead: None,
             trail: None,
             edges_at: None,
@@ -319,7 +299,8 @@ impl Engine {
             changed = true;
         }
         let at = Instant::now();
-        let mut replies = Vec::new();
+        let mut replies = std::mem::take(&mut self.buffers.replies);
+        replies.clear();
         changed |= self.parse(&mut replies, at + PARSE_BUDGET);
         if let Some(writer) = self.writer.as_mut() {
             if !replies.is_empty() {
@@ -327,6 +308,7 @@ impl Engine {
             }
             let _ = writer.flush();
         }
+        self.buffers.replies = replies;
         if let Ok(title) = self.vt.title()
             && title != self.title
         {

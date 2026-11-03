@@ -15,8 +15,9 @@ impl Engine {
     /// collects the replies the program asked for. Says whether anything the pane draws changed.
     pub(super) fn parse(&mut self, replies: &mut Vec<u8>, until: Instant) -> bool {
         let mut changed = false;
+        let mut bytes = std::mem::take(&mut self.buffers.parse);
         loop {
-            let bytes = self.incoming.take(PARSE_CHUNK);
+            self.incoming.take_into(PARSE_CHUNK, &mut bytes);
             if bytes.is_empty() {
                 break;
             }
@@ -31,6 +32,7 @@ impl Engine {
                 break;
             }
         }
+        self.buffers.parse = bytes;
         changed
     }
 }

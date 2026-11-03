@@ -88,23 +88,32 @@ impl Incoming {
         }
     }
 
-    /// Takes up to `budget` bytes from the front, oldest first, and wakes the reader if there is
-    /// room again.
-    pub(super) fn take(&self, budget: usize) -> Vec<u8> {
+    /// Takes up to `budget` bytes from the front, oldest first, into `out`, and wakes the reader
+    /// if there is room again. The buffer is the caller's, so a burst that parses chunk after
+    /// chunk does not allocate one per chunk.
+    pub(super) fn take_into(&self, budget: usize, out: &mut Vec<u8>) {
+        out.clear();
         let Ok(mut queue) = self.queue.lock() else {
-            return Vec::new();
+            return;
         };
         if queue.is_empty() {
-            return Vec::new();
+            return;
         }
         // Draining the front leaves the rest where it is: a full queue is not copied per chunk,
         // so catching up on a burst costs the bytes parsed and not the backlog behind them.
         let take = budget.min(queue.len());
-        let bytes: Vec<u8> = queue.drain(..take).collect();
+        out.extend(queue.drain(..take));
         drop(queue);
         self.spent(take);
         self.room.notify_all();
-        bytes
+    }
+
+    /// The same take as a fresh buffer, for a test that reads what came out.
+    #[cfg(test)]
+    pub(super) fn take(&self, budget: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        self.take_into(budget, &mut out);
+        out
     }
 
     pub(super) fn len(&self) -> usize {

@@ -26,23 +26,23 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
     .expect("a shell on a pty");
     assert!(
         engine
-            .mouse(Action::Press, Some(Button::Four), (3, 2), false)
+            .encode_mouse(Action::Press, Some(Button::Four), (3, 2), false)
             .is_empty(),
         "a program that did not ask for the mouse hears nothing"
     );
     engine.feed(b"\x1b[?1000h\x1b[?1006h");
     assert_eq!(
-        engine.mouse(Action::Press, Some(Button::Four), (3, 2), false),
+        engine.encode_mouse(Action::Press, Some(Button::Four), (3, 2), false),
         b"\x1b[<64;4;3M",
         "a notch up is button 4, at the pointer's own cell"
     );
     assert_eq!(
-        engine.mouse(Action::Press, Some(Button::Five), (3, 2), false),
+        engine.encode_mouse(Action::Press, Some(Button::Five), (3, 2), false),
         b"\x1b[<65;4;3M",
         "and a notch down is button 5"
     );
     assert_eq!(
-        engine.mouse(Action::Release, Some(Button::Left), (3, 2), false),
+        engine.encode_mouse(Action::Release, Some(Button::Left), (3, 2), false),
         b"\x1b[<0;4;3m",
         "the release names the button that ended, not a motion with none"
     );
@@ -51,12 +51,14 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
     // carries it as button 35, and the modes that only report motion while a button is down
     // do not ask for it at all.
     assert!(
-        engine.mouse(Action::Motion, None, (5, 1), false).is_empty(),
+        engine
+            .encode_mouse(Action::Motion, None, (5, 1), false)
+            .is_empty(),
         "press/release tracking (1000) has no motion to report"
     );
     engine.feed(b"\x1b[?1003h");
     assert_eq!(
-        engine.mouse(Action::Motion, None, (5, 1), false),
+        engine.encode_mouse(Action::Motion, None, (5, 1), false),
         b"\x1b[<35;6;2M",
         "a bare move names no button"
     );

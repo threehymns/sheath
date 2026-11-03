@@ -24,7 +24,7 @@ fn engine() -> (tempfile::TempDir, Engine) {
 }
 
 fn press(engine: &mut Engine) -> String {
-    String::from_utf8_lossy(&engine.mouse(
+    String::from_utf8_lossy(&engine.encode_mouse(
         mouse::Action::Press,
         Some(mouse::Button::Left),
         (2, 3),
