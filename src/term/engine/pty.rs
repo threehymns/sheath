@@ -36,7 +36,7 @@ pub(super) struct Session {
 /// The screen's inbox: bytes the shell wrote and the app has not parsed yet, and the room the
 /// reader waits for once the queue is full.
 pub(super) struct Incoming {
-    queue: Mutex<Vec<u8>>,
+    queue: Mutex<VecDeque<u8>>,
     /// Signalled when the app takes bytes, so the reader can read again.
     room: Condvar,
     /// Each queued chunk and when it arrived, oldest first: the front's age is how far the
@@ -49,7 +49,7 @@ pub(super) struct Incoming {
 impl Incoming {
     fn new() -> Incoming {
         Incoming {
-            queue: Mutex::new(Vec::new()),
+            queue: Mutex::new(VecDeque::new()),
             room: Condvar::new(),
             arrivals: Mutex::new(VecDeque::new()),
             closed: AtomicBool::new(false),
@@ -61,7 +61,7 @@ impl Incoming {
         let Ok(mut queue) = self.queue.lock() else {
             return;
         };
-        queue.extend_from_slice(bytes);
+        queue.extend(bytes);
         drop(queue);
         if let Ok(mut arrivals) = self.arrivals.lock() {
             arrivals.push_back((bytes.len(), Instant::now()));
@@ -97,14 +97,12 @@ impl Incoming {
         if queue.is_empty() {
             return Vec::new();
         }
-        let rest = if queue.len() > budget {
-            queue.split_off(budget)
-        } else {
-            Vec::new()
-        };
-        let bytes = std::mem::replace(&mut *queue, rest);
+        // Draining the front leaves the rest where it is: a full queue is not copied per chunk,
+        // so catching up on a burst costs the bytes parsed and not the backlog behind them.
+        let take = budget.min(queue.len());
+        let bytes: Vec<u8> = queue.drain(..take).collect();
         drop(queue);
-        self.spent(bytes.len());
+        self.spent(take);
         self.room.notify_all();
         bytes
     }
