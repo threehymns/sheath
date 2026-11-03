@@ -107,10 +107,27 @@ fn perf_terminal_grid() {
         echo.push(at.elapsed().as_secs_f64() * 1e3);
         std::hint::black_box(&frame);
     }
+    // An idle drain is what a pane pays per frame when nothing new arrived: the shells's bytes
+    // are all parsed, and the frame loop still asks whether anything moved.
+    let mut idle = Vec::new();
+    for _ in 0..200 {
+        let at = Instant::now();
+        std::hint::black_box(engine.drain());
+        idle.push(at.elapsed().as_secs_f64() * 1e6);
+    }
+    let idle = {
+        idle.sort_by(f64::total_cmp);
+        idle
+    };
     let (fm, fp) = stats(full);
     let (em, ep) = stats(echo);
     println!("grid whole screen {cols}x{rows}: median {fm:.3} ms, p95 {fp:.3} ms");
     println!("grid one line changed: median {em:.3} ms, p95 {ep:.3} ms");
+    println!(
+        "drain idle: median {:.3} us, p95 {:.3} us",
+        idle[idle.len() / 2],
+        idle[(idle.len() as f64 * 0.95) as usize]
+    );
 }
 
 /// The commit the pane costs on top of the browser: idle, and with one row changing (a
