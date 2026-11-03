@@ -105,7 +105,7 @@ pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: u
             if entry.is_dir {
                 stack.push(entry.path.clone());
             }
-            if !entry.name.to_lowercase().contains(query) {
+            if !contains_folded(&entry.name, query) {
                 continue;
             }
             entry.relative = entry
