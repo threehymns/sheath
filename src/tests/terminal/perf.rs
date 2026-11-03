@@ -174,6 +174,44 @@ fn perf_terminal_commit() {
     );
 }
 
+/// A frame the pane draws with nothing new from the shell: the fractional step of a smooth
+/// scroll, the frame after a blink, a view build that only moved a hover. The grid is read back
+/// into the same frame the raster streams, so this is the whole cost of that frame at this level.
+#[test]
+#[ignore]
+fn perf_terminal_unchanged_frame() {
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let (cols, rows) = (140u16, 14u16);
+    let mut engine = Engine::spawn(
+        dir.path(),
+        cols,
+        rows,
+        (8.0, 16.0),
+        2.0,
+        crate::term::theme(true),
+        wake,
+    )
+    .unwrap();
+    engine.feed(vt_screen(rows as usize, cols as usize).as_bytes());
+    let mut frame = Frame::default();
+    engine.fill(&mut frame);
+    // The fractional scroll the pane asks for on every wheel notch: the overscan rows are
+    // already read, so the edges are a no-op and only the readback is left.
+    engine.ensure_edges(true);
+    engine.fill(&mut frame);
+    let mut samples = Vec::new();
+    for _ in 0..500 {
+        let at = Instant::now();
+        engine.ensure_edges(true);
+        engine.fill(&mut frame);
+        samples.push(at.elapsed().as_secs_f64() * 1e6);
+        std::hint::black_box(&frame);
+    }
+    let (median, p95) = stats(samples);
+    println!("unchanged frame {cols}x{rows} (a smooth scroll): median {median:.1} us, p95 {p95:.1} us");
+}
+
 /// A long folder beside the pane, to show what the terminal's frames cost on top of a list.
 #[test]
 #[ignore]
