@@ -6,7 +6,7 @@ use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
-use super::{Block, GAP, Node, Panes, Side};
+use super::{Block, DropTarget, Edge, GAP, Node, Panes, Side};
 use crate::Window;
 use crate::icons;
 
@@ -213,16 +213,23 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
             &name,
             p.focuses(id),
             p.is_zoomed(),
-            p.drop_target() == Some(id),
+            p.drop_target() == Some(DropTarget::Swap(id)),
             k,
         );
         body = body.child(header);
     }
-    body.child(grid(block, tab, scale, k))
+    body = body.child(grid(block, tab, scale, k));
+    if let Some(DropTarget::Split { pane, edge }) = p.drop_target()
+        && pane == id
+    {
+        body = body.child(edge_band(id, edge, block.rect, k));
+    }
+    body
 }
 
-/// A block's header, which also drags: pressing it picks the pane up, and letting go over
-/// another pane swaps the two. `target` says the pointer is over this pane on a drag.
+/// A block's header, which also drags: pressing it picks the pane up, letting go over another
+/// pane's body swaps the two, and letting go on one of its edges splits beside it. `target` says
+/// the pointer is over this pane's body on a drag.
 fn header(
     tab: u64,
     block: &Block,
@@ -309,6 +316,24 @@ fn header(
     .child(split_down)
     .child(zoom)
     .child(close)
+}
+
+/// The half of a pane a dragged header would take when it is dropped on an edge: the wash shows
+/// where the split will open and how much the pane keeps.
+fn edge_band(id: u64, edge: Edge, rect: [f32; 4], k: &'static Kit) -> El {
+    let mut band = el()
+        .key(format!("block-{id}-drop"))
+        .fill(k.c.hover)
+        .transition(rune::Transition::none());
+    let half_w = (rect[2] * 0.5).max(0.0);
+    let half_h = (rect[3] * 0.5).max(0.0);
+    band = match edge {
+        Edge::Left => band.pin(Some(0.0), None, Some(0.0), Some(0.0)).w(half_w),
+        Edge::Right => band.pin(None, Some(0.0), Some(0.0), Some(0.0)).w(half_w),
+        Edge::Top => band.pin(Some(0.0), Some(0.0), Some(0.0), None).h(half_h),
+        Edge::Bottom => band.pin(Some(0.0), Some(0.0), None, Some(0.0)).h(half_h),
+    };
+    band
 }
 
 /// One block's grid, with its wheel, pointer, drag and layout wired to that block's shell.

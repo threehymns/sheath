@@ -1,4 +1,3 @@
-
 use super::*;
 
 /// A tab in the temporary folder with a block and no shell started: opening a terminal only
@@ -20,6 +19,36 @@ fn shares(node: &Node) -> Vec<f32> {
             let mut out = vec![*share];
             out.extend(shares(first));
             out.extend(shares(second));
+            out
+        }
+    }
+}
+
+/// The direction each split divides along, outermost first.
+fn sides(node: &Node) -> Vec<Side> {
+    match node {
+        Node::Block(_) => Vec::new(),
+        Node::Split {
+            side,
+            first,
+            second,
+            ..
+        } => {
+            let mut out = vec![*side];
+            out.extend(sides(first));
+            out.extend(sides(second));
+            out
+        }
+    }
+}
+
+/// The blocks in the tree, left-to-right and top-to-bottom.
+fn order(node: &Node) -> Vec<u64> {
+    match node {
+        Node::Block(id) => vec![*id],
+        Node::Split { first, second, .. } => {
+            let mut out = order(first);
+            out.extend(order(second));
             out
         }
     }
@@ -67,20 +96,8 @@ fn resize_grows_the_focused_block_toward_the_direction() {
     );
 }
 
-/// The blocks in the tree, left-to-right and top-to-bottom.
-fn order(node: &Node) -> Vec<u64> {
-    match node {
-        Node::Block(id) => vec![*id],
-        Node::Split { first, second, .. } => {
-            let mut out = order(first);
-            out.extend(order(second));
-            out
-        }
-    }
-}
-
 #[test]
-fn dropping_a_header_on_another_pane_swaps_the_two() {
+fn dropping_a_header_on_a_pane_body_swaps_the_two() {
     let mut p = tab();
     p.split(Side::Right);
     let left = 1;
@@ -90,7 +107,11 @@ fn dropping_a_header_on_another_pane_swaps_the_two() {
 
     p.drag_begin(left);
     p.drag_over((150.0, 50.0));
-    assert_eq!(p.drop_target(), Some(right), "the pane under the header");
+    assert_eq!(
+        p.drop_target(),
+        Some(DropTarget::Swap(right)),
+        "the pane under the header"
+    );
     p.drag_end(false);
 
     assert_eq!(
@@ -99,6 +120,42 @@ fn dropping_a_header_on_another_pane_swaps_the_two() {
         "the shells traded places"
     );
     assert_eq!(p.focus_id(), right, "the keyboard stays where it was");
+}
+
+#[test]
+fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
+    let mut p = tab();
+    p.split(Side::Right);
+    let left = 1;
+    let right = p.focus_id();
+    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
+    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+
+    // Near the target's top edge: the drag lands above it rather than swapping.
+    p.drag_begin(left);
+    p.drag_over((150.0, 5.0));
+    assert_eq!(
+        p.drop_target(),
+        Some(DropTarget::Split {
+            pane: right,
+            edge: Edge::Top
+        })
+    );
+    p.drag_end(false);
+
+    assert_eq!(order(&p.root), vec![left, right]);
+    assert_eq!(sides(&p.root), vec![Side::Down], "the pane sits above");
+    assert_eq!(p.blocks(), 2, "the moved block is not duplicated");
+
+    // The block in the second half of a split comes out too: dropping it on the other pane's
+    // left edge opens a fresh row.
+    p.drag_begin(right);
+    p.drag_over((5.0, 50.0));
+    p.drag_end(false);
+
+    assert_eq!(order(&p.root), vec![right, left]);
+    assert_eq!(sides(&p.root), vec![Side::Right], "the pane sits left");
+    assert_eq!(p.blocks(), 2);
 }
 
 #[test]

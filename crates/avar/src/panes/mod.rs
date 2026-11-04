@@ -13,10 +13,13 @@ use rune::{El, TextStyle, Tx, Waker};
 use rune_kit::Kit;
 use rune_tty::Terminal;
 
+mod drag;
 mod tree;
 mod view;
 
-use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side, swap};
+pub use drag::{DropTarget, Edge};
+
+use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
 
 /// Which way a split puts its new block beside the focused one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,11 +41,6 @@ pub enum Dir {
 const MIN_SHARE: f32 = 0.18;
 /// Points of gap between two blocks: the gap is the divider the pointer drags.
 pub const GAP: f32 = 6.0;
-
-/// Whether a point falls inside a rect, as a header drop asks of the panes it passes over.
-fn inside(rect: [f32; 4], (x, y): (f32, f32)) -> bool {
-    x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + rect[3]
-}
 
 /// A shell in a tab, with the rect it was last laid out in: a directional focus needs the rects.
 pub struct Block {
@@ -70,10 +68,9 @@ pub struct Panes {
     next: u64,
     /// The split whose divider is being dragged, if any.
     resizing: Option<Resizing>,
-    /// The block a header drag has picked up, and the block under the pointer it would swap
-    /// with when it is let go.
+    /// The block a header drag has picked up, and where letting it go would put it.
     dragging: Option<u64>,
-    over: Option<u64>,
+    drop: Option<DropTarget>,
     /// The folder a shell opened from this tab starts in before one reports its own (OSC 7).
     dir: PathBuf,
 }
@@ -94,7 +91,7 @@ impl Panes {
             next: 2,
             resizing: None,
             dragging: None,
-            over: None,
+            drop: None,
             dir,
         }
     }
@@ -140,48 +137,6 @@ impl Panes {
 
     pub fn is_zoomed(&self) -> bool {
         self.zoomed
-    }
-
-    /// The block a dragged header is over: the pane the two would swap.
-    pub fn drop_target(&self) -> Option<u64> {
-        self.over
-    }
-
-    /// Picks a block up by its header. A zoomed tab draws one pane and leaves the others with
-    /// no rect to aim at, so there is nothing to drop a header on.
-    pub fn drag_begin(&mut self, id: u64) {
-        if self.zoomed || self.block(id).is_none() {
-            return;
-        }
-        self.dragging = Some(id);
-        self.over = None;
-    }
-
-    /// The pointer moved over the tab: the pane under it is the one a release would swap with.
-    pub fn drag_over(&mut self, at: (f32, f32)) {
-        let Some(from) = self.dragging else {
-            self.over = None;
-            return;
-        };
-        self.over = self
-            .blocks
-            .iter()
-            .find(|block| block.id != from && inside(block.rect, at))
-            .map(|block| block.id);
-    }
-
-    /// The header was let go: over another pane, the two swap places in the tab and their shells
-    /// keep running. Anywhere else, or on a cancelled drag, nothing moves.
-    pub fn drag_end(&mut self, cancelled: bool) {
-        let Some(from) = self.dragging.take() else {
-            self.over = None;
-            return;
-        };
-        let to = self.over.take();
-        let Some(to) = to.filter(|to| *to != from && !cancelled) else {
-            return;
-        };
-        swap(&mut self.root, from, to);
     }
 
     /// The tab's name: the folder its focused shell is in, as a block's header says it.
@@ -250,9 +205,9 @@ impl Panes {
             return;
         };
         self.blocks.remove(index).term.close();
-        if self.dragging == Some(id) || self.over == Some(id) {
+        if self.dragging == Some(id) || self.drop.is_some_and(|drop| drop.pane() == id) {
             self.dragging = None;
-            self.over = None;
+            self.drop = None;
         }
         // The tree is rebuilt from what is left: `remove` takes the node it walks, and the
         // placeholder is never drawn because the last block was handled above.
@@ -279,7 +234,7 @@ impl Panes {
         self.zoomed = false;
         self.resizing = None;
         self.dragging = None;
-        self.over = None;
+        self.drop = None;
     }
 
     /// Gives the keyboard to a block, which is how a press in a grid says which shell to type at.
@@ -330,7 +285,7 @@ impl Panes {
         self.zoomed = !self.zoomed;
         // A zoomed tab has no second pane to drop a header on.
         self.dragging = None;
-        self.over = None;
+        self.drop = None;
     }
 
     /// Rex's `pane.resize`: the focused block grows toward `dir` by `amount` percent of the split
