@@ -6,11 +6,16 @@
 //! screen is the one the user had before they picked the header up.
 
 use super::tree::{Node, place, remove, swap};
-use super::{Panes, Side};
+use super::{HEADER, Panes, Side};
 
 /// Whether a point falls inside a rect, as a header drop asks of the panes it passes over.
 fn inside(rect: [f32; 4], (x, y): (f32, f32)) -> bool {
     x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + rect[3]
+}
+
+/// Whether a point falls in a pane's header, the strip a drag picks it up by.
+fn inside_header(rect: [f32; 4], (x, y): (f32, f32)) -> bool {
+    x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + HEADER
 }
 
 /// How far into a pane's edge a header lands to split beside it rather than swap, as a share of
@@ -83,14 +88,23 @@ impl Panes {
         self.drop
     }
 
-    /// Picks a block up by its header. `at` is the press in the window, which the moves measure
-    /// their travel from: the pane it came from may glide away under the preview, so the pointer
-    /// must not be read back from that pane's rect. A zoomed tab draws one pane and leaves the
-    /// others with no rect to aim at, so there is nothing to drop a header on.
-    pub fn drag_begin(&mut self, id: u64, at: (f32, f32)) {
-        if self.zoomed || self.block(id).is_none() {
+    /// Picks a pane up when `at`, in the tab layout's own points, falls in its header. The press
+    /// is kept in window points, which the moves travel from: the preview may carry the header
+    /// away under the pointer, so its own point would chase itself. A zoomed tab draws one pane
+    /// and leaves the others with no rect to aim at, and a press in a shell belongs to the shell.
+    pub fn drag_begin(&mut self, at: (f32, f32)) {
+        if self.zoomed {
             return;
         }
+        let at = (self.origin.0 + at.0, self.origin.1 + at.1);
+        let Some(id) = self
+            .blocks
+            .iter()
+            .find(|block| inside_header(block.rect, at))
+            .map(|block| block.id)
+        else {
+            return;
+        };
         self.dragging = Some(id);
         self.press = Some(at);
         self.drop = None;

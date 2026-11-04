@@ -6,12 +6,9 @@ use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
-use super::{Block, DropTarget, Edge, GAP, Node, Panes, Side};
+use super::{Block, DropTarget, Edge, GAP, HEADER, Node, Panes, Side};
 use crate::Window;
 use crate::icons;
-
-/// A block's header: its folder on one side, its buttons on the other.
-const HEADER: f32 = 28.0;
 
 /// A tab's layout: panes divided by the gaps between them, each split nested in the last. With
 /// `zoom` set, every split on that block's path gives it the whole share and the other side is
@@ -273,28 +270,7 @@ fn header(
         .h(HEADER)
         .px(8.0)
         .gap(2.0)
-        .center_y()
-        // The press is measured from the pane's own top-left plus the header's point, because
-        // the header is the first thing the pane draws. The moves are measured from that press:
-        // the preview carries the header away under the pointer, so its own point would chase
-        // itself.
-        .on_drag(move |s: &mut Window, d: &mut Drag, tx: &mut Tx| {
-            let Some(p) = s.tabs.panes_mut(tab) else {
-                return;
-            };
-            match d.phase {
-                Phase::Down => {
-                    let Some(rect) = p.block(id).map(|block| block.rect) else {
-                        return;
-                    };
-                    p.drag_begin(id, (rect[0] + d.x, rect[1] + d.y));
-                }
-                Phase::Move => p.drag_over((d.dx, d.dy)),
-                Phase::Up => p.drag_end(d.cancelled()),
-            }
-            // The previewed layout and the drop land at once, so the panes follow the pointer.
-            tx.instant();
-        });
+        .center_y();
     if target {
         bar = bar.fill(k.c.hover);
     }

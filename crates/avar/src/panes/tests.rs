@@ -111,7 +111,7 @@ fn resize_grows_the_focused_block_toward_the_direction() {
 fn dropping_a_header_on_a_pane_body_swaps_the_two() {
     let (mut p, left, right) = pair();
 
-    p.drag_begin(left, (10.0, 10.0));
+    p.drag_begin((10.0, 10.0));
     p.drag_over((140.0, 40.0));
     assert_eq!(
         p.drop_target(),
@@ -143,7 +143,7 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
     let (mut p, left, right) = pair();
 
     // Near the target's top edge: the drag lands above it rather than swapping.
-    p.drag_begin(left, (10.0, 10.0));
+    p.drag_begin((10.0, 10.0));
     p.drag_over((140.0, -5.0));
     assert_eq!(
         p.drop_target(),
@@ -170,8 +170,8 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
 
     // The block in the second half of a split comes out too: dropping it on the other pane's
     // left edge opens a fresh row.
-    p.drag_begin(right, (10.0, 10.0));
-    p.drag_over((-5.0, 40.0));
+    p.drag_begin((110.0, 10.0));
+    p.drag_over((-105.0, 40.0));
     p.drag_end(false);
 
     assert_eq!(order(&p.root), vec![right, left]);
@@ -183,7 +183,7 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
 fn a_drag_previews_the_layout_and_a_cancel_puts_it_back() {
     let (mut p, left, right) = pair();
 
-    p.drag_begin(left, (10.0, 10.0));
+    p.drag_begin((10.0, 10.0));
     assert!(p.preview.is_none(), "a press alone rearranges nothing");
 
     p.drag_over((140.0, 40.0));
@@ -205,17 +205,104 @@ fn a_drag_previews_the_layout_and_a_cancel_puts_it_back() {
 fn a_header_dropped_off_any_pane_or_cancelled_moves_nothing() {
     let (mut p, left, right) = pair();
 
-    p.drag_begin(left, (10.0, 10.0));
+    p.drag_begin((10.0, 10.0));
     p.drag_over((490.0, 490.0));
     assert_eq!(p.drop_target(), None);
     assert!(p.preview.is_none(), "no pane means no preview");
     p.drag_end(false);
     assert_eq!(order(&p.root), vec![left, right]);
 
-    p.drag_begin(left, (10.0, 10.0));
+    p.drag_begin((10.0, 10.0));
     p.drag_over((140.0, 40.0));
     p.drag_end(true);
     assert_eq!(order(&p.root), vec![left, right], "a cancelled drag holds");
+}
+
+#[test]
+fn only_a_press_in_a_header_picks_a_pane_up() {
+    let (mut p, left, right) = pair();
+
+    // The grid below the header is the shell's: a drag there belongs to the terminal.
+    p.drag_begin((50.0, 60.0));
+    p.drag_over((140.0, 0.0));
+    assert_eq!(p.drop_target(), None);
+    assert!(p.preview.is_none());
+    p.drag_end(false);
+    assert_eq!(order(&p.root), vec![left, right]);
+}
+
+#[test]
+fn a_header_press_is_measured_from_the_tab_layout_origin() {
+    let (mut p, left, right) = pair();
+    p.set_origin(40.0, 50.0);
+    p.set_rect(left, [40.0, 50.0, 100.0, 100.0]);
+    p.set_rect(right, [140.0, 50.0, 100.0, 100.0]);
+
+    p.drag_begin((10.0, 10.0));
+    p.drag_over((130.0, 40.0));
+    assert_eq!(
+        p.drop_target(),
+        Some(DropTarget::Swap(right)),
+        "the local press lands in the first pane's header"
+    );
+}
+
+#[test]
+fn a_header_drag_keeps_tracking_after_the_preview_moves_the_panes() {
+    use rune::text::TextSystem;
+    use rune::{Env, Runtime};
+
+    let mut window = crate::Window::start();
+    window.tabs = crate::tabs::Tabs::new(std::env::temp_dir());
+    window.tabs.split(Side::Right);
+    window.horizontal = false;
+    window.headers = true;
+    window.top_bar = false;
+    window.palette = None;
+    window.settings = None;
+
+    let text = TextSystem::new(rune_theme_opencode::FONTS, rune_theme_opencode::FAMILIES);
+    let mut rt = Runtime::with_text(
+        window,
+        crate::frame::view,
+        (1000.0, 700.0),
+        Env::new(true, 1.0),
+        text,
+    );
+    rt.frame(0.0);
+    rt.frame(0.0);
+
+    let (x, y) = rt.find("block-1-name").expect("the first pane's header");
+    let (rx, ry) = rt.find("block-2-name").expect("the second pane's header");
+
+    rt.pointer_down(x, y);
+    rt.frame(0.0);
+    rt.pointer_move(rx, ry + 200.0);
+    rt.frame(0.0);
+    let preview = rt
+        .state
+        .tabs
+        .panes_mut(1)
+        .and_then(|p| p.preview.as_ref())
+        .map(order)
+        .expect("the swap is previewed");
+    assert_eq!(preview, vec![2, 1], "the panes show their new order");
+
+    // A second move after the header has been re-parented: a captured gesture that lost its
+    // element path would never see this one, leaving the first preview on screen.
+    rt.pointer_move(x, y + 300.0);
+    rt.frame(0.0);
+    let p = rt.state.tabs.panes_mut(1).expect("the tab");
+    assert!(p.preview.is_none(), "the drag still follows the pointer");
+    assert_eq!(p.drop_target(), None, "it is back over its own pane");
+
+    rt.pointer_move(rx, ry + 200.0);
+    rt.frame(0.0);
+    rt.pointer_up(rx, ry + 200.0);
+    rt.frame(0.0);
+    let p = rt.state.tabs.panes_mut(1).expect("the tab");
+    assert!(p.preview.is_none());
+    assert_eq!(order(&p.root), vec![2, 1], "the drop commits the preview");
 }
 
 #[test]

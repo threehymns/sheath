@@ -41,6 +41,8 @@ pub enum Dir {
 const MIN_SHARE: f32 = 0.18;
 /// Points of gap between two blocks: the gap is the divider the pointer drags.
 pub const GAP: f32 = 6.0;
+/// Points of a pane's header: the strip above its shell that picks the pane up.
+pub(super) const HEADER: f32 = 28.0;
 
 /// A shell in a tab, with the rect it was last laid out in: a directional focus needs the rects.
 pub struct Block {
@@ -75,6 +77,9 @@ pub struct Panes {
     drop: Option<DropTarget>,
     /// The layout the drop would leave, drawn in place of the committed tree until the release.
     preview: Option<Node>,
+    /// Where the tab's layout starts in the window, which turns a drag's local press into the
+    /// window points the panes' rects are in.
+    origin: (f32, f32),
     /// The folder a shell opened from this tab starts in before one reports its own (OSC 7).
     dir: PathBuf,
 }
@@ -98,6 +103,7 @@ impl Panes {
             press: None,
             drop: None,
             preview: None,
+            origin: (0.0, 0.0),
             dir,
         }
     }
@@ -345,6 +351,12 @@ impl Panes {
     pub fn balance(&mut self) {
         balance_node(&mut self.root);
         self.resizing = None;
+    }
+
+    /// Records where the tab's layout starts in the window, which a header drag adds its local
+    /// press to before it asks which pane was picked up.
+    pub fn set_origin(&mut self, x: f32, y: f32) {
+        self.origin = (x, y);
     }
 
     /// Records where a block was laid out, for a directional focus. While a header drag previews

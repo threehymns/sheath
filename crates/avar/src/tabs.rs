@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{El, TextStyle, Tx, Waker, row, text};
+use rune::{Drag, El, Phase, TextStyle, Tx, Waker, col, row, text};
 use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, glyphs};
 use rune_tty::Terminal;
@@ -384,12 +384,41 @@ impl Tabs {
     }
 
     /// A tab's layout, ready to draw: the blocks of the tab on screen, split as it was left.
+    ///
+    /// The wrapper owns the header drag rather than the header itself. A preview re-parents the
+    /// panes, and Rune captures a gesture by the element's path: a header that moved would stop
+    /// resolving and the drag would freeze, so the gesture sits on this box instead, which stays
+    /// put for the whole drag.
     pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit, headers: bool) -> El {
-        self.rows
-            .iter()
-            .find(|row| row.id == tab)
-            .map(|row| row.panes.layout(tab, scale, k, headers))
-            .unwrap_or_else(rune::el)
+        let Some(row) = self.rows.iter().find(|row| row.id == tab) else {
+            return rune::el();
+        };
+        let mut shell = col()
+            .key(format!("panes-{tab}"))
+            .w_full()
+            .h_full()
+            .min_h(0.0)
+            .on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
+                if let Some(p) = s.tabs.panes_mut(tab) {
+                    p.set_origin(rect[0], rect[1]);
+                }
+            });
+        if headers {
+            shell = shell.on_drag(move |s: &mut Window, d: &mut Drag, tx: &mut Tx| {
+                let Some(p) = s.tabs.panes_mut(tab) else {
+                    return;
+                };
+                match d.phase {
+                    Phase::Down => p.drag_begin((d.x, d.y)),
+                    Phase::Move => p.drag_over((d.dx, d.dy)),
+                    Phase::Up => p.drag_end(d.cancelled()),
+                }
+                // The previewed layout and the drop land at once, so the panes follow the
+                // pointer instead of gliding behind it.
+                tx.instant();
+            });
+        }
+        shell.child(row.panes.layout(tab, scale, k, headers))
     }
 
     /// Reads every block's shell, on screen or not, and closes the blocks whose shell ended. The
