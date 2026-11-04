@@ -7,14 +7,13 @@
 
 use std::time::Instant;
 
-use rune::{Color, Cursor, Cx, Drag, El, Phase, Spring, Tx, col, el, row, text};
+use rune::{Color, Cursor, Cx, Drag, El, Phase, Spring, Tx, col, el, row};
 use rune_kit::shell::{PaneMotion, SidebarToggle, SplitView};
 use rune_kit::{ControlSize, Kit, Toolbar};
 use rune_theme_opencode as theme;
 
 use crate::Window;
 use crate::action::Action;
-use crate::panes::DragPreview;
 
 /// The window background showing around the panes of a window that draws its own titlebar.
 const FRAME: f32 = 8.0;
@@ -115,15 +114,6 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     };
     s.built.set(s.built.get() + at.elapsed());
     let mut layers = Vec::new();
-    // The pane a header drag is carrying, named beside the pointer as it moves.
-    if let Some(preview) = s
-        .tabs
-        .active_id()
-        .and_then(|id| s.tabs.panes(id))
-        .and_then(|p| p.drag_preview())
-    {
-        layers.push(drag_badge(preview, k));
-    }
     if s.palette.is_some() {
         let (backdrop, slot) = actions_ui::palette_layers(s, k, Action::icon);
         layers.push(backdrop);
@@ -146,26 +136,6 @@ fn system_titlebar() -> bool {
 /// and every command the bar could hold has a chord and the command bar.
 fn toolbar(s: &Window) -> Toolbar {
     Toolbar::new().title(s.tabs.title())
-}
-
-/// The badge under the pointer while a pane header is dragged: the pane in hand and what a
-/// release would do with it.
-fn drag_badge(preview: DragPreview, k: &'static Kit) -> El {
-    el().key("pane-drag-badge")
-        .absolute(preview.at.0 + 14.0, preview.at.1 + 14.0)
-        .radius(6.0)
-        .px(10.0)
-        .py(6.0)
-        .center_y()
-        .fill(k.c.layer_02)
-        .border(1.0, k.c.border_muted)
-        .transition(rune::Transition::none())
-        .child(
-            text(preview.label)
-                .font(k.ty.caption())
-                .color(k.c.text_base)
-                .max_lines(1),
-        )
 }
 
 /// The tab rail in a window with no top bar: a pane beside the panes, resizable by the grip on

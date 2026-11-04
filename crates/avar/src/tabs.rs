@@ -115,14 +115,6 @@ impl Tabs {
         self.tab_mut(tab).map(|row| &mut row.panes)
     }
 
-    /// A tab's panes, read-only: the frame asks what a header drag is carrying.
-    pub fn panes(&self, tab: u64) -> Option<&Panes> {
-        self.rows
-            .iter()
-            .find(|row| row.id == tab)
-            .map(|row| &row.panes)
-    }
-
     fn tab_mut(&mut self, id: u64) -> Option<&mut Tab> {
         self.rows.iter_mut().find(|row| row.id == id)
     }

@@ -10,6 +10,7 @@ use super::Side;
 /// How a tab's blocks tile: one block, or two layouts divided along one axis. `share` is the
 /// part of the split the first side takes, and `length` is the split's extent along that axis,
 /// which a drag turns points into a share.
+#[derive(Clone)]
 pub(crate) enum Node {
     Block(u64),
     Split {

@@ -274,27 +274,25 @@ fn header(
         .px(8.0)
         .gap(2.0)
         .center_y()
-        // The pointer's point in the header is the pane's own top-left plus it, because the
-        // header is the first thing the pane draws.
+        // The press is measured from the pane's own top-left plus the header's point, because
+        // the header is the first thing the pane draws. The moves are measured from that press:
+        // the preview carries the header away under the pointer, so its own point would chase
+        // itself.
         .on_drag(move |s: &mut Window, d: &mut Drag, tx: &mut Tx| {
-            let Some(rect) = s
-                .tabs
-                .panes_mut(tab)
-                .and_then(|p| p.block(id))
-                .map(|block| block.rect)
-            else {
-                return;
-            };
-            let at = (rect[0] + d.x, rect[1] + d.y);
             let Some(p) = s.tabs.panes_mut(tab) else {
                 return;
             };
             match d.phase {
-                Phase::Down => p.drag_begin(id),
-                Phase::Move => p.drag_over(at),
+                Phase::Down => {
+                    let Some(rect) = p.block(id).map(|block| block.rect) else {
+                        return;
+                    };
+                    p.drag_begin(id, (rect[0] + d.x, rect[1] + d.y));
+                }
+                Phase::Move => p.drag_over((d.dx, d.dy)),
                 Phase::Up => p.drag_end(d.cancelled()),
             }
-            // The pane under the drag fills as it is aimed at, and the fill goes with the drop.
+            // The previewed layout and the drop land at once, so the panes follow the pointer.
             tx.instant();
         });
     if target {

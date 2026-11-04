@@ -1,9 +1,9 @@
-//! Dragging a pane by its header: the edge a drop aims at, the badge the frame draws in hand,
-//! and the move it makes.
+//! Dragging a pane by its header: the edge a drop aims at, the layout it would leave, and the
+//! move it makes.
 //!
-//! A header drag is a gesture on the tab's layout rather than on the block's shell, so the block
-//! keeps running while the pointer decides whether it trades places with another pane or takes
-//! half of it.
+//! The committed tree stays put while the pointer is down: the tab draws a preview of the drop
+//! instead, and only a release writes the change. A cancel drops the preview, so the layout on
+//! screen is the one the user had before they picked the header up.
 
 use super::tree::{Node, place, remove, swap};
 use super::{Panes, Side};
@@ -16,6 +16,10 @@ fn inside(rect: [f32; 4], (x, y): (f32, f32)) -> bool {
 /// How far into a pane's edge a header lands to split beside it rather than swap, as a share of
 /// the pane's width or height.
 const EDGE_BAND: f32 = 0.25;
+
+/// The split a preview draws before the drop is committed. It never enters the tab's tree, so it
+/// only has to be a name the layout can key and the shares can ignore.
+const PREVIEW_SPLIT: u64 = u64::MAX;
 
 /// An edge of a pane a dragged header can be dropped on: the pane it was carried from lands on
 /// that side of the pane under the pointer, splitting it in two.
@@ -35,16 +39,6 @@ impl Edge {
             Edge::Right => (Side::Right, false),
             Edge::Top => (Side::Down, true),
             Edge::Bottom => (Side::Down, false),
-        }
-    }
-
-    /// How a drop on this edge reads in the drag badge.
-    fn beside(self) -> &'static str {
-        match self {
-            Edge::Left => "left of",
-            Edge::Right => "right of",
-            Edge::Top => "above",
-            Edge::Bottom => "below",
         }
     }
 }
@@ -83,72 +77,60 @@ impl DropTarget {
     }
 }
 
-/// What a header drag is carrying and where it would land, for the frame to draw beside the
-/// pointer.
-pub struct DragPreview {
-    pub label: String,
-    pub at: (f32, f32),
-}
-
 impl Panes {
     /// Where a release would put the header being dragged, for the layout to show.
     pub fn drop_target(&self) -> Option<DropTarget> {
         self.drop
     }
 
-    /// The pane a header drag is carrying, and what letting go would do with it. None until the
-    /// pointer moves, so a press alone carries no badge.
-    pub fn drag_preview(&self) -> Option<DragPreview> {
-        let from = self.dragging?;
-        let at = self.drag_at?;
-        let name = self.name(from);
-        let label = match self.drop {
-            Some(DropTarget::Swap(to)) => format!("Swap {name} with {}", self.name(to)),
-            Some(DropTarget::Split { pane, edge }) => {
-                format!("Move {name} {} {}", edge.beside(), self.name(pane))
-            }
-            None => format!("Move {name}"),
-        };
-        Some(DragPreview { label, at })
-    }
-
-    /// Picks a block up by its header. A zoomed tab draws one pane and leaves the others with
-    /// no rect to aim at, so there is nothing to drop a header on.
-    pub fn drag_begin(&mut self, id: u64) {
+    /// Picks a block up by its header. `at` is the press in the window, which the moves measure
+    /// their travel from: the pane it came from may glide away under the preview, so the pointer
+    /// must not be read back from that pane's rect. A zoomed tab draws one pane and leaves the
+    /// others with no rect to aim at, so there is nothing to drop a header on.
+    pub fn drag_begin(&mut self, id: u64, at: (f32, f32)) {
         if self.zoomed || self.block(id).is_none() {
             return;
         }
         self.dragging = Some(id);
-        self.drag_at = None;
+        self.press = Some(at);
         self.drop = None;
+        self.preview = None;
     }
 
-    /// The pointer moved over the tab: the pane under it, and the edge it is over, are where a
-    /// release would put the block, and the badge follows the pointer there.
-    pub fn drag_over(&mut self, at: (f32, f32)) {
+    /// The pointer travelled `travel` points from the press: the pane under it, and the edge it
+    /// is over, are where a release would put the block, and the tab draws that layout now.
+    pub fn drag_over(&mut self, travel: (f32, f32)) {
         let Some(from) = self.dragging else {
-            self.drag_at = None;
+            self.press = None;
             self.drop = None;
+            self.preview = None;
             return;
         };
-        self.drag_at = Some(at);
+        let Some(press) = self.press else {
+            return;
+        };
+        let at = (press.0 + travel.0, press.1 + travel.1);
         self.drop = self
             .blocks
             .iter()
             .find(|block| block.id != from && inside(block.rect, at))
             .map(|block| DropTarget::at(block.rect, block.id, at));
+        self.preview = self.drop.and_then(|drop| self.preview_of(from, drop));
     }
 
     /// The header was let go. Over another pane's body the two swap places; over one of its
     /// edges the dragged block takes that side of the pane in a fresh even split. Either way
-    /// both shells keep running. Anywhere else, or on a cancelled drag, nothing moves.
+    /// both shells keep running. Anywhere else, or on a cancelled drag, the preview goes and
+    /// nothing moves.
     pub fn drag_end(&mut self, cancelled: bool) {
         let Some(from) = self.dragging.take() else {
-            self.drag_at = None;
+            self.press = None;
             self.drop = None;
+            self.preview = None;
             return;
         };
-        self.drag_at = None;
+        self.press = None;
+        self.preview = None;
         let Some(drop) = self.drop.take().filter(|_| !cancelled) else {
             return;
         };
@@ -161,32 +143,50 @@ impl Panes {
         }
     }
 
+    /// The layout this drop would leave: the committed tree with the block moved or swapped,
+    /// which the tab draws in place of the real one until the release.
+    fn preview_of(&self, from: u64, drop: DropTarget) -> Option<Node> {
+        match drop {
+            DropTarget::Swap(to) if to != from => {
+                let mut root = self.root.clone();
+                swap(&mut root, from, to);
+                Some(root)
+            }
+            DropTarget::Split { pane, edge } if pane != from => {
+                beside(self.root.clone(), from, pane, edge, PREVIEW_SPLIT)
+            }
+            _ => None,
+        }
+    }
+
     /// Lifts `from` out of the tree and puts it back beside `pane`, on the edge the header was
     /// dropped toward: the split is fresh and even, and every other pane keeps its share.
     fn move_beside(&mut self, from: u64, pane: u64, edge: Edge) {
-        let root = std::mem::replace(&mut self.root, Node::Block(0));
-        let Some(root) = remove(root, from) else {
-            // `from` was the whole tree, so there is no second pane to divide it with.
-            self.root = Node::Block(from);
-            return;
-        };
-        self.root = root;
-        let (side, before) = edge.split();
-        let (first, second) = if before {
-            (Node::Block(from), Node::Block(pane))
-        } else {
-            (Node::Block(pane), Node::Block(from))
-        };
         let split = self.next;
         self.next += 1;
-        let divided = Node::Split {
-            id: split,
-            side,
-            share: 0.5,
-            length: 0.0,
-            first: Box::new(first),
-            second: Box::new(second),
-        };
-        place(&mut self.root, pane, divided);
+        let root = std::mem::replace(&mut self.root, Node::Block(0));
+        self.root = beside(root, from, pane, edge, split).unwrap_or(Node::Block(from));
     }
+}
+
+/// `root` with `from` lifted out and put beside `pane` on `edge`, in a split called `split`.
+/// None when `from` was the whole tree, leaving nothing to divide.
+fn beside(mut root: Node, from: u64, pane: u64, edge: Edge, split: u64) -> Option<Node> {
+    root = remove(root, from)?;
+    let (side, before) = edge.split();
+    let (first, second) = if before {
+        (Node::Block(from), Node::Block(pane))
+    } else {
+        (Node::Block(pane), Node::Block(from))
+    };
+    let divided = Node::Split {
+        id: split,
+        side,
+        share: 0.5,
+        length: 0.0,
+        first: Box::new(first),
+        second: Box::new(second),
+    };
+    place(&mut root, pane, divided);
+    Some(root)
 }

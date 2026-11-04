@@ -54,6 +54,17 @@ fn order(node: &Node) -> Vec<u64> {
     }
 }
 
+/// A tab split left and right, with both panes laid out so a drag has rects to aim at.
+fn pair() -> (Panes, u64, u64) {
+    let mut p = tab();
+    p.split(Side::Right);
+    let left = 1;
+    let right = p.focus_id();
+    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
+    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+    (p, left, right)
+}
+
 #[test]
 fn a_split_puts_the_new_block_beside_the_one_it_divided() {
     let mut p = tab();
@@ -98,19 +109,24 @@ fn resize_grows_the_focused_block_toward_the_direction() {
 
 #[test]
 fn dropping_a_header_on_a_pane_body_swaps_the_two() {
-    let mut p = tab();
-    p.split(Side::Right);
-    let left = 1;
-    let right = p.focus_id();
-    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
-    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+    let (mut p, left, right) = pair();
 
-    p.drag_begin(left);
-    p.drag_over((150.0, 50.0));
+    p.drag_begin(left, (10.0, 10.0));
+    p.drag_over((140.0, 40.0));
     assert_eq!(
         p.drop_target(),
         Some(DropTarget::Swap(right)),
         "the pane under the header"
+    );
+    assert_eq!(
+        order(p.preview.as_ref().expect("the swap is previewed")),
+        vec![right, left],
+        "the tab shows the shells already traded"
+    );
+    assert_eq!(
+        order(&p.root),
+        vec![left, right],
+        "the tab waits for the drop"
     );
     p.drag_end(false);
 
@@ -124,22 +140,27 @@ fn dropping_a_header_on_a_pane_body_swaps_the_two() {
 
 #[test]
 fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
-    let mut p = tab();
-    p.split(Side::Right);
-    let left = 1;
-    let right = p.focus_id();
-    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
-    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+    let (mut p, left, right) = pair();
 
     // Near the target's top edge: the drag lands above it rather than swapping.
-    p.drag_begin(left);
-    p.drag_over((150.0, 5.0));
+    p.drag_begin(left, (10.0, 10.0));
+    p.drag_over((140.0, -5.0));
     assert_eq!(
         p.drop_target(),
         Some(DropTarget::Split {
             pane: right,
             edge: Edge::Top
         })
+    );
+    assert_eq!(
+        sides(p.preview.as_ref().expect("the split is previewed")),
+        vec![Side::Down],
+        "the preview is already a column"
+    );
+    assert_eq!(
+        sides(&p.root),
+        vec![Side::Right],
+        "the tab waits for the drop"
     );
     p.drag_end(false);
 
@@ -149,8 +170,8 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
 
     // The block in the second half of a split comes out too: dropping it on the other pane's
     // left edge opens a fresh row.
-    p.drag_begin(right);
-    p.drag_over((5.0, 50.0));
+    p.drag_begin(right, (10.0, 10.0));
+    p.drag_over((-5.0, 40.0));
     p.drag_end(false);
 
     assert_eq!(order(&p.root), vec![right, left]);
@@ -159,51 +180,42 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
 }
 
 #[test]
-fn a_header_dropped_off_any_pane_or_cancelled_moves_nothing() {
-    let mut p = tab();
-    p.split(Side::Right);
-    let left = 1;
-    let right = p.focus_id();
-    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
-    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+fn a_drag_previews_the_layout_and_a_cancel_puts_it_back() {
+    let (mut p, left, right) = pair();
 
-    p.drag_begin(left);
-    p.drag_over((500.0, 500.0));
-    assert_eq!(p.drop_target(), None);
-    p.drag_end(false);
-    assert_eq!(order(&p.root), vec![left, right]);
+    p.drag_begin(left, (10.0, 10.0));
+    assert!(p.preview.is_none(), "a press alone rearranges nothing");
 
-    p.drag_begin(left);
-    p.drag_over((150.0, 50.0));
+    p.drag_over((140.0, 40.0));
+    assert_eq!(
+        order(p.preview.as_ref().expect("the swap is previewed")),
+        vec![right, left]
+    );
+    // The panes move under the pointer, so the drag keeps aiming at the layout it started in
+    // instead of chasing the preview.
+    p.set_rect(left, [900.0, 900.0, 1.0, 1.0]);
+    assert_eq!(p.block(left).unwrap().rect, [0.0, 0.0, 100.0, 100.0]);
+
     p.drag_end(true);
-    assert_eq!(order(&p.root), vec![left, right], "a cancelled drag holds");
+    assert!(p.preview.is_none(), "a cancel drops the preview");
+    assert_eq!(order(&p.root), vec![left, right], "the layout holds");
 }
 
 #[test]
-fn a_header_drag_previews_the_pane_and_where_it_would_land() {
-    let mut p = tab();
-    p.split(Side::Right);
-    let left = 1;
-    let right = p.focus_id();
-    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
-    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
-    let (from, to) = (p.name(left), p.name(right));
+fn a_header_dropped_off_any_pane_or_cancelled_moves_nothing() {
+    let (mut p, left, right) = pair();
 
-    p.drag_begin(left);
-    assert!(p.drag_preview().is_none(), "a press alone carries nothing");
-
-    p.drag_over((150.0, 50.0));
-    let preview = p.drag_preview().expect("the drag is in hand");
-    assert_eq!(preview.at, (150.0, 50.0));
-    assert_eq!(preview.label, format!("Swap {from} with {to}"));
-
-    p.drag_over((150.0, 5.0));
-    let preview = p.drag_preview().expect("the drag is in hand");
-    assert_eq!(preview.at, (150.0, 5.0), "the badge follows the pointer");
-    assert_eq!(preview.label, format!("Move {from} above {to}"));
-
+    p.drag_begin(left, (10.0, 10.0));
+    p.drag_over((490.0, 490.0));
+    assert_eq!(p.drop_target(), None);
+    assert!(p.preview.is_none(), "no pane means no preview");
     p.drag_end(false);
-    assert!(p.drag_preview().is_none(), "the badge goes with the drop");
+    assert_eq!(order(&p.root), vec![left, right]);
+
+    p.drag_begin(left, (10.0, 10.0));
+    p.drag_over((140.0, 40.0));
+    p.drag_end(true);
+    assert_eq!(order(&p.root), vec![left, right], "a cancelled drag holds");
 }
 
 #[test]

@@ -17,7 +17,7 @@ mod drag;
 mod tree;
 mod view;
 
-pub use drag::{DragPreview, DropTarget, Edge};
+pub use drag::{DropTarget, Edge};
 
 use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
 
@@ -68,11 +68,13 @@ pub struct Panes {
     next: u64,
     /// The split whose divider is being dragged, if any.
     resizing: Option<Resizing>,
-    /// The block a header drag has picked up, where the pointer is, and where letting it go
+    /// The block a header drag has picked up, where the press landed, and where letting it go
     /// would put the block.
     dragging: Option<u64>,
-    drag_at: Option<(f32, f32)>,
+    press: Option<(f32, f32)>,
     drop: Option<DropTarget>,
+    /// The layout the drop would leave, drawn in place of the committed tree until the release.
+    preview: Option<Node>,
     /// The folder a shell opened from this tab starts in before one reports its own (OSC 7).
     dir: PathBuf,
 }
@@ -93,8 +95,9 @@ impl Panes {
             next: 2,
             resizing: None,
             dragging: None,
-            drag_at: None,
+            press: None,
             drop: None,
+            preview: None,
             dir,
         }
     }
@@ -215,8 +218,9 @@ impl Panes {
         self.blocks.remove(index).term.close();
         if self.dragging == Some(id) || self.drop.is_some_and(|drop| drop.pane() == id) {
             self.dragging = None;
-            self.drag_at = None;
+            self.press = None;
             self.drop = None;
+            self.preview = None;
         }
         // The tree is rebuilt from what is left: `remove` takes the node it walks, and the
         // placeholder is never drawn because the last block was handled above.
@@ -243,8 +247,9 @@ impl Panes {
         self.zoomed = false;
         self.resizing = None;
         self.dragging = None;
-        self.drag_at = None;
+        self.press = None;
         self.drop = None;
+        self.preview = None;
     }
 
     /// Gives the keyboard to a block, which is how a press in a grid says which shell to type at.
@@ -295,8 +300,9 @@ impl Panes {
         self.zoomed = !self.zoomed;
         // A zoomed tab has no second pane to drop a header on.
         self.dragging = None;
-        self.drag_at = None;
+        self.press = None;
         self.drop = None;
+        self.preview = None;
     }
 
     /// Rex's `pane.resize`: the focused block grows toward `dir` by `amount` percent of the split
@@ -341,8 +347,13 @@ impl Panes {
         self.resizing = None;
     }
 
-    /// Records where a block was laid out, for a directional focus.
+    /// Records where a block was laid out, for a directional focus. While a header drag previews
+    /// a layout the panes move, but the drag keeps aiming at the layout it started in, so the
+    /// rects stay as the drop aimed at them.
     pub fn set_rect(&mut self, id: u64, rect: [f32; 4]) {
+        if self.dragging.is_some() {
+            return;
+        }
         if let Some(block) = self.blocks.iter_mut().find(|block| block.id == id) {
             block.rect = rect;
         }
@@ -437,7 +448,8 @@ impl Panes {
             };
         }
         let zoom = self.zoomed.then_some(self.focus);
-        view::tree(self, tab, &self.root, scale, k, headers, zoom)
+        let root = self.preview.as_ref().unwrap_or(&self.root);
+        view::tree(self, tab, root, scale, k, headers, zoom)
     }
 
     /// Puts the keyboard on the active block and takes it off every other one.
