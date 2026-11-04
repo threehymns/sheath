@@ -12,7 +12,6 @@ mod recorder;
 mod rules;
 mod session;
 mod settings;
-mod term;
 mod ui;
 mod vfs;
 mod views;
@@ -22,20 +21,13 @@ mod tests;
 
 use rune::AppSpec;
 
-/// The faces the app draws with: Inter (variable, so every weight) and IBM Plex Mono Regular
-/// for sizes and the inspector. The theme also ships Plex Mono Medium, which nothing asks for —
-/// its `mono` style is weight 400 — and carrying it costs the wasm build about 157 KB, 55 KB
-/// compressed. The order is `rune_theme_opencode::FONTS`: Inter, Plex Mono Regular, Plex Mono
-/// Medium, pinned by the Rune revision in Cargo.toml. A Nerd Font installed on the system joins
-/// this list at launch as the terminal's fallback for the icons only it draws; see
-/// `term::fonts`.
-const FONTS: &[&[u8]] = &[rune_theme_opencode::FONTS[0], rune_theme_opencode::FONTS[2]];
-
+// The faces come from the terminal crate's own list, which owns why the theme's third face is
+// left out: see `rune_tty::FONTS`.
 /// Opens Sheath's window. Shared by the desktop binary and the browser entry point, so both
 /// builds start the same app from the same spec.
 pub fn launch() {
     rune::set_app_id("dev.sheath.Sheath");
-    let (fonts, families) = term::fonts::spec();
+    let (fonts, families) = rune_tty::fonts::spec();
     rune::run(AppSpec {
         min_size: Some((1000.0, 600.0)),
         fonts,
@@ -54,13 +46,6 @@ pub fn launch() {
         ],
         ..AppSpec::new("Sheath", (1180.0, 760.0), app::App::new, ui::view)
     });
-}
-
-/// Opens a window that is only the terminal pane: the same engine, rows and scroll as the pane
-/// inside the app, with none of the file manager around it. `cargo run --example terminal` starts it.
-#[cfg(not(target_arch = "wasm32"))]
-pub fn launch_terminal() {
-    term::window::launch();
 }
 
 /// Loads the KDL files OPFS kept from the last visit, before the web build opens its window.

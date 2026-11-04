@@ -4,9 +4,9 @@
 //! Desktop builds stream the grid as one texture and build no row elements, so these tests run
 //! with `--features text-renderer`.
 
-use crate::term::Terminal;
+use rune_tty::Terminal;
 #[cfg(feature = "text-renderer")]
-use crate::term::grid::{Frame, Line};
+use rune_tty::grid::{Frame, Line};
 
 /// Where a fractional scroll puts the rows: the first row hangs lower by exactly the fraction,
 /// and the overscan row above it covers the strip that would otherwise be background.
@@ -81,7 +81,7 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
 
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
-    let theme = crate::term::theme(true);
+    let theme = rune_tty::theme(true);
     let mut pane = Terminal::new();
     pane.open(dir.path().to_path_buf());
     let pump = |pane: &mut Terminal| {
@@ -132,8 +132,8 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
 #[cfg(feature = "text-renderer")]
 #[test]
 fn a_background_is_a_rectangle_over_its_cells() {
-    use crate::term::grid::{Pen, Run};
     use crate::tests::helpers::*;
+    use rune_tty::grid::{Pen, Run};
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));
@@ -216,8 +216,8 @@ fn the_pane_draws_below_the_browser_when_it_opens() {
 #[cfg(feature = "text-renderer")]
 #[test]
 fn a_shape_is_a_rectangle_over_its_cell() {
-    use crate::term::grid::Shape;
     use crate::tests::helpers::*;
+    use rune_tty::grid::Shape;
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));
@@ -280,8 +280,8 @@ fn a_shape_is_a_rectangle_over_its_cell() {
 #[cfg(feature = "text-renderer")]
 #[test]
 fn an_update_keeps_the_elements_to_its_right() {
-    use crate::term::grid::{Pen, Run, Shape};
     use crate::tests::helpers::*;
+    use rune_tty::grid::{Pen, Run, Shape};
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));
@@ -385,8 +385,8 @@ fn an_update_keeps_the_elements_to_its_right() {
 #[cfg(feature = "text-renderer")]
 #[test]
 fn a_logo_replaced_by_a_popover_leaves_nothing_fading() {
-    use crate::term::grid::{Pen, Run, Shape};
     use crate::tests::helpers::*;
+    use rune_tty::grid::{Pen, Run, Shape};
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));
@@ -483,7 +483,7 @@ fn a_logo_replaced_by_a_popover_leaves_nothing_fading() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_box_drawing_cell_is_shapes_and_a_space() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
 
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
@@ -493,7 +493,7 @@ fn a_box_drawing_cell_is_shapes_and_a_space() {
         4,
         (7.0, 15.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("an engine");
@@ -539,8 +539,8 @@ fn a_box_drawing_cell_is_shapes_and_a_space() {
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 #[test]
 fn the_grid_streams_as_one_texture_by_default() {
-    use crate::term::grid::{Frame, Line};
     use crate::tests::helpers::*;
+    use rune_tty::grid::{Frame, Line};
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));
@@ -582,8 +582,8 @@ fn the_grid_streams_as_one_texture_by_default() {
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 #[test]
 fn a_notice_or_a_starting_shell_still_uses_text() {
-    use crate::term::grid::Frame;
     use crate::tests::helpers::*;
+    use rune_tty::grid::Frame;
 
     let dir = long_folder(4);
     let mut rt = runtime(app(&dir));

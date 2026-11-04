@@ -1,0 +1,35 @@
+[package]
+name = "rune-tty"
+# Versioned on its own, like Hex's `crates/` crates: the terminal is published separately from
+# the app that uses it.
+version = "0.1.0"
+edition = "2024"
+description = "A terminal for Rune apps: Ghostty's VT core on a PTY, and the grid a view draws"
+
+[features]
+# Builds the text-row renderer instead of the streamed texture. The web build uses it always.
+text-renderer = []
+
+[dependencies]
+rune.workspace = true
+rune-kit.workspace = true
+rune-theme-opencode.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The emulator: Ghostty's VT core, which parses escape sequences and keeps the grid, scrollback,
+# and reflow, while the caller draws the cells. It builds a pinned Ghostty source with Zig at
+# build time, so nothing native here exists on wasm.
+# `kitty-graphics` turns on the image storage, placement and query half of the kitty graphics
+# protocol, and `png` bundles the decoder libghostty calls for `f=100` payloads.
+ghostty-vt = { version = "0.8.0", default-features = false, features = [
+    "kitty-graphics",
+    "png",
+] }
+# The PTY behind the grid, and the shell process on the other end of it.
+portable-pty = "0.9"
+# The raster renderer draws the pane's glyphs itself, from the mono face.
+swash = "0.2.10"
+# A cell holds a whole grapheme cluster, so its glyphs come from shaping it: the emoji font's
+# ligatures and the placement of a combining mark both need a shaper.
+harfrust = "0.12"
+unicode-segmentation = "1.13"

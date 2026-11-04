@@ -40,7 +40,7 @@ impl App {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let dark = self.dark.get();
-            let theme = crate::term::theme(dark);
+            let theme = rune_tty::theme(dark);
             // The grid is sized in the font's own cell, so the shell is told the columns and rows
             // the rows are actually drawn at.
             self.term

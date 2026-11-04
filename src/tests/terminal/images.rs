@@ -5,7 +5,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use crate::term::engine::Engine;
+use rune_tty::engine::Engine;
 
 /// A 1x1 red RGB image, transmitted and displayed at the cursor with `a=T`, sized to one cell
 /// (`c=1,r=1`) so its geometry is the same at any font: 0xff, 0x00, 0x00 base64-encodes to
@@ -21,7 +21,7 @@ fn engine(cols: u16, rows: u16) -> (tempfile::TempDir, Engine) {
         rows,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -57,7 +57,7 @@ fn an_image_transmitted_at_the_cursor_reaches_the_frame() {
     );
     assert_eq!(
         placement.layer,
-        crate::term::grid::ImageLayer::AboveText,
+        rune_tty::grid::ImageLayer::AboveText,
         "z-index 0 draws over the text"
     );
 }
@@ -93,15 +93,9 @@ fn a_negative_z_index_sorts_under_the_text() {
     engine.feed(b"\x1b_Ga=p,i=1,z=-1\x1b\\");
     let frame = engine.frame();
     assert_eq!(frame.images.len(), 2);
-    assert_eq!(
-        frame.images[0].layer,
-        crate::term::grid::ImageLayer::BelowText
-    );
+    assert_eq!(frame.images[0].layer, rune_tty::grid::ImageLayer::BelowText);
     assert_eq!(frame.images[0].z, -1);
-    assert_eq!(
-        frame.images[1].layer,
-        crate::term::grid::ImageLayer::AboveText
-    );
+    assert_eq!(frame.images[1].layer, rune_tty::grid::ImageLayer::AboveText);
 }
 
 /// Deleting the images clears the frame: a viewer that exits puts the screen back, and the pane

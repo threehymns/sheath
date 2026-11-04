@@ -2,18 +2,18 @@
 //! the header draws rather than against a shell that has to cooperate.
 
 #[cfg(not(target_arch = "wasm32"))]
-use crate::term::engine::{directory, progress_of};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::term::{Progress, ProgressKind};
-#[cfg(not(target_arch = "wasm32"))]
 use ghostty_vt::terminal::ProgressState;
+#[cfg(not(target_arch = "wasm32"))]
+use rune_tty::engine::{directory, progress_of};
+#[cfg(not(target_arch = "wasm32"))]
+use rune_tty::{Progress, ProgressKind};
 
 /// OSC 8 links are stored with the cells they cover, so a click resolves the same link from any
 /// cell of it and nothing from the cell past its end.
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn an_osc8_link_comes_back_with_the_cells_it_covers() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -22,7 +22,7 @@ fn an_osc8_link_comes_back_with_the_cells_it_covers() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -62,8 +62,8 @@ fn an_osc8_link_comes_back_with_the_cells_it_covers() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn the_program_s_cursor_colour_and_shape_reach_the_frame() {
-    use crate::term::engine::Engine;
-    use crate::term::grid::CursorShape;
+    use rune_tty::engine::Engine;
+    use rune_tty::grid::CursorShape;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -72,7 +72,7 @@ fn the_program_s_cursor_colour_and_shape_reach_the_frame() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -107,8 +107,8 @@ fn the_program_s_cursor_colour_and_shape_reach_the_frame() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_program_s_default_colours_reach_the_rows_already_drawn() {
-    use crate::term::engine::Engine;
-    use crate::term::grid::Frame;
+    use rune_tty::engine::Engine;
+    use rune_tty::grid::Frame;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -117,7 +117,7 @@ fn a_program_s_default_colours_reach_the_rows_already_drawn() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -146,8 +146,8 @@ fn a_program_s_default_colours_reach_the_rows_already_drawn() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_program_s_default_colours_reach_the_overscan_rows() {
-    use crate::term::engine::Engine;
-    use crate::term::grid::Frame;
+    use rune_tty::engine::Engine;
+    use rune_tty::grid::Frame;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -156,7 +156,7 @@ fn a_program_s_default_colours_reach_the_overscan_rows() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -194,7 +194,7 @@ fn a_program_s_default_colours_reach_the_overscan_rows() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn an_osc52_copy_is_trimmed_of_its_trailing_whitespace() {
-    use crate::term::engine::{Engine, trim_trailing};
+    use rune_tty::engine::{Engine, trim_trailing};
     assert_eq!(trim_trailing("echo hi\n".to_owned()), "echo hi");
     assert_eq!(trim_trailing("echo hi \t\r\n\n".to_owned()), "echo hi");
     assert_eq!(
@@ -211,7 +211,7 @@ fn an_osc52_copy_is_trimmed_of_its_trailing_whitespace() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -257,10 +257,10 @@ fn a_directory_report_decodes_into_the_path_it_names() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn the_color_scheme_answer_follows_the_background() {
-    use crate::term::Theme;
-    use crate::term::engine::scheme;
     use ghostty_vt::style::RgbColor;
     use ghostty_vt::terminal::ColorScheme;
+    use rune_tty::Theme;
+    use rune_tty::engine::scheme;
     let theme = |bg: u8| Theme {
         fg: RgbColor {
             r: 255 - bg,

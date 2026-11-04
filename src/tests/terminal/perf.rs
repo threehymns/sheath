@@ -3,9 +3,9 @@ use std::time::Instant;
 use rune::{Key, KeyEvent, Mods, Runtime};
 
 use crate::app::App;
-use crate::term::engine::Engine;
-use crate::term::grid::{Frame, Line, Pen, Run};
 use crate::tests::helpers::{app, fixture, long_folder, runtime};
+use rune_tty::engine::Engine;
+use rune_tty::grid::{Frame, Line, Pen, Run};
 
 fn stats(mut samples: Vec<f64>) -> (f64, f64) {
     samples.sort_by(f64::total_cmp);
@@ -81,7 +81,7 @@ fn perf_terminal_grid() {
         rows,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .unwrap();
@@ -89,7 +89,7 @@ fn perf_terminal_grid() {
 
     // The pane's own path: one frame reused, so this is the read back and not an allocation
     // per row.
-    let mut frame = crate::term::grid::Frame::default();
+    let mut frame = rune_tty::grid::Frame::default();
     let mut full = Vec::new();
     let screen = vt_screen(rows as usize, cols as usize);
     for _ in 0..200 {
@@ -189,7 +189,7 @@ fn perf_terminal_unchanged_frame() {
         rows,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .unwrap();

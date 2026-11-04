@@ -9,7 +9,7 @@
 /// The phantom space the renderer used to insert there was what drifted the rest of the row.
 #[test]
 fn a_wide_character_covers_two_cells() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
 
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
@@ -19,7 +19,7 @@ fn a_wide_character_covers_two_cells() {
         4,
         (7.0, 15.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("an engine");

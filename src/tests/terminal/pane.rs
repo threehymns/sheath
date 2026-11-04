@@ -1,7 +1,7 @@
 //! The pane's own numbers: what a scroll splits into, the height it may take, and what a
 //! drag through the minimum does, all without a running view.
 
-use crate::term::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, Terminal, split};
+use rune_tty::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, Terminal, split};
 use std::path::PathBuf;
 
 #[test]
@@ -212,8 +212,8 @@ fn a_drag_that_collapses_again_is_not_a_click() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_selection_reaches_the_frame_without_new_output() {
-    use crate::term::engine::Engine;
-    use crate::term::grid::Frame;
+    use rune_tty::engine::Engine;
+    use rune_tty::grid::Frame;
 
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
@@ -223,7 +223,7 @@ fn a_selection_reaches_the_frame_without_new_output() {
         4,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("an engine");

@@ -6,7 +6,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use crate::term::engine::Engine;
+use rune_tty::engine::Engine;
 
 /// A shell with an integration script is started with it, and its first prompt reports the
 /// directory the pane started it in. A shell without one is started unchanged, so this only
@@ -30,7 +30,7 @@ fn the_first_prompt_reports_the_directory_it_started_in() {
         24,
         (8.0, 16.0),
         1.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");

@@ -140,7 +140,7 @@ pub struct App {
     pub notices: Vec<Notice>,
     pub keybinds: Keybinds,
     /// The bottom terminal pane and the shell behind it.
-    pub term: crate::term::Terminal,
+    pub term: rune_tty::Terminal,
     /// The appearance the last frame drew in, so a shell started from a poll gets the same
     /// colours the pane paints with.
     pub dark: std::cell::Cell<bool>,
@@ -286,7 +286,7 @@ impl App {
             place_dragged: false,
             notices: Vec::new(),
             keybinds,
-            term: crate::term::Terminal::new(),
+            term: rune_tty::Terminal::new(),
             dark: std::cell::Cell::new(true),
             scale: std::cell::Cell::new(1.0),
             wake: None,

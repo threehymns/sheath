@@ -1,0 +1,12 @@
+[package]
+name = "avar"
+version = "0.1.0"
+edition = "2024"
+description = "A terminal window: rune-tty's pane, a shell, and nothing else"
+
+[dependencies]
+rune-tty.workspace = true
+rune.workspace = true
+rune-theme-opencode.workspace = true
+# Reading the clipboard for a paste into the shell; a terminal's paste is a read.
+arboard = "3"

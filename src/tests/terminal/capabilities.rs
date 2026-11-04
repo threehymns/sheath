@@ -4,7 +4,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
-use crate::term::engine::Engine;
+use rune_tty::engine::Engine;
 
 fn engine(cols: u16, rows: u16) -> (tempfile::TempDir, Engine) {
     let dir = tempfile::tempdir().unwrap();
@@ -15,7 +15,7 @@ fn engine(cols: u16, rows: u16) -> (tempfile::TempDir, Engine) {
         rows,
         (8.0, 16.0),
         1.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");

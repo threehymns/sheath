@@ -19,12 +19,12 @@ cargo run -- ~/Downloads  # start somewhere else
 cargo run -- README.md    # start beside a file, with it selected
 ```
 
-The terminal pane is also a window of its own — the same engine, rows and scroll, with no file
-manager around them:
+`rune-tty` (`crates/term`) is the pane itself; `avar` (`crates/terminal`) is a window that is
+only that pane, with no file manager around it:
 
 ```sh
-cargo run --example terminal           # a shell in the folder you are in
-cargo run --example terminal -- ~/src  # ... or in another one
+cargo run -p avar            # a shell in the folder you are in
+cargo run -p avar -- ~/src   # ... or in another one
 ```
 
 Arguments after `--` go to the app; Rune parses its own flags first. The framework is pinned
@@ -133,7 +133,7 @@ build always uses it.
 - **Collapsing, and closing.** The header's chevron (or the pane's own shortcut) collapses the
   pane; the shell keeps running and the same session comes back. The close button ends the
   shell, so opening the pane again starts a fresh one. A shell that exits closes the pane too,
-  and the standalone `terminal` window with it.
+  and `avar`, the standalone window, with it.
 - **Resizing.** Drag the pane's top edge; the shell reflows as it moves. A drag stops at the
   minimum height; pushing a little further past it collapses the pane, and dragging the handle
   up from the bottom opens it again once the drag reaches the minimum. A click on the collapsed

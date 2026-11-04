@@ -5,56 +5,53 @@ edition = "2024"
 default-run = "sheath"
 description = "A file manager PoC built with the Rune UI framework"
 
+# The app is the root package, the way Hex lays out its own tree: plain `cargo build` and
+# `cargo test` select this package and only this one, and `--workspace` or `-p avar` reaches the
+# terminal. `crates/` holds what the app shares rather than owns.
+[workspace]
+members = ["crates/term", "crates/terminal"]
+resolver = "3"
+
+[workspace.dependencies]
+# The terminal, shared by the app's pane and the standalone `avar` window. `path` is what the
+# workspace builds; `version` is what a published crate needs, so the two are always in step.
+rune-tty = { path = "crates/term", version = "0.1.0" }
+# Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends. One pin
+# for the whole workspace, so the pane and the app are never built against two different Runes.
+rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", default-features = false }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
+
 [features]
 # Opt-in Rust hot-patching for desktop development; see "Live editing" in README.md.
 hot = ["rune/hot"]
-# The original row/span renderer for the grid. Desktop builds stream the grid as one texture by
-# default; this builds the text rows instead, and the paint tests that assert their elements.
-text-renderer = []
+# The terminal's text row renderer, forwarded to the crate that owns it.
+text-renderer = ["rune-tty/text-renderer"]
 
 [dependencies]
+# The terminal pane, which is also the standalone `avar` window's only dependency.
+rune-tty.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 kdl = { version = "6.7.1", default-features = false }
-# Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends.
 # Rune's defaults bundle Inter and IBM Plex Mono as fallback faces; the app passes the theme's
 # own fonts, so those bytes would only sit in the module unused (1.4 MB on the web build).
 # `svg` (resvg rasterizing) is a native-only feature: the web build previews pictures by URL
 # through the browser's own codecs, and its demo tree has no SVG, so resvg would only sit in the
 # wasm unused.
-rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", default-features = false }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
-rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
+rune.workspace = true
+rune-kit.workspace = true
+rune-theme-opencode.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Platform integration the desktop build uses: notifications over D-Bus and Rune's audio.
-rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", features = ["dbus", "ogg-audio", "svg"] }
+rune = { workspace = true, features = ["dbus", "ogg-audio", "svg"] }
 avif-decode = { version = "3", default-features = false }
 # fff is the file finder behind the recursive search: it indexes the folder on screen and ranks
 # the matches, so the app does not carry its own tree walk. Its index is native-only (LMDB,
 # libgit2, threads), so the web demo keeps the plain walk.
 fff-search = "0.11.1-nightly.f64bab2"
-# The terminal pane's emulator: Ghostty's VT core, which parses escape sequences and keeps the
-# grid, scrollback, and reflow, while Rune draws the cells. It builds a pinned Ghostty source
-# with Zig at build time, so it stays out of the web build.
-# `kitty-graphics` turns on the image storage, placement and query half of the kitty graphics
-# protocol, and `png` bundles the decoder libghostty calls for `f=100` payloads. Both are
-# default features of the crate, so turning defaults off above means naming them here.
-ghostty-vt = { version = "0.8.0", default-features = false, features = [
-    "kitty-graphics",
-    "png",
-] }
-# The texture prototype rasterizes the pane's glyphs itself, from the same mono face.
-swash = "0.2.10"
-# A cell holds a whole grapheme cluster, so its glyphs come from shaping it: the emoji font's
-# ligatures for `👍🏽` and the placement of a combining mark both need a shaper. Both crates
-# are already in Rune's graph, so this adds no download.
-harfrust = "0.12"
-unicode-segmentation = "1.13"
-# Reading the clipboard for a paste into the shell; Rune's own clipboard is write-only from the
-# app side, and a terminal's paste is a read.
+# Reading the clipboard for a paste into the terminal.
 arboard = "3"
-# The PTY behind the pane, and the shell process on the other end of it.
-portable-pty = "0.9"
 notify = "8"
 trash = "5.2.9"
 heif-oxide = "0.1"
@@ -76,3 +73,11 @@ js-sys = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
+
+# The terminal tests drive libghostty directly: a mouse report, a colour scheme, a progress
+# state. They are native only, as the engine is.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+ghostty-vt = { version = "0.8.0", default-features = false, features = [
+    "kitty-graphics",
+    "png",
+] }

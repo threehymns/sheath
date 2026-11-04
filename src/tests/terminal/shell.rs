@@ -10,8 +10,8 @@
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
-    use crate::term::engine::Engine;
     use ghostty_vt::mouse::{Action, Button};
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -20,7 +20,7 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -69,7 +69,7 @@ fn a_mouse_capturing_program_gets_the_wheel_and_the_button_that_ended() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_shell_that_exits_is_reported() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -78,7 +78,7 @@ fn a_shell_that_exits_is_reported() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -105,7 +105,7 @@ fn a_shell_that_exits_is_reported() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn the_shell_is_told_it_is_on_ghostty_s_terminfo() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -114,7 +114,7 @@ fn the_shell_is_told_it_is_on_ghostty_s_terminfo() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -141,7 +141,7 @@ fn the_shell_is_told_it_is_on_ghostty_s_terminfo() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_search_marks_the_matches_it_finds_and_walks_them() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -150,7 +150,7 @@ fn a_search_marks_the_matches_it_finds_and_walks_them() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -205,7 +205,7 @@ fn a_search_marks_the_matches_it_finds_and_walks_them() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_double_click_takes_a_word_and_a_triple_click_its_line() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -214,7 +214,7 @@ fn a_double_click_takes_a_word_and_a_triple_click_its_line() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");
@@ -253,7 +253,7 @@ fn a_double_click_takes_a_word_and_a_triple_click_its_line() {
 #[cfg(not(target_arch = "wasm32"))]
 #[test]
 fn a_shell_starts_on_a_pty_and_its_output_reaches_the_grid() {
-    use crate::term::engine::Engine;
+    use rune_tty::engine::Engine;
     let dir = tempfile::tempdir().unwrap();
     let wake: rune::Waker = std::sync::Arc::new(|| {});
     let mut engine = Engine::spawn(
@@ -262,7 +262,7 @@ fn a_shell_starts_on_a_pty_and_its_output_reaches_the_grid() {
         10,
         (8.0, 16.0),
         2.0,
-        crate::term::theme(true),
+        rune_tty::theme(true),
         wake,
     )
     .expect("a shell on a pty");

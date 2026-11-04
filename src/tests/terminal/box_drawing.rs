@@ -1,7 +1,7 @@
 //! The tables behind the cell-filling characters are pure functions of the code point
 //! and the cell's size, so they can be checked without a terminal at all.
 
-use crate::term::shapes::{self, Metrics};
+use rune_tty::shapes::{self, Metrics};
 
 /// An IBM Plex Mono cell at 2x, the size the pane measures on the headless display.
 fn metrics() -> Metrics {
