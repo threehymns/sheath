@@ -9,6 +9,8 @@ rune-tty.workspace = true
 rune.workspace = true
 rune-kit.workspace = true
 rune-theme-opencode.workspace = true
+# The dialog frame: the notch the Done button sits in, shared with the app's settings window.
+chrome.workspace = true
 # The shared keymap and its two surfaces: the command palette and the keybind editor.
 actions.workspace = true
 actions-ui.workspace = true

@@ -11,6 +11,7 @@
 mod action;
 mod config;
 mod icons;
+mod settings;
 
 use std::cell::Cell;
 use std::collections::BTreeMap;
@@ -20,14 +21,11 @@ use std::time::{Duration, Instant};
 use action::Action;
 use actions::{Keybinds, Outcome, Recorder};
 use actions_ui::{KeybindHost, Palette, PaletteHost};
-use rune::{
-    Cx, Drag, El, Key, KeyEvent, PhysicalInput, Shortcut, ShortcutError, Tx, Waker, col, el, row,
-    text,
-};
-use rune_kit::{Button, ButtonVariant, ControlSize, Kit, scrim};
+use rune::{Cx, Drag, El, Key, KeyEvent, PhysicalInput, Shortcut, ShortcutError, Tx, Waker, col};
 use rune_theme_opencode as theme;
 use rune_tty::{Terminal, layout_screen, screen_of, terminal_cell, terminal_drag};
 use scroll::Host;
+use settings::SettingsTab;
 
 /// Where the shell starts: the first path on the command line that is a folder, else the folder
 /// the window was started in.
@@ -54,8 +52,8 @@ pub struct Window {
     keybinds: Keybinds<Action>,
     recorders: BTreeMap<Action, Recorder>,
     store: config::Store,
-    /// Whether the keybind editor is up.
-    keybinds_open: bool,
+    /// The settings window, with the tab it was left on, while it is up.
+    settings: Option<SettingsTab>,
     /// The scroll areas the palette and the editor build, and the physics for them.
     areas: scroll::Areas,
     /// Frames drawn since the last report, the bytes parsed by then, and when that report was
@@ -92,7 +90,7 @@ impl Window {
             keybinds,
             recorders: Keybinds::<Action>::recorders(),
             store,
-            keybinds_open: false,
+            settings: None,
             areas: scroll::Areas::default(),
             frames: 0,
             parsed: 0,
@@ -108,7 +106,7 @@ impl Window {
     fn run(&mut self, action: Action, tx: &mut Tx) {
         match action {
             Action::CommandBar => self.palette = Some(Palette::open()),
-            Action::OpenSettings => self.keybinds_open = true,
+            Action::OpenSettings => self.open_settings(),
             Action::Copy => {
                 if let Some(text) = self.term.copy_selection()
                     && !text.trim().is_empty()
@@ -128,6 +126,20 @@ impl Window {
                 self.wake_frame(tx);
             }
         }
+    }
+
+    fn open_settings(&mut self) {
+        if self.settings.is_none() {
+            self.settings = Some(SettingsTab::Shortcuts);
+        }
+    }
+
+    fn open_tab(&mut self, tab: SettingsTab) {
+        self.settings = Some(tab);
+    }
+
+    fn close_settings(&mut self) {
+        self.settings = None;
     }
 
     fn set_binding(
@@ -219,8 +231,8 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         layers.push(backdrop);
         layers.push(slot);
     }
-    if s.keybinds_open {
-        keybind_layer(s, k, &mut layers);
+    if let Some(tab) = s.settings {
+        settings::layer(s, tab, k, &mut layers);
     }
     let content = col()
         .key("terminal-window")
@@ -230,82 +242,6 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         .fill(k.c.bg_base)
         .child(screen);
     rune_kit::root(content, layers)
-}
-
-/// The keybind editor's frame: the shared page body, padded in a dialog with a way out. The frame
-/// is the host's because the page is only the rows and their footer.
-fn keybind_layer(s: &Window, k: &Kit, layers: &mut Vec<El>) {
-    let page = actions_ui::keybind_page(s, k, Action::icon, &icons::UNDO);
-    let header = row()
-        .key("keybinds-header")
-        .w_full()
-        .h(52.0)
-        .px(20.0)
-        .center_y()
-        .child(text("Shortcuts").font(k.ty.ui_medium).color(k.c.text_base));
-    let mut panel = col()
-        .key("keybinds-dialog")
-        .w(580.0)
-        .h_full()
-        .max_h(600.0)
-        .radius(12.0)
-        .fill(k.c.bg_base)
-        .border(1.0, k.c.border_muted)
-        .clip_rounded(12.0)
-        .modal(true, |s: &mut Window| s.keybinds_open = false)
-        .on_press(|_: &mut Window| {})
-        .child(header)
-        .child(
-            el().key("keybinds-rule")
-                .h(1.0)
-                .w_full()
-                .fill(k.c.border_muted),
-        )
-        .child(scroll::area(
-            s,
-            "keybinds-scroll",
-            col().w_full().grow(1.0).min_h(0.0).scroll_edge_fade(16.0),
-            col()
-                .key("keybinds-content")
-                .w_full()
-                .px(20.0)
-                .pt(16.0)
-                .pb(20.0)
-                .child(page),
-        ));
-    panel = panel.child(
-        row()
-            .key("keybinds-footer")
-            .w_full()
-            .h(60.0)
-            .px(20.0)
-            .center_y()
-            .justify_end()
-            .child(
-                Button::new("Done")
-                    .variant(ButtonVariant::Neutral)
-                    .control_size(ControlSize::Regular)
-                    .on_press(|s: &mut Window| s.keybinds_open = false)
-                    .build(k)
-                    .key("close-keybinds")
-                    .default_button(),
-            ),
-    );
-    layers.push(
-        scrim("keybinds-scrim", |s: &mut Window| s.keybinds_open = false)
-            .fill(k.alpha(k.c.black, 0.32)),
-    );
-    layers.push(
-        col()
-            .key("keybinds-slot")
-            .absolute(0.0, 0.0)
-            .w_full()
-            .h_full()
-            .padding(32.0)
-            .justify_center()
-            .items_center()
-            .child(panel),
-    );
 }
 
 /// Drains the PTY and rebuilds the frame when it changed. Runs in the frame's poll, so the waker
@@ -373,9 +309,9 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette.is_some() {
         return s.palette_key(event, tx);
     }
-    if s.keybinds_open {
+    if s.settings.is_some() {
         if matches!(event.key, Key::Escape) {
-            s.keybinds_open = false;
+            s.close_settings();
             return true;
         }
         return false;
