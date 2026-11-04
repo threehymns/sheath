@@ -396,21 +396,20 @@ impl Panes {
         (redraw, blink, ended)
     }
 
-    /// The tab's layout: the blocks as cards, split by the gaps that resize them. A tab holding
-    /// one block draws just its grid: a window that is one shell is a terminal, not a card.
-    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit) -> El {
+    /// The tab's layout: the blocks as panes, split by the gaps that resize them. A tab holding
+    /// one block with no headers draws just its grid: a window that is one shell is a terminal,
+    /// not a pane. A zoomed pane keeps its place in the tree and takes the whole share of every
+    /// split on its path, so it glides to the tab's edge on the layout spring.
+    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit, headers: bool) -> El {
         if self.blocks.len() == 1 {
             return match self.block(self.focus) {
-                Some(block) => view::bare(tab, block, scale, k),
+                Some(block) if !headers => view::bare(tab, block, scale, k),
+                Some(block) => view::pane(self, tab, block, scale, k, headers),
                 None => rune::el(),
             };
         }
-        if self.zoomed
-            && let Some(block) = self.block(self.focus)
-        {
-            return view::card(self, tab, block, scale, k);
-        }
-        view::tree(self, tab, &self.root, scale, k)
+        let zoom = self.zoomed.then_some(self.focus);
+        view::tree(self, tab, &self.root, scale, k, headers, zoom)
     }
 
     /// Puts the keyboard on the active block and takes it off every other one.

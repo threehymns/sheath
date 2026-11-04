@@ -17,14 +17,24 @@ pub const SETTINGS: &str = "settings.kdl";
 pub enum Setting {
     /// The tabs as a bar across the top of the window, instead of the rail down its side.
     HorizontalTabs,
+    /// A header above each pane, naming its folder and offering to split, zoom and close it.
+    PaneHeaders,
+    /// A slim bar above the panes, with the tab's name.
+    TopBar,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 1] = [Setting::HorizontalTabs];
+    pub const ALL: [Setting; 3] = [
+        Setting::HorizontalTabs,
+        Setting::PaneHeaders,
+        Setting::TopBar,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
             Setting::HorizontalTabs => "horizontal-tabs",
+            Setting::PaneHeaders => "pane-headers",
+            Setting::TopBar => "top-bar",
         }
     }
 
@@ -35,6 +45,8 @@ impl Setting {
     pub fn default_on(self) -> bool {
         match self {
             Setting::HorizontalTabs => false,
+            Setting::PaneHeaders => false,
+            Setting::TopBar => false,
         }
     }
 }

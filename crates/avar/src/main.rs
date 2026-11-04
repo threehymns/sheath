@@ -96,6 +96,10 @@ pub struct Window {
     /// The settings beside them, and the tab layout they currently ask for.
     prefs: config::Store,
     horizontal: bool,
+    /// Whether each pane draws its header above its shell.
+    headers: bool,
+    /// Whether the window draws its own slim top bar above the panes.
+    top_bar: bool,
     /// The settings window, with the tab it was left on, while it is up.
     settings: Option<SettingsTab>,
     /// The scroll areas the palette and the editor build, and the physics for them.
@@ -127,6 +131,12 @@ impl Window {
         let horizontal = prefs
             .setting(config::Setting::HorizontalTabs)
             .unwrap_or_else(|| config::Setting::HorizontalTabs.default_on());
+        let headers = prefs
+            .setting(config::Setting::PaneHeaders)
+            .unwrap_or_else(|| config::Setting::PaneHeaders.default_on());
+        let top_bar = prefs
+            .setting(config::Setting::TopBar)
+            .unwrap_or_else(|| config::Setting::TopBar.default_on());
         Window {
             tabs: Tabs::new(start_dir()),
             rail: PaneState::new(tabs::RAIL).range(tabs::RAIL_MIN, tabs::RAIL_MAX),
@@ -139,6 +149,8 @@ impl Window {
             store,
             prefs,
             horizontal,
+            headers,
+            top_bar,
             settings: None,
             areas: scroll::Areas::default(),
             frames: 0,
@@ -221,6 +233,30 @@ impl Window {
     pub(crate) fn set_horizontal_tabs(&mut self, on: bool) {
         self.horizontal = on;
         self.prefs.set_setting(config::Setting::HorizontalTabs, on);
+    }
+
+    /// Whether each pane draws its header above its shell.
+    pub(crate) fn pane_headers(&self) -> bool {
+        self.headers
+    }
+
+    /// Shows the pane headers, or takes them away, and writes the choice down so the next window
+    /// opens the same way.
+    pub(crate) fn set_pane_headers(&mut self, on: bool) {
+        self.headers = on;
+        self.prefs.set_setting(config::Setting::PaneHeaders, on);
+    }
+
+    /// Whether the window draws its own slim top bar above the panes.
+    pub(crate) fn top_bar(&self) -> bool {
+        self.top_bar
+    }
+
+    /// Shows the top bar, or takes it away, and writes the choice down so the next window opens
+    /// the same way.
+    pub(crate) fn set_top_bar(&mut self, on: bool) {
+        self.top_bar = on;
+        self.prefs.set_setting(config::Setting::TopBar, on);
     }
 
     fn open_settings(&mut self) {

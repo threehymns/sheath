@@ -66,8 +66,14 @@ impl Tabs {
         self.rows.is_empty()
     }
 
+    /// How many tabs the window holds: the rail or the strip is only there to choose between
+    /// them, so one tab needs neither.
+    pub fn len(&self) -> usize {
+        self.rows.len()
+    }
+
     /// One tab holding one pane: the window opens as a terminal, so it draws no rail, no
-    /// toolbar and no card around the grid.
+    /// toolbar and no chrome around the grid.
     pub fn is_single(&self) -> bool {
         self.rows.len() == 1 && self.rows[0].panes.blocks() == 1
     }
@@ -378,11 +384,11 @@ impl Tabs {
     }
 
     /// A tab's layout, ready to draw: the blocks of the tab on screen, split as it was left.
-    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit) -> El {
+    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit, headers: bool) -> El {
         self.rows
             .iter()
             .find(|row| row.id == tab)
-            .map(|row| row.panes.layout(tab, scale, k))
+            .map(|row| row.panes.layout(tab, scale, k, headers))
             .unwrap_or_else(rune::el)
     }
 

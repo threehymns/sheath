@@ -192,28 +192,72 @@ pub fn layer(s: &Window, tab: SettingsTab, k: &Kit, layers: &mut Vec<El>) {
     );
 }
 
-/// The appearance page: the layout the window draws its tabs in.
+/// The appearance page: the layout the window draws its tabs and panes in.
 fn appearance_page(s: &Window, k: &Kit) -> El {
     let horizontal = Switch::new(s.horizontal_tabs())
         .hide_label()
         .on_toggle(|s: &mut Window| s.set_horizontal_tabs(!s.horizontal_tabs()))
         .build(k)
         .key("horizontal-tabs");
-    settings_section(
-        k,
-        "appearance-tabs",
-        "Tabs",
-        vec![settings_row(
+    let headers = Switch::new(s.pane_headers())
+        .hide_label()
+        .on_toggle(|s: &mut Window| s.set_pane_headers(!s.pane_headers()))
+        .build(k)
+        .key("pane-headers");
+    let top_bar = Switch::new(s.top_bar())
+        .hide_label()
+        .on_toggle(|s: &mut Window| s.set_top_bar(!s.top_bar()))
+        .build(k)
+        .key("top-bar");
+    col()
+        .w_full()
+        .gap(24.0)
+        .child(settings_section(
             k,
-            &rune_kit::shell::SIDEBAR,
-            "Horizontal workspace tabs",
-            Some(
-                "Draw the tabs as a bar across the top of the window instead of a rail down its \
-                 side.",
-            ),
-            horizontal,
-        )],
-    )
+            "appearance-tabs",
+            "Tabs",
+            vec![settings_row(
+                k,
+                &rune_kit::shell::SIDEBAR,
+                "Horizontal workspace tabs",
+                Some(
+                    "Draw the tabs as a bar across the top of the window instead of a rail down \
+                     its side.",
+                ),
+                horizontal,
+            )],
+        ))
+        .child(settings_section(
+            k,
+            "appearance-panes",
+            "Panes",
+            vec![settings_row(
+                k,
+                &icons::SPLIT_RIGHT,
+                "Pane headers",
+                Some(
+                    "Show each pane's folder, and its split, zoom and close buttons, above its \
+                     terminal.",
+                ),
+                headers,
+            )],
+        ))
+        .child(settings_section(
+            k,
+            "appearance-window",
+            "Window",
+            vec![settings_row(
+                k,
+                &rune_kit::glyphs::DASH,
+                "Top bar",
+                Some(
+                    "Show a slim bar with the tab's name above the panes. It stays hidden \
+                     where the window already has a titlebar: the compositor's or Rune's own \
+                     on Wayland, the window manager's on X11, the system's on Windows.",
+                ),
+                top_bar,
+            )],
+        ))
 }
 
 fn header(k: &Kit, tab: SettingsTab) -> El {

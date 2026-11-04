@@ -1,7 +1,8 @@
-//! How a tab's blocks are drawn: a card each, with its folder and the buttons that split, zoom
-//! and close it, and the gaps between cards that the pointer drags to resize them.
+//! How a tab's blocks are drawn: the shell of a pane each, the header that names it and splits,
+//! zooms and closes it when the settings ask for one, and the gaps between panes that the
+//! pointer drags to resize them.
 
-use rune::{Color, Cursor, Drag, El, Phase, Tx, col, el, row, text};
+use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
@@ -11,14 +12,22 @@ use crate::icons;
 
 /// A block's header: its folder on one side, its buttons on the other.
 const HEADER: f32 = 28.0;
-/// A card's corner, and the radius its grid is clipped to.
-const RADIUS: f32 = 10.0;
 
-/// A tab's layout: cards divided by the gaps between them, each split nested in the last.
-pub fn tree(p: &Panes, tab: u64, node: &Node, scale: f32, k: &'static Kit) -> El {
+/// A tab's layout: panes divided by the gaps between them, each split nested in the last. With
+/// `zoom` set, every split on that block's path gives it the whole share and the other side is
+/// drawn empty, so a zoom is a resize of one pane rather than a swap of the whole tab.
+pub fn tree(
+    p: &Panes,
+    tab: u64,
+    node: &Node,
+    scale: f32,
+    k: &'static Kit,
+    headers: bool,
+    zoom: Option<u64>,
+) -> El {
     match node {
         Node::Block(id) => match p.block(*id) {
-            Some(block) => card(p, tab, block, scale, k),
+            Some(block) => pane(p, tab, block, scale, k, headers),
             None => rune::el(),
         },
         Node::Split {
@@ -31,23 +40,46 @@ pub fn tree(p: &Panes, tab: u64, node: &Node, scale: f32, k: &'static Kit) -> El
         } => {
             let split = *id;
             let side = *side;
-            let share = *share;
-            let first = tree(p, tab, first, scale, k);
-            let second = tree(p, tab, second, scale, k);
-            let divider = divider(tab, split, side, k);
             let column = side == Side::Right;
+            let first_holds = zoom.is_some_and(|focus| holds(first, focus));
+            let second_holds = zoom.is_some_and(|focus| holds(second, focus));
+            let zoomed = first_holds || second_holds;
+            // Zoomed, the focused pane takes the whole split and the other side is empty, so
+            // the pane widens (or narrows) on the layout spring instead of flying there with
+            // its text scaled. Otherwise the split keeps the shares it was left with.
+            let (first_share, second_share) = match zoom {
+                Some(_) if first_holds => (1.0, 0.0),
+                Some(_) if second_holds => (0.0, 1.0),
+                _ => (*share, 1.0 - *share),
+            };
+            let first = if zoomed && !first_holds {
+                rune::el()
+            } else {
+                tree(p, tab, first, scale, k, headers, zoom)
+            };
+            let second = if zoomed && !second_holds {
+                rune::el()
+            } else {
+                tree(p, tab, second, scale, k, headers, zoom)
+            };
+            let divider = divider(tab, split, side, k);
+            // A share moved by a command (a resize step, a balance) glides on the kit's layout
+            // spring instead of jumping; a divider drag lands at once through `tx.instant`, so
+            // the gap still follows the pointer.
             let mut container = if column {
                 row()
                     .key(format!("split-{split}"))
                     .w_full()
                     .h_full()
                     .min_h(0.0)
+                    .motion(k.motion.disclosure)
             } else {
                 col()
                     .key(format!("split-{split}"))
                     .w_full()
                     .h_full()
                     .min_w(0.0)
+                    .motion(k.motion.disclosure)
             };
             container = container.on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
                 // The split's own extent along its axis: what a drag divides points by.
@@ -58,14 +90,14 @@ pub fn tree(p: &Panes, tab: u64, node: &Node, scale: f32, k: &'static Kit) -> El
             let a = if column {
                 col()
                     .key(format!("split-{split}-first"))
-                    .grow(share)
+                    .grow(first_share)
                     .min_w(0.0)
                     .h_full()
                     .child(first)
             } else {
                 col()
                     .key(format!("split-{split}-first"))
-                    .grow(share)
+                    .grow(first_share)
                     .w_full()
                     .min_h(0.0)
                     .child(first)
@@ -73,19 +105,24 @@ pub fn tree(p: &Panes, tab: u64, node: &Node, scale: f32, k: &'static Kit) -> El
             let b = if column {
                 col()
                     .key(format!("split-{split}-second"))
-                    .grow(1.0 - share)
+                    .grow(second_share)
                     .min_w(0.0)
                     .h_full()
                     .child(second)
             } else {
                 col()
                     .key(format!("split-{split}-second"))
-                    .grow(1.0 - share)
+                    .grow(second_share)
                     .w_full()
                     .min_h(0.0)
                     .child(second)
             };
-            container.child(a).child(divider).child(b)
+            // A zoomed split has no divider: its whole extent goes to the pane on the path.
+            container = container.child(a);
+            if !zoomed {
+                container = container.child(divider);
+            }
+            container.child(b)
         }
     }
 }
@@ -133,7 +170,7 @@ fn divider(tab: u64, split: u64, side: Side, k: &'static Kit) -> El {
     })
 }
 
-/// A tab's only block, with no card around it: the window opens as a terminal, so a fresh one
+/// A tab's only block, with no chrome around it: the window opens as a terminal, so a fresh one
 /// shows a prompt and nothing else. The chrome arrives with the second pane or the second tab.
 pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
     let id = block.id;
@@ -151,36 +188,28 @@ pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
         .child(grid(block, tab, scale, k))
 }
 
-/// One block: a card over the window's background, its folder in the header and its shell under
-/// it. The card that has the keyboard is the one drawn as active.
-pub fn card(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
+/// One block: its shell, and the header naming it when the settings ask for headers. The pane
+/// sits on the window's own background, with no card of its own, so a split reads as the
+/// terminal the window opened as.
+pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, headers: bool) -> El {
     let id = block.id;
-    let focused = p.focuses(id);
-    let zoomed = p.is_zoomed();
-    let name = folder(block);
-    col()
+    let mut body = col()
         .key(format!("block-{id}"))
         .w_full()
         .h_full()
         .min_h(0.0)
-        .radius(RADIUS)
-        .fill(k.c.bg_base)
-        .border(
-            1.0,
-            if focused {
-                k.c.border_muted
-            } else {
-                k.c.border_weak
-            },
-        )
-        .clip_rounded(RADIUS)
+        .motion(k.motion.disclosure)
+        .clip_rounded(0.0)
         .on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
             if let Some(p) = s.tabs.panes_mut(tab) {
                 p.set_rect(id, rect);
             }
-        })
-        .child(header(tab, block, &name, focused, zoomed, k))
-        .child(grid(block, tab, scale, k))
+        });
+    if headers {
+        let name = folder(block);
+        body = body.child(header(tab, block, &name, p.focuses(id), p.is_zoomed(), k));
+    }
+    body.child(grid(block, tab, scale, k))
 }
 
 fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &'static Kit) -> El {
@@ -285,7 +314,19 @@ fn grid(block: &Block, tab: u64, scale: f32, k: &'static Kit) -> El {
         .grow(1.0)
         .min_h(0.0)
         .clip_rounded(0.0)
+        // The pane's box glides; the grid inside it takes its final size at once, so a glide
+        // reflows the shell once and the pane's rect reveals the new width, rather than the
+        // columns chasing the animation at every frame.
+        .motion(Spring::NONE)
         .child(screen)
+}
+
+/// Whether `node` is, or holds, block `id`.
+fn holds(node: &Node, id: u64) -> bool {
+    match node {
+        Node::Block(block) => *block == id,
+        Node::Split { first, second, .. } => holds(first, id) || holds(second, id),
+    }
 }
 
 /// The folder a block's shell is in, as its header names it.
