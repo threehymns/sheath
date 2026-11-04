@@ -18,6 +18,7 @@
 //! its blink and its moves cost no upload at all.
 
 mod atlas;
+mod compose;
 mod image;
 mod paint;
 
@@ -31,11 +32,9 @@ use std::cell::RefCell;
 use rune::Pixels;
 use rune::color::srgb_encode;
 
-use crate::grid::{Frame, ImageLayer, Line};
+use crate::grid::{Frame, Line, Placement};
 
-use atlas::Atlas;
-use image::paint_image;
-use paint::{Surface, glyph_size, paint_line};
+use compose::{Geometry, Pass, Raster};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Palette {
@@ -49,10 +48,6 @@ pub struct Palette {
 pub fn rgb(color: rune::Color) -> [u8; 3] {
     let byte = |value: f32| (srgb_encode(value) * 255.0).round().clamp(0.0, 255.0) as u8;
     [byte(color.r), byte(color.g), byte(color.b)]
-}
-
-struct Raster {
-    atlas: Atlas,
 }
 
 /// What the cached image was made in. A view build that changed nothing about the grid (a moved
@@ -81,8 +76,10 @@ struct Cache {
     rows: Vec<Line>,
     lead: Option<Line>,
     trail: Option<Line>,
-    /// Whether the image holds kitty graphics placements, which span rows and are painted whole.
-    images: bool,
+    /// The kitty graphics placements the image holds. A frame whose placements are these same
+    /// images in the same places leaves them in the pixels: only the bands whose text changed are
+    /// painted again, with the image composited under or over them.
+    placements: Vec<Placement>,
     /// The frame's generation the image was painted at: the engine bumps it on every readback,
     /// so an equal one means no row can have changed since.
     generation: u64,
@@ -104,7 +101,7 @@ impl Cache {
             rows: Vec::new(),
             lead: None,
             trail: None,
-            images: false,
+            placements: Vec::new(),
             generation: 0,
             face,
         }
@@ -163,18 +160,23 @@ pub fn picture(
             line_px,
             palette,
         };
-        let images = !frame.images.is_empty();
         let geometry_same = cache.drawn == Some(stamp)
             && cache.width == width
             && cache.height == height
             && cache.rows.len() == usize::from(frame.rows);
+        // A placement that did not move and whose pixels did not change is already in the image:
+        // the video frame of a program that only redraws its own overlay must not scale and blit
+        // the whole picture again. The engine keeps one `Arc` per image generation, so comparing
+        // the pointers tells a new frame from the one already composited.
+        let placements_same = same_placements(&cache.placements, &frame.images);
+        let has_images = !frame.images.is_empty() || !cache.placements.is_empty();
         // An equal generation says this is the frame the image was painted from: the engine
         // bumps it on every readback, so no row can have changed. A test's composed frame has
         // generation zero and is always diffed.
         let settled = geometry_same && frame.generation > 0 && cache.generation == frame.generation;
-        // A placement spans rows, so a frame that carries one (or one the image still holds) is
-        // painted whole; the rest are only ever painted where they changed.
-        let full = !geometry_same || images || cache.images;
+        // A changed placement spans rows, so that frame is painted whole; the rest are only ever
+        // painted where they changed.
+        let full = !geometry_same || !placements_same;
         let bands_total = usize::from(frame.rows) + 2;
         let row_bytes = width as usize * line_px as usize * 4;
         let mut bands: Vec<usize> = Vec::new();
@@ -196,8 +198,11 @@ pub fn picture(
             // A viewport that stepped by whole rows is still showing the rows it was showing,
             // one band over: a wheel notch, or a line of a program's output scrolling the
             // screen. The pixels move with it and only the bands that have no source are
-            // painted, which is what a scroll costs instead of the whole grid.
-            if bands.len() * 2 > bands_total
+            // painted, which is what a scroll costs instead of the whole grid. A placement is
+            // anchored to the viewport, so moving the text's pixels would move the image with
+            // it: a frame carrying one is diffed band by band instead.
+            if !has_images
+                && bands.len() * 2 > bands_total
                 && let Some((step, paints)) = stepped(cache, frame, bands_total)
                 && paints.len() + 2 < bands_total
             {
@@ -253,7 +258,7 @@ pub fn picture(
         if cache.trail.as_ref() != frame.trail.as_ref() {
             cache.trail.clone_from(&frame.trail);
         }
-        cache.images = images;
+        cache.placements.clone_from(&frame.images);
         cache.drawn = Some(stamp);
         cache.generation = frame.generation;
         cache.pixels.set(width, height, cache.rgba.clone());
@@ -271,6 +276,24 @@ fn streamed_for_test() -> Vec<u8> {
             .map(|cache| cache.rgba.clone())
             .unwrap_or_default()
     })
+}
+
+/// Whether two frames carry the same placements: the same images, in the same places, at the
+/// same sizes. An image's pixels are one `Arc` per engine readback, so two placements built from
+/// one image generation share it, and a new video frame under the same image id does not.
+fn same_placements(old: &[Placement], new: &[Placement]) -> bool {
+    old.len() == new.len()
+        && old.iter().zip(new).all(|(was, now)| {
+            was.image == now.image
+                && was.layer == now.layer
+                && was.z == now.z
+                && was.x == now.x
+                && was.y == now.y
+                && was.w == now.w
+                && was.h == now.h
+                && was.source == now.source
+                && std::sync::Arc::ptr_eq(&was.data, &now.data)
+        })
 }
 
 /// The line a band holds: the overscan row above the viewport, the viewport's rows, then the one
@@ -344,191 +367,5 @@ fn shift_pixels(rgba: &mut [u8], row_bytes: usize, total: usize, step: isize) {
     } else {
         let step = (-step) as usize;
         rgba.copy_within(step * row_bytes..total * row_bytes, 0);
-    }
-}
-
-/// Paints one band: one row of the image and the line that belongs on it.
-fn paint_band(
-    atlas: &Atlas,
-    pixels: &mut [u8],
-    width: u32,
-    line_px: u32,
-    cell_px: u32,
-    palette: Palette,
-    line: &Line,
-) {
-    let mut surface = Surface::new(pixels, width, line_px, palette.bg);
-    paint_line(atlas, &mut surface, line, cell_px, line_px, palette);
-}
-
-/// The pixel geometry one image is painted at.
-#[derive(Clone, Copy)]
-struct Geometry {
-    width: u32,
-    height: u32,
-    cell_px: u32,
-    line_px: u32,
-    scale: f32,
-}
-
-/// What one paint pass covers: every band, or only the bands that changed.
-struct Pass<'a> {
-    palette: Palette,
-    bands: &'a [usize],
-    full: bool,
-}
-
-impl Raster {
-    fn new() -> Raster {
-        Raster {
-            atlas: Atlas::new(),
-        }
-    }
-
-    /// Composes the whole frame into a fresh image, for a test that reads the pixels back.
-    #[cfg(test)]
-    fn compose(
-        &mut self,
-        frame: &Frame,
-        cell: f32,
-        line: f32,
-        scale: f32,
-        palette: Palette,
-    ) -> Option<(u32, u32, Vec<u8>)> {
-        let cell_px = (cell * scale).round().max(1.0) as u32;
-        let line_px = (line * scale).round().max(1.0) as u32;
-        let width = u32::from(frame.cols) * cell_px;
-        let height = (u32::from(frame.rows) + 2) * line_px;
-        if width == 0 || height == 0 {
-            return None;
-        }
-        let mut rgba = vec![0u8; (width * height * 4) as usize];
-        let bands: Vec<usize> = (0..usize::from(frame.rows) + 2).collect();
-        self.paint(
-            frame,
-            Geometry {
-                width,
-                height,
-                cell_px,
-                line_px,
-                scale,
-            },
-            Pass {
-                palette,
-                bands: &bands,
-                full: true,
-            },
-            &mut rgba,
-        );
-        Some((width, height, rgba))
-    }
-
-    /// Paints `pass.bands` of the frame into `rgba`, which holds the whole image: untouched
-    /// bands keep the pixels they were painted with.
-    fn paint(&mut self, frame: &Frame, geometry: Geometry, pass: Pass, rgba: &mut [u8]) {
-        let Geometry {
-            width,
-            height,
-            cell_px,
-            line_px,
-            scale,
-        } = geometry;
-        // The images a program placed go under the text when their z-index says so: under the
-        // cell backgrounds for the smallest values, under the glyphs for the other negatives.
-        // Painting them before the rows is what keeps text over an image readable, and it is
-        // the order Ghostty's own renderer uses.
-        let overscan = line_px as i32;
-        if pass.full {
-            for placement in frame
-                .images
-                .iter()
-                .filter(|placement| placement.layer != ImageLayer::AboveText)
-            {
-                paint_image(
-                    rgba,
-                    width,
-                    height,
-                    placement,
-                    scale,
-                    overscan,
-                    pass.palette.bg,
-                );
-            }
-        }
-        let size = glyph_size(line_px);
-        self.atlas.preload(frame, size, pass.bands);
-        let atlas = &self.atlas;
-        let row_bytes = width as usize * 4 * line_px as usize;
-        // Spawning a thread costs more than painting a band of a pane-sized grid. On an eight-core
-        // machine a 140x14 pane at 2x paints a whole screen in 0.51 ms on one thread and 0.79 ms
-        // on eight, because the spawns and the joins outweigh the pixels; a fullscreened 274x72
-        // grid still comes out ahead with workers (26.8 ms against 33.7 ms). The two cross at
-        // about two megapixels, which is what this counts, so a pane's rows stay on this thread.
-        let pixels = pass.bands.len() as u64 * u64::from(width) * u64::from(line_px);
-        let workers = if pixels < 2_000_000 {
-            1
-        } else {
-            std::thread::available_parallelism()
-                .map(|count| count.get())
-                .unwrap_or(1)
-                .min(pass.bands.len())
-        };
-        if workers <= 1 {
-            for &band in pass.bands {
-                let Some(line) = band_line(frame, band) else {
-                    continue;
-                };
-                let at = band * row_bytes;
-                paint_band(
-                    atlas,
-                    &mut rgba[at..at + row_bytes],
-                    width,
-                    line_px,
-                    cell_px,
-                    pass.palette,
-                    line,
-                );
-            }
-        } else {
-            let bands = pass.bands;
-            let palette = pass.palette;
-            let per = (usize::from(frame.rows) + 2).div_ceil(workers);
-            std::thread::scope(|scope| {
-                for (index, pixels) in rgba.chunks_mut(per * row_bytes).enumerate() {
-                    let first = index * per;
-                    scope.spawn(move || {
-                        for (offset, pixels) in pixels.chunks_mut(row_bytes).enumerate() {
-                            let band = first + offset;
-                            if !bands.contains(&band) {
-                                continue;
-                            }
-                            let Some(line) = band_line(frame, band) else {
-                                continue;
-                            };
-                            paint_band(atlas, pixels, width, line_px, cell_px, palette, line);
-                        }
-                    });
-                }
-            });
-        }
-        // A placement above the text is drawn last, over the glyphs, which is where a plain
-        // `a=T` image lands.
-        if pass.full {
-            for placement in frame
-                .images
-                .iter()
-                .filter(|placement| placement.layer == ImageLayer::AboveText)
-            {
-                paint_image(
-                    rgba,
-                    width,
-                    height,
-                    placement,
-                    scale,
-                    overscan,
-                    pass.palette.bg,
-                );
-            }
-        }
     }
 }
