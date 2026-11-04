@@ -35,52 +35,52 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         .active_id()
         .map(|id| s.tabs.layout(id, s.scale.get(), k))
         .unwrap_or_else(rune::el);
-    // A window showing a single shell is only the terminal: no rail, no toolbar, no card around
-    // the grid. The chrome arrives with the second tab or the second pane, and the chords that
-    // make either of them work do so without it.
+    // A window showing a single shell is the terminal and nothing else: no title bar band, no
+    // card around the grid, no rail, no toolbar. The chrome arrives with the second pane or tab,
+    // and the chords that make either of them work do so without it.
     let single = s.tabs.is_single();
-    let horizontal = s.horizontal_tabs() && !single;
-    let main = if horizontal {
-        col()
-            .key("workspace")
-            .w_full()
-            .h_full()
-            .min_h(0.0)
-            .child(s.tabs.strip(k))
-            .child(main.grow(1.0).min_h(0.0))
-    } else {
+    let horizontal = s.horizontal_tabs();
+    let content = if single {
         main
-    };
-    let mut shell = SplitView::new(main)
-        .titlebar_inset(cx.titlebar_inset())
-        .frame_inset(FRAME)
-        .pane_motion(
-            PaneMotion::new()
-                .spring(Spring::new(0.32, 0.0))
-                .scale_with_width(320.0, 0.16, 0.32)
-                .fade_tail(0.15),
-        )
-        .reduced_motion(cx.is_reduced_motion());
-    if !single {
-        shell = shell.toolbar(toolbar(s, k));
-    }
-    if horizontal {
-        shell = shell.toolbar_in_panel();
-    } else if !single {
-        shell = shell
-            .sidebar(&s.rail, |s: &mut Window| &mut s.rail, s.tabs.rail(k))
+    } else {
+        let main = if horizontal {
+            col()
+                .key("workspace")
+                .w_full()
+                .h_full()
+                .min_h(0.0)
+                .child(s.tabs.strip(k))
+                .child(main.grow(1.0).min_h(0.0))
+        } else {
+            main
+        };
+        let mut shell = SplitView::new(main)
+            .titlebar_inset(cx.titlebar_inset())
+            .frame_inset(FRAME)
+            .toolbar(toolbar(s, k))
             .toolbar_in_panel()
-            .sidebar_padding(RAIL_PADDING.0, RAIL_PADDING.1)
-            .sidebar_toggle(
-                SidebarToggle::new()
-                    .size(ControlSize::Large)
-                    .past_lights(16.0)
-                    .edge(12.0)
-                    .gap(4.0)
-                    .in_header(),
-            );
-    }
-    let content = shell.build(k);
+            .pane_motion(
+                PaneMotion::new()
+                    .spring(Spring::new(0.32, 0.0))
+                    .scale_with_width(320.0, 0.16, 0.32)
+                    .fade_tail(0.15),
+            )
+            .reduced_motion(cx.is_reduced_motion());
+        if !horizontal {
+            shell = shell
+                .sidebar(&s.rail, |s: &mut Window| &mut s.rail, s.tabs.rail(k))
+                .sidebar_padding(RAIL_PADDING.0, RAIL_PADDING.1)
+                .sidebar_toggle(
+                    SidebarToggle::new()
+                        .size(ControlSize::Large)
+                        .past_lights(16.0)
+                        .edge(12.0)
+                        .gap(4.0)
+                        .in_header(),
+                );
+        }
+        shell.build(k)
+    };
     s.built.set(s.built.get() + at.elapsed());
     let mut layers = Vec::new();
     if s.palette.is_some() {
