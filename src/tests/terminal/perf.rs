@@ -214,6 +214,149 @@ fn perf_terminal_unchanged_frame() {
     );
 }
 
+/// The pane against the heaviest thing a program can draw: a full-screen video player, on a real PTY,
+/// through the same parse, readback and raster the app runs every frame. The demo is started as
+/// the pane's shell, so its capability queries are answered by the engine the way they are for a
+/// real terminal. Reports the frame rate the pane sustains while the demo runs, and where the
+/// time went.
+#[test]
+#[ignore]
+fn perf_video_stream() {
+    use rune_tty::raster::{Palette, picture};
+
+    if std::env::var_os("PERF_COMMAND").is_none() {
+        eprintln!("set PERF_COMMAND to the video player and its arguments");
+        return;
+    }
+    let root = tempfile::tempdir().unwrap();
+    let script = root.path().join("demo");
+    std::fs::write(&script, "#!/bin/sh\nexec $PERF_COMMAND\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    // The pane starts `$SHELL` with no arguments, so the demo script is the shell for this run.
+    // SAFETY: this is a manual benchmark, and the process was started by the test harness.
+    unsafe { std::env::set_var("SHELL", &script) };
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    // The pane's own size, so the same demo can be measured at a few grid sizes: PERF_COLS and
+    // PERF_ROWS override it for a run that asks how throughput scales.
+    let dim = |name: &str, default: u16| {
+        std::env::var(name)
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(default)
+    };
+    let (cols, rows) = (dim("PERF_COLS", 180), dim("PERF_ROWS", 48));
+    let mut engine = Engine::spawn(
+        root.path(),
+        cols,
+        rows,
+        (8.0, 16.0),
+        2.0,
+        rune_tty::theme(true),
+        wake,
+    )
+    .expect("an engine");
+    unsafe { std::env::remove_var("SHELL") };
+
+    let palette = Palette {
+        bg: rune_tty::raster::rgb(rune_theme_opencode::kit(true).c.bg_base),
+        selection: rune_tty::raster::rgb(rune_theme_opencode::kit(true).c.text_accent),
+        search: rune_tty::raster::rgb(rune_theme_opencode::kit(true).c.text_accent),
+    };
+    let mut frame = Frame::default();
+    // The first fill composes the whole image; every later one diffs against it, as in the app.
+    engine.drain();
+    engine.fill(&mut frame);
+    let start = Instant::now();
+    let deadline = start + std::time::Duration::from_secs(20);
+    // Only frames with new content are built, the way the app's poll builds one per wake.
+    let mut drawn = 0u64;
+    let mut changed_frames = 0u64;
+    let mut parse = std::time::Duration::ZERO;
+    let mut readback = std::time::Duration::ZERO;
+    let mut raster = std::time::Duration::ZERO;
+    let mut spans: Vec<f64> = Vec::new();
+    let mut last_parsed = engine.stats().parsed;
+    let mut last_report = start;
+    let mut last_image = 0u32;
+    let mut image_changes = 0u64;
+    while Instant::now() < deadline && !engine.shell_exited() {
+        let at = Instant::now();
+        let changed = engine.drain();
+        let after_drain = Instant::now();
+        if !changed {
+            std::thread::yield_now();
+            continue;
+        }
+        changed_frames += 1;
+        engine.fill(&mut frame);
+        let after_fill = Instant::now();
+        std::hint::black_box(picture(&frame, 8.0, 16.0, 2.0, palette));
+        let after_picture = Instant::now();
+        parse += after_drain - at;
+        readback += after_fill - after_drain;
+        raster += after_picture - after_fill;
+        spans.push(after_picture.duration_since(at).as_secs_f64() * 1e3);
+        drawn += 1;
+        if let Some(placement) = frame.images.first()
+            && placement.image != last_image
+        {
+            last_image = placement.image;
+            image_changes += 1;
+        }
+        if last_report.elapsed() >= std::time::Duration::from_secs(1) {
+            last_report = Instant::now();
+            let stats = engine.stats();
+            let image = frame.images.first().map(|p| {
+                format!(
+                    "{}x{} -> {}x{} pt, {}x{} px source",
+                    p.data.width, p.data.height, p.w, p.h, p.source[2], p.source[3]
+                )
+            });
+            println!(
+                "{:>5.1}s: {:.1} frames/s drawn, {} image changes, image {:?}, {} MiB parsed/s, {} KiB queued, lag {:?}",
+                start.elapsed().as_secs_f64(),
+                drawn as f64 / start.elapsed().as_secs_f64(),
+                image_changes,
+                image,
+                (stats.parsed - last_parsed) >> 20,
+                stats.queued >> 10,
+                stats.lag
+            );
+            last_parsed = stats.parsed;
+        }
+    }
+    let elapsed = start.elapsed().as_secs_f64();
+    let stats = engine.stats();
+    spans.sort_by(f64::total_cmp);
+    let pct = |f: f64| spans[((spans.len() - 1) as f64 * f) as usize];
+    println!(
+        "a full-screen video player {cols}x{rows}: {drawn} drawn frames ({changed_frames} changed) in {elapsed:.2}s — {:.1} fps",
+        drawn as f64 / elapsed
+    );
+    println!(
+        "  frame p50 {:.1} ms, p95 {:.1} ms, max {:.1} ms",
+        pct(0.5),
+        pct(0.95),
+        spans[spans.len() - 1]
+    );
+    println!(
+        "  parse {:.2} ms/frame, readback {:.2} ms/frame, raster {:.2} ms/frame",
+        parse.as_secs_f64() * 1e3 / drawn as f64,
+        readback.as_secs_f64() * 1e3 / drawn as f64,
+        raster.as_secs_f64() * 1e3 / drawn as f64,
+    );
+    println!(
+        "  {} MiB parsed total, {} KiB still queued, lag {:?}, {image_changes} video frames",
+        stats.parsed >> 20,
+        stats.queued >> 10,
+        stats.lag
+    );
+}
+
 /// A long folder beside the pane, to show what the terminal's frames cost on top of a list.
 #[test]
 #[ignore]
