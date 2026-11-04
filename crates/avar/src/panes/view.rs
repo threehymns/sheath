@@ -6,7 +6,7 @@ use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
-use super::{Block, DropTarget, Edge, GAP, HEADER, Node, Panes, Side};
+use super::{Block, GAP, HEADER, Node, Panes, Side};
 use crate::Window;
 use crate::icons;
 
@@ -204,38 +204,16 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
         });
     if headers {
         let name = p.name(id);
-        let header = header(
-            tab,
-            block,
-            &name,
-            p.focuses(id),
-            p.is_zoomed(),
-            p.drop_target() == Some(DropTarget::Swap(id)),
-            k,
-        );
+        let header = header(tab, block, &name, p.focuses(id), p.is_zoomed(), k);
         body = body.child(header);
     }
-    body = body.child(grid(block, tab, scale, k));
-    if let Some(DropTarget::Split { pane, edge }) = p.drop_target()
-        && pane == id
-    {
-        body = body.child(edge_band(id, edge, block.rect, k));
-    }
-    body
+    body.child(grid(block, tab, scale, k))
 }
 
 /// A block's header, which also drags: pressing it picks the pane up, letting go over another
-/// pane's body swaps the two, and letting go on one of its edges splits beside it. `target` says
-/// the pointer is over this pane's body on a drag.
-fn header(
-    tab: u64,
-    block: &Block,
-    name: &str,
-    focused: bool,
-    zoomed: bool,
-    target: bool,
-    k: &'static Kit,
-) -> El {
+/// pane's body swaps the two, and letting go on one of its edges splits beside it. The drag
+/// previews the layout itself, so nothing here marks where a drop would land.
+fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &'static Kit) -> El {
     let id = block.id;
     let button = |glyph: &'static rune::Icon, label: &'static str| {
         IconButton::new(glyph)
@@ -264,16 +242,13 @@ fn header(
         .on_press(move |s: &mut Window| s.tabs.close_block(tab, id))
         .build(k)
         .key(format!("block-{id}-close"));
-    let mut bar = row()
+    let bar = row()
         .key(format!("block-{id}-header"))
         .w_full()
         .h(HEADER)
         .px(8.0)
         .gap(2.0)
         .center_y();
-    if target {
-        bar = bar.fill(k.c.hover);
-    }
     bar.child(
         text(name.to_owned())
             .key(format!("block-{id}-name"))
@@ -290,24 +265,6 @@ fn header(
     .child(split_down)
     .child(zoom)
     .child(close)
-}
-
-/// The half of a pane a dragged header would take when it is dropped on an edge: the wash shows
-/// where the split will open and how much the pane keeps.
-fn edge_band(id: u64, edge: Edge, rect: [f32; 4], k: &'static Kit) -> El {
-    let mut band = el()
-        .key(format!("block-{id}-drop"))
-        .fill(k.c.hover)
-        .transition(rune::Transition::none());
-    let half_w = (rect[2] * 0.5).max(0.0);
-    let half_h = (rect[3] * 0.5).max(0.0);
-    band = match edge {
-        Edge::Left => band.pin(Some(0.0), None, Some(0.0), Some(0.0)).w(half_w),
-        Edge::Right => band.pin(None, Some(0.0), Some(0.0), Some(0.0)).w(half_w),
-        Edge::Top => band.pin(Some(0.0), Some(0.0), Some(0.0), None).h(half_h),
-        Edge::Bottom => band.pin(Some(0.0), Some(0.0), None, Some(0.0)).h(half_h),
-    };
-    band
 }
 
 /// One block's grid, with its wheel, pointer, drag and layout wired to that block's shell.

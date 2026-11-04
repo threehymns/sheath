@@ -17,7 +17,9 @@ mod drag;
 mod tree;
 mod view;
 
-pub use drag::{DropTarget, Edge};
+pub use drag::DropTarget;
+#[cfg(test)]
+pub use drag::Edge;
 
 use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
 

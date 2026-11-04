@@ -114,7 +114,7 @@ fn dropping_a_header_on_a_pane_body_swaps_the_two() {
     p.drag_begin((10.0, 10.0));
     p.drag_over((140.0, 40.0));
     assert_eq!(
-        p.drop_target(),
+        p.drop,
         Some(DropTarget::Swap(right)),
         "the pane under the header"
     );
@@ -146,7 +146,7 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
     p.drag_begin((10.0, 10.0));
     p.drag_over((140.0, -5.0));
     assert_eq!(
-        p.drop_target(),
+        p.drop,
         Some(DropTarget::Split {
             pane: right,
             edge: Edge::Top
@@ -207,7 +207,7 @@ fn a_header_dropped_off_any_pane_or_cancelled_moves_nothing() {
 
     p.drag_begin((10.0, 10.0));
     p.drag_over((490.0, 490.0));
-    assert_eq!(p.drop_target(), None);
+    assert_eq!(p.drop, None);
     assert!(p.preview.is_none(), "no pane means no preview");
     p.drag_end(false);
     assert_eq!(order(&p.root), vec![left, right]);
@@ -225,7 +225,7 @@ fn only_a_press_in_a_header_picks_a_pane_up() {
     // The grid below the header is the shell's: a drag there belongs to the terminal.
     p.drag_begin((50.0, 60.0));
     p.drag_over((140.0, 0.0));
-    assert_eq!(p.drop_target(), None);
+    assert_eq!(p.drop, None);
     assert!(p.preview.is_none());
     p.drag_end(false);
     assert_eq!(order(&p.root), vec![left, right]);
@@ -241,7 +241,7 @@ fn a_header_press_is_measured_from_the_tab_layout_origin() {
     p.drag_begin((10.0, 10.0));
     p.drag_over((130.0, 40.0));
     assert_eq!(
-        p.drop_target(),
+        p.drop,
         Some(DropTarget::Swap(right)),
         "the local press lands in the first pane's header"
     );
@@ -294,7 +294,7 @@ fn a_header_drag_keeps_tracking_after_the_preview_moves_the_panes() {
     rt.frame(0.0);
     let p = rt.state.tabs.panes_mut(1).expect("the tab");
     assert!(p.preview.is_none(), "the drag still follows the pointer");
-    assert_eq!(p.drop_target(), None, "it is back over its own pane");
+    assert_eq!(p.drop, None, "it is back over its own pane");
 
     rt.pointer_move(rx, ry + 200.0);
     rt.frame(0.0);

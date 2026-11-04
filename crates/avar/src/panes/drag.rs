@@ -83,11 +83,6 @@ impl DropTarget {
 }
 
 impl Panes {
-    /// Where a release would put the header being dragged, for the layout to show.
-    pub fn drop_target(&self) -> Option<DropTarget> {
-        self.drop
-    }
-
     /// Picks a pane up when `at`, in the tab layout's own points, falls in its header. The press
     /// is kept in window points, which the moves travel from: the preview may carry the header
     /// away under the pointer, so its own point would chase itself. A zoomed tab draws one pane
