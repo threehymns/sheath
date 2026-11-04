@@ -7,6 +7,17 @@ description = "A terminal window: rune-tty's pane, a shell, and nothing else"
 [dependencies]
 rune-tty.workspace = true
 rune.workspace = true
+rune-kit.workspace = true
 rune-theme-opencode.workspace = true
+# The shared keymap and its two surfaces: the command palette and the keybind editor.
+actions.workspace = true
+actions-ui.workspace = true
+# The keybinds file, and the format itself.
+actions-kdl.workspace = true
+kdl.workspace = true
+# The palette's wheel physics, shared with the app's list.
+scroll.workspace = true
 # Reading the clipboard for a paste into the shell; a terminal's paste is a read.
 arboard = "3"
+# The config folder `keybinds.kdl` lives in.
+dirs = "6"
