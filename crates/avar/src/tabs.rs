@@ -1,21 +1,22 @@
-//! Avar's tabs, each a shell and each splittable into a second pane beside it: the set of them,
-//! the rail that shows them, and the grid each pane draws.
+//! Avar's tabs: the set of them, the rail that shows them, and the rule that exactly one block
+//! in the window has the keyboard.
 //!
-//! The set owns its own invariants, so the window never has to: the tab on screen is always one
-//! of the tabs, exactly one pane in the window has the keyboard, and a tab whose shell ends
-//! closes itself. The rail is a rune-kit `Sidebar`, so its rows drag to reorder through the
-//! kit's `Reorder`, and the split is a `SplitView`'s inspector pane, so its divider drags and
-//! its pane collapses while the shell in it keeps running.
+//! A tab is Rex's window: its own layout of blocks, each block its own shell and so its own PTY.
+//! This module owns the set rather than the layout — the blocks and their tree live in
+//! [`crate::panes`] — so a tab here is one row of the rail plus the panes behind it, and the
+//! window never has to keep the two in step. The rail is a rune-kit `Sidebar`, so its rows drag
+//! to reorder through the kit's `Reorder`.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{Drag, El, TextStyle, Tx, Waker};
-use rune_kit::shell::{PaneState, Reorder, Sidebar, SidebarRow};
+use rune::{El, TextStyle, Tx, Waker};
+use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
 use rune_kit::{Kit, glyphs};
-use rune_tty::{Terminal, layout_screen, screen_of, terminal_cell, terminal_drag};
+use rune_tty::Terminal;
 
 use crate::Window;
+use crate::panes::{Dir, Panes, Side};
 
 /// The tab rail's width, and the range its edge drags within.
 pub const RAIL: f32 = 216.0;
@@ -25,17 +26,6 @@ pub const RAIL_MAX: f32 = 320.0;
 pub const GAP: f32 = 4.0;
 /// Tab rows are a little taller than a sidebar's default: a tab is the window's subject.
 const ROW: f32 = 32.0;
-/// A split pane's width, and the range its divider drags within.
-pub const SPLIT: f32 = 420.0;
-const SPLIT_MIN: f32 = 240.0;
-const SPLIT_MAX: f32 = 960.0;
-
-/// Which of a tab's panes: the one that fills the tab, or the split beside it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Which {
-    Main,
-    Split,
-}
 
 /// Every tab the window has, in rail order, and the one on screen. Closing the last tab leaves
 /// the set empty, which is how the window knows it has nothing left to show.
@@ -45,19 +35,26 @@ pub struct Tabs {
     next: u64,
     /// The rail's drag, owned here because it is the rail's own gesture.
     drag: Reorder,
-    /// The pane a frame draws in the one frame between the last tab closing and the window
-    /// closing with it, so the split view always has a state to read.
-    empty_pane: PaneState,
+}
+
+/// One tab: a layout of blocks, and the folder it opened in before any shell reported one.
+struct Tab {
+    /// What a pane's handlers name their tab by. A tab's place in the rail moves as tabs open,
+    /// close and reorder, so the id is what outlives it.
+    id: u64,
+    panes: Panes,
 }
 
 impl Tabs {
     pub fn new(dir: PathBuf) -> Tabs {
         Tabs {
-            rows: vec![Tab::new(1, dir)],
+            rows: vec![Tab {
+                id: 1,
+                panes: Panes::new(dir),
+            }],
             active: 0,
             next: 2,
             drag: Reorder::new().gap(GAP),
-            empty_pane: PaneState::new(SPLIT).collapsed(),
         }
     }
 
@@ -76,56 +73,45 @@ impl Tabs {
         self.focused().and_then(|term| term.pwd())
     }
 
-    /// The split pane of the tab on screen, for the split view's divider and its motion.
-    pub fn pane(&self) -> PaneState {
-        self.rows
-            .get(self.active)
-            .map_or(self.empty_pane, |tab| tab.pane)
-    }
-
-    /// The tab on screen's split pane, for the split view's divider to write to.
-    pub fn pane_mut(&mut self) -> &mut PaneState {
-        match self.rows.get_mut(self.active) {
-            Some(tab) => &mut tab.pane,
-            None => &mut self.empty_pane,
-        }
-    }
-
-    pub fn split_shown(&self) -> bool {
-        self.rows
-            .get(self.active)
-            .is_some_and(|tab| tab.pane.is_open())
-    }
-
-    /// Whether the tab on screen was ever split: its pane's content is only built once it was.
-    pub fn has_split(&self) -> bool {
-        self.rows.get(self.active).is_some_and(Tab::has_split)
-    }
-
     pub fn title(&self) -> String {
         self.rows
             .get(self.active)
-            .map(Tab::title)
+            .map(|tab| tab.panes.title())
             .unwrap_or_default()
     }
 
-    /// The pane with the keyboard, which is the only one that takes keys or blinks.
+    /// The block with the keyboard, which is the only one that takes keys or blinks.
     pub fn focused(&self) -> Option<&Terminal> {
-        let tab = self.rows.get(self.active)?;
-        tab.terminal(tab.focus)
+        self.rows.get(self.active)?.panes.focused()
     }
 
     pub fn focused_mut(&mut self) -> Option<&mut Terminal> {
-        let tab = self.rows.get_mut(self.active)?;
-        let which = tab.focus;
-        tab.terminal_mut(which)
+        self.rows.get_mut(self.active)?.panes.focused_mut()
+    }
+
+    /// A block of any tab, for the handlers a grid wires before the tab is known to be on
+    /// screen: a background tab keeps parsing what its shells write.
+    pub fn block_mut(&mut self, tab: u64, block: u64) -> Option<&mut Terminal> {
+        self.tab_mut(tab)
+            .and_then(|row| row.panes.terminal_mut(block))
+    }
+
+    pub fn panes_mut(&mut self, tab: u64) -> Option<&mut Panes> {
+        self.tab_mut(tab).map(|row| &mut row.panes)
+    }
+
+    fn tab_mut(&mut self, id: u64) -> Option<&mut Tab> {
+        self.rows.iter_mut().find(|row| row.id == id)
     }
 
     /// Opens a tab at the end of the rail, in `dir`, and shows it.
     pub fn open(&mut self, dir: PathBuf) {
         let id = self.next;
         self.next += 1;
-        self.rows.push(Tab::new(id, dir));
+        self.rows.push(Tab {
+            id,
+            panes: Panes::new(dir),
+        });
         self.active = self.rows.len() - 1;
         self.sync_focus();
     }
@@ -135,7 +121,7 @@ impl Tabs {
         let Some(index) = self.rows.iter().position(|tab| tab.id == id) else {
             return;
         };
-        self.rows.remove(index).close();
+        self.rows.remove(index).panes.close_all();
         if self.rows.is_empty() {
             return;
         }
@@ -155,11 +141,82 @@ impl Tabs {
         self.sync_focus();
     }
 
-    /// A press in a pane is a press on its tab: the keyboard goes there, and that tab shows.
-    pub fn focus(&mut self, id: u64, which: Which) {
-        if let Some(index) = self.rows.iter().position(|tab| tab.id == id) {
+    /// A press in a block is a press on its tab and its block: both take the keyboard.
+    pub fn focus_block(&mut self, tab: u64, block: u64) {
+        if let Some(index) = self.rows.iter().position(|row| row.id == tab) {
             self.active = index;
-            self.rows[index].focus = which;
+            self.rows[index].panes.focus(block);
+        }
+        self.sync_focus();
+    }
+
+    /// A press in a block's split button: that tab shows, that block is divided, and the new
+    /// block takes the keyboard.
+    pub fn split_at(&mut self, tab: u64, block: u64, side: Side) {
+        if let Some(row) = self.tab_mut(tab) {
+            row.panes.split_at(block, side);
+        }
+        self.sync_focus();
+    }
+
+    /// A press in a block's close button: the block and its shell go, and the tab with the last
+    /// one of them.
+    pub fn close_block(&mut self, tab: u64, block: u64) {
+        let Some(index) = self.rows.iter().position(|row| row.id == tab) else {
+            return;
+        };
+        let panes = &mut self.rows[index].panes;
+        panes.close(block);
+        let empty = panes.is_empty();
+        if empty {
+            self.close(tab);
+        } else {
+            panes.sync_focus(index == self.active);
+        }
+    }
+
+    /// The window's close-pane command: the block with the keyboard goes, and so does its tab
+    /// when it was the last one.
+    pub fn close_pane(&mut self) {
+        let Some(tab) = self.rows.get(self.active) else {
+            return;
+        };
+        let (id, block) = (tab.id, tab.panes.focus_id());
+        self.close_block(id, block);
+    }
+
+    /// Splits the focused block of the tab on screen.
+    pub fn split(&mut self, side: Side) {
+        if let Some(tab) = self.rows.get_mut(self.active) {
+            tab.panes.split(side);
+        }
+        self.sync_focus();
+    }
+
+    /// Zooms the block with the keyboard, or unzooms the tab if it was already zoomed.
+    pub fn toggle_zoom(&mut self) {
+        if let Some(tab) = self.rows.get_mut(self.active) {
+            tab.panes.toggle_zoom();
+        }
+    }
+
+    /// A press in a block's zoom button: that tab shows, that block is the one zoomed.
+    pub fn zoom_at(&mut self, tab: u64, block: u64) {
+        if let Some(index) = self.rows.iter().position(|row| row.id == tab) {
+            self.active = index;
+            let panes = &mut self.rows[index].panes;
+            panes.focus(block);
+            if !panes.is_zoomed() {
+                panes.toggle_zoom();
+            }
+        }
+        self.sync_focus();
+    }
+
+    /// Moves the keyboard to the nearest block in a direction, in the tab on screen.
+    pub fn focus_dir(&mut self, dir: Dir) {
+        if let Some(tab) = self.rows.get_mut(self.active) {
+            tab.panes.focus_dir(dir);
         }
         self.sync_focus();
     }
@@ -189,30 +246,9 @@ impl Tabs {
         self.sync_focus();
     }
 
-    /// Splits the tab on screen, or closes the split and keeps its shell running.
-    pub fn toggle_split(&mut self) {
-        let Some(tab) = self.rows.get_mut(self.active) else {
-            return;
-        };
-        if tab.pane.is_open() {
-            tab.close_split();
-        } else {
-            tab.open_split();
-        }
-        self.sync_focus();
-    }
-
-    /// The split's shell ended, or its pane was dragged shut: the tab goes back to one pane.
-    pub fn close_split(&mut self, id: u64) {
-        if let Some(tab) = self.rows.iter_mut().find(|tab| tab.id == id) {
-            tab.close_split();
-        }
-        self.sync_focus();
-    }
-
     /// The rail: every tab as a row that drags to reorder, with a close button under the pointer
     /// and the active tab filled.
-    pub fn list(&self, k: &Kit) -> El {
+    pub fn rail(&self, k: &Kit) -> El {
         let mut rail = Sidebar::new()
             .label("Tabs")
             .inset(0.0)
@@ -220,10 +256,17 @@ impl Tabs {
             .header_padding(10.0, 10.0);
         for (index, tab) in self.rows.iter().enumerate() {
             let id = tab.id;
-            let row = SidebarRow::new(tab.title())
+            let blocks = tab.panes.blocks();
+            let mut row = SidebarRow::new(tab.panes.title())
                 .icon(&glyphs::CURSOR_TEXT)
                 .height(ROW)
-                .selected(index == self.active)
+                .selected(index == self.active);
+            // A split tab says how many blocks it holds, so a tab that looked away still shows
+            // the work in it.
+            if blocks > 1 {
+                row = row.detail(format!("{blocks} panes"));
+            }
+            let row = row
                 .on_select(move |s: &mut Window, _: &mut Tx| s.tabs.select(id))
                 .on_close(move |s: &mut Window, _: &mut Tx| s.tabs.close(id))
                 .reorder(
@@ -240,7 +283,16 @@ impl Tabs {
         rail.build(k)
     }
 
-    /// Reads every pane's shell, on screen or not, and closes the ones whose shell ended. The
+    /// A tab's layout, ready to draw: the blocks of the tab on screen, split as it was left.
+    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit) -> El {
+        self.rows
+            .iter()
+            .find(|row| row.id == tab)
+            .map(|row| row.panes.layout(tab, scale, k))
+            .unwrap_or_else(rune::el)
+    }
+
+    /// Reads every block's shell, on screen or not, and closes the blocks whose shell ended. The
     /// window asks for the frame the rows moved in, and for the soonest cursor blink.
     pub fn poll(
         &mut self,
@@ -250,231 +302,34 @@ impl Tabs {
         dark: bool,
         tx: &mut Tx,
     ) -> (bool, Option<Duration>) {
-        let theme = rune_tty::theme(dark);
         let mut redraw = false;
         let mut blink: Option<Duration> = None;
-        let mut ended: Vec<(u64, Which)> = Vec::new();
+        let mut ended: Vec<(u64, u64)> = Vec::new();
         for tab in &mut self.rows {
-            let id = tab.id;
-            for which in [Which::Main, Which::Split] {
-                let Some(term) = tab.terminal_mut(which) else {
-                    continue;
-                };
-                term.measure(mono, scale);
-                redraw |= term.poll(wake, theme);
-                for text in term.take_copies() {
-                    tx.copy(text);
-                }
-                // The window has no toasts to put a program's OSC 9 or 777 notification in:
-                // drained so they do not pile up behind it, and otherwise dropped.
-                term.take_notifications();
-                if term.shell_exited() {
-                    ended.push((id, which));
-                }
-                if let Some(wait) = term.blink_wait() {
-                    blink = Some(blink.map_or(wait, |soonest| soonest.min(wait)));
-                }
+            let (redrew, wait, closed) = tab.panes.poll(mono, scale, wake, dark, tx);
+            redraw |= redrew;
+            blink = match (blink, wait) {
+                (Some(soonest), Some(wait)) => Some(soonest.min(wait)),
+                (soonest, wait) => soonest.or(wait),
+            };
+            for block in closed {
+                ended.push((tab.id, block));
             }
         }
-        // A pane whose shell ended closes: the split first, leaving its tab, then a tab whose
-        // own shell ended.
-        for (id, which) in ended {
-            match which {
-                Which::Main => self.close(id),
-                Which::Split => self.close_split(id),
-            }
+        // A block whose shell ended closes, and a tab with no blocks left closes with it, so the
+        // window closes when its last shell ends, the way Ghostty's does.
+        for (tab, block) in ended {
+            self.close_block(tab, block);
         }
         self.sync_focus();
         (redraw, blink)
     }
 
-    fn terminal_mut(&mut self, id: u64, which: Which) -> Option<&mut Terminal> {
-        self.rows
-            .iter_mut()
-            .find(|tab| tab.id == id)?
-            .terminal_mut(which)
-    }
-
-    /// The keyboard goes to the active tab's focused pane and nowhere else: a shell in another
-    /// tab keeps running and drawing, but its cursor stays solid and it gets no keys. A split
-    /// that a drag collapsed hands the keyboard back to the tab.
+    /// The keyboard goes to the active tab's focused block and nowhere else: a shell in another
+    /// tab keeps running and drawing, but its cursor stays solid and it gets no keys.
     fn sync_focus(&mut self) {
         for (index, tab) in self.rows.iter_mut().enumerate() {
-            if !tab.pane.is_open() && tab.focus == Which::Split {
-                tab.focus = Which::Main;
-            }
-            let focused = (index == self.active).then_some(tab.focus);
-            let main_focused = focused == Some(Which::Main);
-            let split_focused = focused == Some(Which::Split);
-            if let Some(term) = tab.terminal_mut(Which::Main) {
-                term.set_focus(main_focused);
-            }
-            if let Some(term) = tab.terminal_mut(Which::Split) {
-                term.set_focus(split_focused);
-            }
-        }
-    }
-}
-
-/// One pane's grid, with its wheel, pointer, drag and layout wired to the tab and side it draws.
-pub fn screen(s: &Window, id: u64, which: Which, k: &'static Kit) -> El {
-    let Some(term) = s
-        .tabs
-        .rows
-        .iter()
-        .find(|tab| tab.id == id)
-        .and_then(|tab| tab.terminal(which))
-    else {
-        return rune::el();
-    };
-    screen_of(term, s.scale.get(), k)
-        .on_wheel(move |s: &mut Window, wheel, tx: &mut Tx| {
-            // The same split the app's pane makes: a program that captured the mouse scrolls
-            // its own view, and shift takes the mouse back for the history.
-            let Some(term) = s.tabs.terminal_mut(id, which) else {
-                return false;
-            };
-            let shift = tx.mods().shift;
-            if !shift
-                && let Some(at) = term.hovered_cell()
-                && term.mouse_wheel(wheel.dy > 0.0, at, false)
-            {
-                return true;
-            }
-            term.wheel(wheel.dy)
-        })
-        .on_pointer_move_local(move |s: &mut Window, p, tx: &mut Tx| {
-            if let Some(term) = s.tabs.terminal_mut(id, which) {
-                let at = terminal_cell(term, (p.x, p.y));
-                term.hover(at, tx.mods().shift);
-            }
-        })
-        .on_hover_change(move |s: &mut Window, inside: bool, _: &mut Tx| {
-            if !inside && let Some(term) = s.tabs.terminal_mut(id, which) {
-                term.hover(None, false);
-            }
-        })
-        .on_drag(move |s: &mut Window, drag: &mut Drag, tx: &mut Tx| {
-            if let Some(term) = s.tabs.terminal_mut(id, which) {
-                terminal_drag(term, drag, tx);
-            }
-        })
-        // A press anywhere in the grid gives that pane the keyboard, and the tab it is in the
-        // window's active one.
-        .on_press(move |s: &mut Window| s.tabs.focus(id, which))
-        .on_layout_tx(move |s: &mut Window, rect, tx: &mut Tx| {
-            if let Some(term) = s.tabs.terminal_mut(id, which) {
-                layout_screen(term, rect);
-            }
-            tx.live_only();
-        })
-}
-
-/// One tab: the shell that fills it, and the split's shell once the tab is split.
-struct Tab {
-    /// What a pane's handlers name their tab by. A tab's place in the rail moves as tabs open,
-    /// close and reorder, so the id is what outlives it.
-    id: u64,
-    main: Terminal,
-    split: Option<Terminal>,
-    /// The split pane's width and whether it shows; the `SplitView`'s divider writes to it.
-    pane: PaneState,
-    /// Which pane has the keyboard.
-    focus: Which,
-    /// The folder the tab started in, before its shell reported one (OSC 7).
-    dir: PathBuf,
-}
-
-impl Tab {
-    fn new(id: u64, dir: PathBuf) -> Tab {
-        let mut main = Terminal::new();
-        main.open(dir.clone());
-        Tab {
-            id,
-            main,
-            split: None,
-            // A split opens on demand: it starts collapsed, keeping the width it will open at.
-            pane: PaneState::new(SPLIT)
-                .range(SPLIT_MIN, SPLIT_MAX)
-                .collapsed(),
-            focus: Which::Main,
-            dir,
-        }
-    }
-
-    /// Whether the tab has ever been split.
-    fn has_split(&self) -> bool {
-        self.split.is_some()
-    }
-
-    /// The pane's terminal. A split that was never opened has none.
-    fn terminal(&self, which: Which) -> Option<&Terminal> {
-        match which {
-            Which::Main => Some(&self.main),
-            Which::Split => self.split.as_ref(),
-        }
-    }
-
-    fn terminal_mut(&mut self, which: Which) -> Option<&mut Terminal> {
-        match which {
-            Which::Main => Some(&mut self.main),
-            Which::Split => self.split.as_mut(),
-        }
-    }
-
-    /// The folder a shell opened in this tab starts in: the one the shell last reported, else
-    /// the one the tab started in.
-    fn dir(&self) -> PathBuf {
-        self.main.pwd().unwrap_or_else(|| self.dir.clone())
-    }
-
-    /// The tab's name: the folder its shell is in, as a terminal's tab usually says.
-    fn title(&self) -> String {
-        let dir = self.dir();
-        dir.file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| dir.display().to_string())
-    }
-
-    /// Shows the split, starting its shell the first time and keeping the one it has after, and
-    /// gives it the keyboard.
-    fn open_split(&mut self) {
-        let dir = self.dir();
-        match self.split.as_mut() {
-            // The shell ended while the pane was shut: the next open starts a fresh one here.
-            Some(term) if !term.is_open() => term.open(dir),
-            Some(_) => {}
-            None => {
-                let mut term = Terminal::new();
-                term.open(dir);
-                self.split = Some(term);
-            }
-        }
-        self.pane.set_open(true);
-        self.focus = Which::Split;
-    }
-
-    /// Hides the split and gives the keyboard back to the tab, leaving the split's shell running
-    /// so opening it again is the same session.
-    fn close_split(&mut self) {
-        self.pane.set_open(false);
-        if let Some(split) = self.split.as_mut() {
-            // A shell that has ended has nothing to come back to: the next open starts a new one.
-            if split.shell_exited() {
-                split.close();
-            } else {
-                split.set_focus(false);
-            }
-        }
-        self.focus = Which::Main;
-    }
-
-    /// Ends both shells: closing a tab ends what ran in it.
-    fn close(&mut self) {
-        self.main.close();
-        if let Some(split) = self.split.as_mut() {
-            split.close();
+            tab.panes.sync_focus(index == self.active);
         }
     }
 }

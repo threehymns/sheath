@@ -1,9 +1,10 @@
 //! Avar: a window that is only the terminal. The same crate, rows and scroll as the pane inside
 //! Sheath, with none of the file manager around it — a shell, a full-window grid, and the wheel
-//! and drag that go with it. On top of it: tabs, each a shell and each splittable into a second
-//! pane beside it, the shared command palette, a keybind editor, and the `keybinds.kdl` those
-//! overrides live in. The tabs and the split are rune-kit's own shell pieces: a `Sidebar` whose
-//! rows drag to reorder, and a `SplitView` whose inspector is the split's pane.
+//! and drag that go with it. On top of it: tabs, each its own layout of blocks, every block its
+//! own shell — split right or down as often as you like, zoom one into the tab, and give any of
+//! them the keyboard — plus the shared command palette, a keybind editor, and the `keybinds.kdl`
+//! those overrides live in. The tabs and the splits are rune-kit's own shell pieces: a `Sidebar`
+//! whose rows drag to reorder, and a `SplitView` around the tab on screen.
 //!
 //! ```sh
 //! cargo run -p avar            # a shell in the folder you are in
@@ -14,6 +15,7 @@ mod action;
 mod config;
 mod frame;
 mod icons;
+mod panes;
 mod settings;
 mod tabs;
 
@@ -25,6 +27,7 @@ use std::time::{Duration, Instant};
 use action::Action;
 use actions::{Keybinds, Outcome, Recorder};
 use actions_ui::{KeybindHost, Palette, PaletteHost};
+use panes::{Dir, Side};
 use rune::{El, Key, KeyEvent, PhysicalInput, Shortcut, ShortcutError, Tx, Waker, col};
 use rune_kit::shell::PaneState;
 use rune_theme_opencode as theme;
@@ -35,14 +38,21 @@ use tabs::Tabs;
 /// The chords that reach the window while a shell has the keyboard. Everything else is typed:
 /// these are the commands that are the window's rather than a program's, and a shell reads the
 /// unshifted forms as its own control keys.
-const WINDOW_CHORDS: [Action; 7] = [
+const WINDOW_CHORDS: [Action; 14] = [
     Action::CommandBar,
     Action::OpenSettings,
     Action::NewTab,
     Action::CloseTab,
     Action::NextTab,
     Action::PrevTab,
-    Action::SplitPane,
+    Action::SplitRight,
+    Action::SplitDown,
+    Action::ZoomPane,
+    Action::ClosePane,
+    Action::FocusLeft,
+    Action::FocusRight,
+    Action::FocusUp,
+    Action::FocusDown,
 ];
 
 /// Where the shell starts: the first path on the command line that is a folder, else the folder
@@ -135,7 +145,14 @@ impl Window {
             }
             Action::NextTab => self.tabs.cycle(1),
             Action::PrevTab => self.tabs.cycle(-1),
-            Action::SplitPane => self.tabs.toggle_split(),
+            Action::SplitRight => self.tabs.split(Side::Right),
+            Action::SplitDown => self.tabs.split(Side::Down),
+            Action::ZoomPane => self.tabs.toggle_zoom(),
+            Action::ClosePane => self.tabs.close_pane(),
+            Action::FocusLeft => self.tabs.focus_dir(Dir::Left),
+            Action::FocusRight => self.tabs.focus_dir(Dir::Right),
+            Action::FocusUp => self.tabs.focus_dir(Dir::Up),
+            Action::FocusDown => self.tabs.focus_dir(Dir::Down),
             Action::Copy => {
                 let copied = self
                     .tabs

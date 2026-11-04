@@ -28,6 +28,28 @@ pub static CHECK_SQUARE: Icon = Icon {
     body: r#"<rect x="2.25" y="2.25" width="11.5" height="11.5" rx="2.5" stroke="currentColor"/><path d="M5.5 8.25 7.25 10l3.25-4" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
+/// The split-right button: a window with its trailing pane drawn in, the new block to the
+/// right of the one that was divided.
+pub static SPLIT_RIGHT: Icon = Icon {
+    name: "avar-split-right",
+    view: 16.0,
+    body: r#"<rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none"/><path d="M9.5 3.5V12.5" stroke="currentColor" stroke-width="1"/>"#,
+};
+
+/// The split-down button: the same window divided along its middle instead.
+pub static SPLIT_DOWN: Icon = Icon {
+    name: "avar-split-down",
+    view: 16.0,
+    body: r#"<rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" stroke-width="1" fill="none"/><path d="M2.5 8H13.5" stroke="currentColor" stroke-width="1"/>"#,
+};
+
+/// Zoom: a block taking the whole tab, drawn as the four corners it expands into.
+pub static ZOOM: Icon = Icon {
+    name: "avar-zoom",
+    view: 16.0,
+    body: r#"<path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
+};
+
 /// The reset button beside a changed shortcut.
 pub static UNDO: Icon = Icon {
     name: "avar-undo",
