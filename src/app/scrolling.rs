@@ -1,110 +1,56 @@
-use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::cell::Cell;
 use std::rc::Rc;
-use std::time::Duration;
 
-use rune::{ScrollPos, Tx, WheelEvent};
-
-use super::scroll::{Limits, Scroll, Step};
+use rune::{ScrollPos, Tx};
+use scroll::{Areas, Host, Limits};
 
 use super::*;
 
 // The file table and the grid share this viewport, and the drag maths works from its offset.
 pub const FILES: &str = "files-table";
 
-// Every scroll area's physics, the offset each viewport last reported, and where it was drawn.
-// A view registers its areas as it builds them, so one that is not on screen costs nothing.
-#[derive(Default)]
-pub(super) struct Scrolls {
-    states: BTreeMap<&'static str, Scroll>,
-    told: RefCell<BTreeMap<&'static str, Rc<Cell<ScrollPos>>>>,
-    regions: RefCell<BTreeMap<&'static str, [f32; 4]>>,
-    shown: RefCell<BTreeSet<&'static str>>,
-}
-
-impl Scrolls {
-    fn told(&self, key: &'static str) -> Rc<Cell<ScrollPos>> {
-        if let Some(cell) = self.told.borrow().get(key) {
-            return cell.clone();
-        }
-        let cell = Rc::new(Cell::new(ScrollPos::default()));
-        self.told.borrow_mut().insert(key, cell.clone());
-        cell
-    }
-
-    fn state(&mut self, key: &'static str) -> &mut Scroll {
-        self.states.entry(key).or_default()
-    }
-
-    fn known(&self) -> Vec<&'static str> {
-        self.told.borrow().keys().copied().collect()
-    }
-
-    // The areas this build drew, so a panel that closed stops pushing at once.
-    fn begin_view(&self) {
-        self.shown.borrow_mut().clear();
-    }
-
-    fn mark_shown(&self, key: &'static str) {
-        self.shown.borrow_mut().insert(key);
-    }
-
-    fn set_region(&mut self, key: &'static str, rect: [f32; 4]) {
-        self.regions.borrow_mut().insert(key, rect);
-    }
-
-    pub(super) fn visible_regions(&self) -> Vec<(&'static str, [f32; 4])> {
-        let shown = self.shown.borrow();
-        let regions = self.regions.borrow();
-        shown
-            .iter()
-            .filter_map(|key| regions.get(key).map(|rect| (*key, *rect)))
-            .collect()
-    }
-
-    fn current(&self, key: &str) -> f32 {
-        self.states.get(key).map_or(0.0, Scroll::current)
-    }
-
-    fn overshoot(&self, key: &str) -> f32 {
-        self.states.get(key).map_or(0.0, Scroll::overshoot)
-    }
-
-    fn each(&mut self, f: impl Fn(&mut Scroll)) {
-        for state in self.states.values_mut() {
-            f(state);
-        }
-    }
-}
-
 pub fn poll(s: &mut App, t: f64, tx: &mut Tx) -> bool {
     s.poll(t, tx)
+}
+
+impl scroll::Host for App {
+    fn areas(&self) -> &Areas {
+        &self.areas
+    }
+
+    fn areas_mut(&mut self) -> &mut Areas {
+        &mut self.areas
+    }
+
+    fn scroll_limits(&self, key: &'static str) -> Limits {
+        Limits {
+            max: self.told(key).get().max[1].max(0.0),
+            inertia: self.config.scroll_inertia,
+            bounce: self.config.overscroll,
+        }
+    }
+
+    /// Records a viewport's rect from its layout, and says whether anything the view reads
+    /// moved: only the list's own rect sizes the marquee and the grid's columns.
+    fn area_resized(&mut self, key: &'static str, rect: [f32; 4]) -> bool {
+        let sized = key == FILES && self.rows_view != rect;
+        if key == FILES {
+            self.rows_view = rect;
+        }
+        self.areas.set_region(key, rect);
+        sized
+    }
 }
 
 impl App {
     // A view tells every scroll area it builds where it is, so drags know what they are over.
     pub fn begin_view(&self) {
-        self.scrolls.begin_view();
-    }
-
-    pub fn scrolled_area(&self, key: &'static str) {
-        self.scrolls.mark_shown(key);
-    }
-
-    /// Records a viewport's rect from its layout, and says whether anything the view reads
-    /// moved: only the list's own rect sizes the marquee and the grid's columns.
-    pub fn area_view(&mut self, key: &'static str, rect: [f32; 4]) -> bool {
-        let sized = key == FILES && self.rows_view != rect;
-        if key == FILES {
-            self.rows_view = rect;
-        }
-        self.scrolls.set_region(key, rect);
-        sized
+        self.areas.begin_view();
     }
 
     // The offset cell a viewport writes its position into; the view keeps it across frames.
     pub fn told(&self, key: &'static str) -> Rc<Cell<ScrollPos>> {
-        self.scrolls.told(key)
+        self.areas.offset_cell(key)
     }
 
     fn told_offset_of(&self, key: &'static str) -> f32 {
@@ -115,57 +61,25 @@ impl App {
         self.told_offset_of(FILES)
     }
 
-    // The viewport reports its own extent, so an area needs no content maths of its own.
-    fn limits(&self, key: &'static str) -> Limits {
-        Limits {
-            max: self.told(key).get().max[1].max(0.0),
-            inertia: self.config.scroll_inertia,
-            bounce: self.config.overscroll,
-        }
-    }
-
     pub fn overshoot(&self, key: &str) -> f32 {
-        self.scrolls.overshoot(key)
+        self.areas.overshoot(key)
     }
 
     // The list's offset, which the drag and marquee maths work from.
     pub(super) fn list_scroll(&self) -> f32 {
-        self.scrolls.current(FILES)
-    }
-
-    fn apply(&self, key: &'static str, step: Step, tx: &mut Tx) {
-        if let Some(at) = step.scroll_to {
-            tx.scroll_to_instant(key, 0.0, at);
-        }
-        if step.again {
-            tx.wake_after(Duration::ZERO);
-        }
-    }
-
-    // A viewport's wheel: takes the delta when a setting asks for it, and returns false so Rune
-    // scrolls natively when both are off.
-    pub fn area_wheel(&mut self, key: &'static str, wheel: WheelEvent, tx: &mut Tx) -> bool {
-        let limits = self.limits(key);
-        let step = self.scrolls.state(key).wheel(&wheel, limits);
-        match step {
-            Some(step) => {
-                self.apply(key, step, tx);
-                true
-            }
-            None => false,
-        }
+        self.areas.current(FILES)
     }
 
     pub(super) fn stop_scrolling(&mut self) {
-        self.scrolls.each(Scroll::stop);
+        self.areas.stop();
     }
 
     pub(super) fn stop_coasting(&mut self) {
-        self.scrolls.each(Scroll::stop_coast);
+        self.areas.stop_coasting();
     }
 
     pub(super) fn stop_bouncing(&mut self) {
-        self.scrolls.each(Scroll::stop_bounce);
+        self.areas.stop_bouncing();
     }
 
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
@@ -221,26 +135,18 @@ impl App {
                 redraw = true;
             }
         }
-        for key in self.scrolls.known() {
-            let told = self.told_offset_of(key);
-            let limits = self.limits(key);
-            let dt = {
-                let state = self.scrolls.state(key);
-                state.observe(told);
-                state.frame(t)
-            };
+        for key in self.areas.known() {
+            let dt = self.areas.begin_frame(key, t);
+            let limits = self.scroll_limits(key);
             // A drag pushes the area under the pointer; the other areas stand still.
             let push = self
                 .drag_push(dt)
                 .filter(|(target, _)| *target == key)
                 .map_or(0.0, |(_, points)| points);
-            let (nudged, stepped) = {
-                let state = self.scrolls.state(key);
-                (state.nudge(push, limits.max), state.step(limits))
-            };
+            let (nudged, stepped) = self.areas.step_key(key, limits, push);
             redraw = redraw || nudged.redraw || stepped.redraw;
-            self.apply(key, nudged, tx);
-            self.apply(key, stepped, tx);
+            scroll::apply(key, nudged, tx);
+            scroll::apply(key, stepped, tx);
         }
         self.follow_drag();
         redraw |= self.poll_terminal(tx);

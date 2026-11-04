@@ -1,12 +1,10 @@
 mod dialogs;
 mod grid;
 mod inspector;
-mod palette;
 mod path_bar;
 mod rule_editor;
 mod rule_picker;
 mod rules;
-mod scroll_area;
 mod settings;
 mod sidebar;
 mod table;
@@ -23,7 +21,6 @@ use crate::icons;
 use crate::keybinds::Action;
 
 use dialogs::{empty_menu, header_menu, place_menu, row_menu, sheet_layer};
-use palette::palette_layer;
 use settings::settings_layer;
 use table::{empty_state, file_table};
 
@@ -117,7 +114,9 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         );
     }
     if s.palette.is_some() {
-        palette_layer(s, k, &mut layers);
+        let (scrim, slot) = actions_ui::palette_layers(s, k, Action::icon);
+        layers.push(scrim);
+        layers.push(slot);
     }
     if s.rule_picker.is_some() {
         rule_picker::rule_picker_layer(s, k, &mut layers);
@@ -208,12 +207,12 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         let caps = s.keybinds.keycaps(Action::FocusSearch);
         if !caps.is_empty() {
             let surface = k.c.bg_base.mix(k.c.white, 0.04);
-            search = search.trailing(crate::keycaps::tray(
+            search = search.trailing(actions_ui::keycaps::tray(
                 k,
                 "search-shortcut",
                 &caps,
                 surface,
-                crate::keycaps::KeySize::Small,
+                actions_ui::keycaps::KeySize::Small,
             ));
         }
     } else {

@@ -1,28 +1,23 @@
 use crate::app::{App, SettingsTab};
 use crate::config;
-use crate::corner::CornerControl;
 use crate::icons;
 use crate::keybinds::Action;
 use crate::settings::Setting;
+use chrome::{Corner, CornerControl};
 use rune::{El, Icon, Tx, col, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
-    shortcut_error_message,
 };
 
 use rune_theme_opencode as theme;
 use std::path::PathBuf;
 
 use super::dialogs::error_text;
-use super::palette::action_icon;
 
-mod card;
 mod metrics;
 
-pub(super) use card::settings_section_action;
+pub(super) use actions_ui::settings::{settings_row, settings_section, settings_section_action};
 pub(super) use metrics::*;
-
-use card::{settings_row, settings_section};
 
 pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let Some(tab) = s.settings else {
@@ -100,7 +95,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
         .padding(0.5)
         .clip_rounded(panel_radius)
         .child(settings_header(k, tab))
-        .child(super::scroll_area::scrolled(
+        .child(scroll::area(
             s,
             "settings-scroll",
             col().w_full().grow(1.0).min_h(0.0).scroll_edge_fade(16.0),
@@ -114,8 +109,9 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .child(body),
         ));
     let done = CornerControl {
-        dialog_width: SETTINGS_DIALOG_WIDTH,
-        dialog_radius: SETTINGS_RADIUS,
+        panel: [0.0, 0.0, SETTINGS_DIALOG_WIDTH, 0.0],
+        corner: Corner::TopRight,
+        radius: SETTINGS_RADIUS,
         inset: SETTINGS_INSET,
         size: DONE_SIZE,
         gap: DONE_GAP,
@@ -123,7 +119,7 @@ pub(super) fn settings_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
     let dialog = k.elevate(
         row()
             .key("settings-dialog")
-            .w(done.dialog_width)
+            .w(SETTINGS_DIALOG_WIDTH)
             .h_full()
             .max_h(600.0)
             .radius(SETTINGS_RADIUS)
@@ -406,137 +402,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
 }
 
 fn keybinds_settings(s: &App, k: &Kit) -> El {
-    let mut rows = Vec::new();
-    for action in Action::ALL {
-        if !s.recorders.contains_key(&action) {
-            continue;
-        }
-        rows.push(settings_row(
-            k,
-            action_icon(action, k),
-            action.label(),
-            None,
-            binding_control(s, k, action, recorder_field(s, k, action)),
-        ));
-    }
-    let saved = match s.store.path(config::KEYBINDS) {
-        Some(path) => format!(
-            "Click a shortcut and press the keys to use instead. Backspace clears it, Escape \
-             cancels while recording. Saved in {}.",
-            path.display()
-        ),
-        None => "Click a shortcut and press the keys to use instead. Backspace clears it, \
-                 Escape cancels while recording."
-            .to_owned(),
-    };
-    let mut page = col()
-        .key("settings-keybinds")
-        .w_full()
-        .gap(24.0)
-        .child(settings_section(k, "settings-shortcuts", "Shortcuts", rows))
-        .child(
-            text(saved)
-                .key("keybind-saved")
-                .font(k.ty.caption())
-                .color(k.c.text_muted)
-                .mx(SETTINGS_ROW_INSET)
-                .wrap(),
-        );
-    if let Some(error) = s.store.error(config::KEYBINDS) {
-        page = page.child(error_text(k, error));
-    }
-    page
-}
-
-fn recorder_field(s: &App, k: &Kit, action: Action) -> El {
-    let recorder = s
-        .recorders
-        .get(&action)
-        .expect("every action has a recorder");
-    let labels = recorder.keycaps(s.keybinds.chord(action));
-    let placeholder = if recorder.is_recording() {
-        "Press shortcut"
-    } else {
-        "Record shortcut"
-    };
-    let surface = if recorder.is_recording() {
-        k.c.layer_01
-    } else {
-        k.c.bg_base
-    };
-    let error = recorder
-        .error()
-        .map(|error| shortcut_error_message(error, recorder.refused()));
-    let mut field = row()
-        .key(format!("record-{}-field", action.id()))
-        .role("button")
-        .label(if labels.is_empty() {
-            placeholder.to_owned()
-        } else {
-            labels.join(" ")
-        })
-        .min_w(96.0)
-        .h(28.0)
-        .px(6.0)
-        .center_y()
-        .justify_end()
-        .radius(k.radius.sm)
-        .focusable(true)
-        .focus_ring(2.0, 2.0, k.c.border_focus)
-        .on_press(move |s: &mut App| {
-            s.recorders
-                .get_mut(&action)
-                .expect("every action has a recorder")
-                .begin();
-        })
-        .on_physical_input(move |s: &mut App, event, _| s.record_key(action, event))
-        .child(if labels.is_empty() {
-            text(placeholder)
-                .font(k.ty.ui_compact)
-                .color(k.c.text_faint)
-        } else {
-            crate::keycaps::tray(
-                k,
-                format!("record-{}-keys", action.id()),
-                &labels,
-                surface,
-                crate::keycaps::KeySize::Regular,
-            )
-        });
-    if recorder.is_recording() {
-        field = field.fill(surface);
-    }
-    let mut root = col()
-        .key(format!("record-{}", action.id()))
-        .gap(4.0)
-        .items_end()
-        .child(field);
-    if let Some(error) = error {
-        root = root.child(
-            text(error)
-                .font(k.ty.small_medium)
-                .color(k.c.danger.fg)
-                .wrap(),
-        );
-    }
-    root
-}
-
-fn binding_control(s: &App, k: &Kit, action: Action, field: El) -> El {
-    let mut row = row().gap(6.0).center_y();
-    if s.keybinds.is_custom(action) {
-        row = row.child(
-            IconButton::new(&icons::UNDO)
-                .variant(IconButtonVariant::GhostMuted)
-                .control_size(ControlSize::Small)
-                .label(format!("Reset {}", action.label()))
-                .help("Reset to the default, taking the shortcut out of keybinds.kdl")
-                .on_press(move |s: &mut App| s.reset_binding(action))
-                .build(k)
-                .key(format!("reset-binding-{}", action.id())),
-        );
-    }
-    row.child(field)
+    actions_ui::keybind_page(s, k, Action::icon, &icons::UNDO)
 }
 
 fn setting_control(s: &App, k: &Kit, setting: Setting, control: El) -> El {

@@ -1,7 +1,11 @@
+use std::collections::BTreeMap;
+
 use crate::app::App;
-use crate::keybinds::Action;
+use crate::config;
+use crate::keybinds::{Action, Keybinds};
 use crate::recorder::{Outcome, Recorder};
-use rune::{PhysicalInput, Shortcut, ShortcutError, TextEdit, Tx};
+use actions_ui::{KeybindHost, Palette, PaletteHost};
+use rune::{El, PhysicalInput, Shortcut, ShortcutError, Tx, col};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
@@ -34,16 +38,9 @@ impl SettingsTab {
     }
 }
 
-pub struct Palette {
-    pub query: TextEdit,
-    pub selected: usize,
-}
-
 impl App {
     pub fn open_palette(&mut self) {
-        let mut query = TextEdit::new("");
-        query.focused = true;
-        self.palette = Some(Palette { query, selected: 0 });
+        self.palette = Some(Palette::open());
     }
 
     pub fn close_palette(&mut self) {
@@ -54,66 +51,12 @@ impl App {
         self.search.focused = true;
     }
 
-    pub fn palette_edit(&mut self) -> &mut TextEdit {
-        &mut self
-            .palette
-            .as_mut()
-            .expect("the open command bar has a field")
-            .query
-    }
-
+    #[cfg(test)]
     pub fn palette_actions(&self) -> Vec<Action> {
-        let query = self
-            .palette
+        self.palette
             .as_ref()
-            .map(|palette| palette.query.text.trim().to_lowercase())
-            .unwrap_or_default();
-        Action::ALL
-            .into_iter()
-            .filter(|action| *action != Action::CommandBar)
-            .filter(|action| {
-                query.is_empty()
-                    || action.label().to_lowercase().contains(&query)
-                    || action.id().contains(&query)
-            })
-            .collect()
-    }
-
-    pub fn palette_requery(&mut self, tx: &mut Tx) {
-        if let Some(palette) = &mut self.palette {
-            palette.selected = 0;
-        }
-        tx.scroll_to_y("command-scroll", 0.0);
-    }
-
-    pub fn palette_move(&mut self, delta: isize, tx: &mut Tx) {
-        let actions = self.palette_actions();
-        if actions.is_empty() {
-            self.palette_requery(tx);
-            return;
-        }
-        let Some(palette) = &mut self.palette else {
-            return;
-        };
-        let last = actions.len() as isize - 1;
-        palette.selected = (palette.selected as isize + delta).clamp(0, last) as usize;
-        let action = actions[palette.selected];
-        tx.scroll_into_view(format!("command-{}", action.id()));
-    }
-
-    pub fn run_palette_command(&mut self, tx: &mut Tx) {
-        let actions = self.palette_actions();
-        let selected = self.palette.as_ref().map(|p| p.selected).unwrap_or(0);
-        let action = actions.get(selected).copied();
-        self.close_palette();
-        if let Some(action) = action {
-            self.run_action(action, tx);
-        }
-    }
-
-    pub fn choose_command(&mut self, action: Action, tx: &mut Tx) {
-        self.close_palette();
-        self.run_action(action, tx);
+            .map(Palette::actions::<Action>)
+            .unwrap_or_default()
     }
 
     pub fn open_settings(&mut self) {
@@ -162,7 +105,7 @@ impl App {
     ) -> Result<(), ShortcutError> {
         self.keybinds.set(action, shortcut)?;
         let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
-            self.keybinds.write(doc, action)
+            actions_kdl::keybinds::set(doc, &self.keybinds, action)
         });
         Ok(())
     }
@@ -193,7 +136,7 @@ impl App {
     pub fn reset_binding(&mut self, action: Action) {
         self.keybinds.reset(action);
         let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
-            self.keybinds.write(doc, action)
+            actions_kdl::keybinds::set(doc, &self.keybinds, action)
         });
         self.recorders.insert(action, Recorder::default());
     }
@@ -271,5 +214,87 @@ impl App {
             Action::OpenTerminal => self.toggle_terminal(),
             Action::Reveal => self.reveal_selected(),
         }
+    }
+}
+
+impl PaletteHost<Action> for App {
+    fn palette(&self) -> &Palette {
+        self.palette
+            .as_ref()
+            .expect("the open command bar has a field")
+    }
+
+    fn palette_mut(&mut self) -> &mut Palette {
+        self.palette
+            .as_mut()
+            .expect("the open command bar has a field")
+    }
+
+    fn keybinds(&self) -> &Keybinds {
+        &self.keybinds
+    }
+
+    fn palette_action(&self) -> Action {
+        Action::CommandBar
+    }
+
+    fn palette_enabled(&self, action: Action) -> bool {
+        self.action_enabled(action)
+    }
+
+    fn palette_run(&mut self, action: Action, tx: &mut Tx) {
+        self.run_action(action, tx);
+    }
+
+    fn palette_close(&mut self) {
+        self.close_palette();
+    }
+
+    fn palette_scroll(&self, content: El) -> El {
+        scroll::area(
+            self,
+            "command-scroll",
+            col()
+                .w_full()
+                .max_h(380.0)
+                .scroll_edge_fade(12.0)
+                .scroll_margin(
+                    actions_ui::palette::CLEARANCE_ROWS
+                        * (actions_ui::palette::ROW_HEIGHT + actions_ui::palette::ROW_GAP),
+                ),
+            content,
+        )
+    }
+}
+
+impl KeybindHost<Action> for App {
+    fn recorders(&self) -> &BTreeMap<Action, Recorder> {
+        &self.recorders
+    }
+
+    fn recorders_mut(&mut self) -> &mut BTreeMap<Action, Recorder> {
+        &mut self.recorders
+    }
+
+    fn keybinds(&self) -> &Keybinds {
+        &self.keybinds
+    }
+
+    fn record_key(&mut self, action: Action, event: &PhysicalInput) -> bool {
+        App::record_key(self, action, event)
+    }
+
+    fn reset_binding(&mut self, action: Action) {
+        App::reset_binding(self, action);
+    }
+
+    fn keybinds_saved_in(&self) -> Option<String> {
+        self.store
+            .path(config::KEYBINDS)
+            .map(|path| path.display().to_string())
+    }
+
+    fn keybinds_error(&self) -> Option<String> {
+        self.store.error(config::KEYBINDS).map(str::to_owned)
     }
 }

@@ -52,21 +52,21 @@ const OVERSCROLL_GIVE: f32 = 0.45;
 const OVERSCROLL_RETURN: f32 = 16.0;
 
 #[derive(Clone, Copy)]
-pub(super) struct Limits {
+pub struct Limits {
     pub max: f32,
     pub inertia: bool,
     pub bounce: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(super) struct Step {
+pub struct Step {
     pub scroll_to: Option<f32>,
     pub redraw: bool,
     pub again: bool,
 }
 
 impl Step {
-    const NONE: Step = Step {
+    pub const NONE: Step = Step {
         scroll_to: None,
         redraw: false,
         again: false,
@@ -78,7 +78,7 @@ impl Step {
 }
 
 #[derive(Default)]
-pub(super) struct Scroll {
+pub struct Scroll {
     told: f32,
     request: Option<f32>,
     velocity: f32,
@@ -98,7 +98,7 @@ pub(super) struct Scroll {
 }
 
 impl Scroll {
-    pub(super) fn current(&self) -> f32 {
+    pub fn current(&self) -> f32 {
         self.request.unwrap_or(self.told)
     }
 
@@ -113,12 +113,12 @@ impl Scroll {
         }
     }
 
-    pub(super) fn observe(&mut self, told: f32) {
+    pub fn observe(&mut self, told: f32) {
         self.told = told;
         self.request = None;
     }
 
-    pub(super) fn frame(&mut self, t: f64) -> f32 {
+    pub fn frame(&mut self, t: f64) -> f32 {
         let since = match self.last_t {
             Some(last) => (t - last).max(0.0) as f32,
             None => 0.0,
@@ -130,7 +130,7 @@ impl Scroll {
         dt
     }
 
-    pub(super) fn wheel(&mut self, wheel: &WheelEvent, limits: Limits) -> Option<Step> {
+    pub fn wheel(&mut self, wheel: &WheelEvent, limits: Limits) -> Option<Step> {
         if !limits.inertia && !limits.bounce {
             return None;
         }
@@ -191,7 +191,7 @@ impl Scroll {
         Some(out)
     }
 
-    pub(super) fn nudge(&mut self, points: f32, max: f32) -> Step {
+    pub fn nudge(&mut self, points: f32, max: f32) -> Step {
         if points == 0.0 {
             return Step::NONE;
         }
@@ -208,7 +208,7 @@ impl Scroll {
         out
     }
 
-    pub(super) fn step(&mut self, limits: Limits) -> Step {
+    pub fn step(&mut self, limits: Limits) -> Step {
         let mut out = Step::NONE;
         let (since, dt) = (self.since, self.dt);
         self.step = 0.0;
@@ -342,7 +342,7 @@ impl Scroll {
         out
     }
 
-    pub(super) fn stop(&mut self) {
+    pub fn stop(&mut self) {
         self.velocity = 0.0;
         self.push = 0.0;
         self.pushing = false;
@@ -355,7 +355,7 @@ impl Scroll {
         self.request = None;
     }
 
-    pub(super) fn stop_coast(&mut self) {
+    pub fn stop_coast(&mut self) {
         self.velocity = 0.0;
         self.push = 0.0;
         self.pushing = false;
@@ -363,14 +363,11 @@ impl Scroll {
         self.stroke_peak = 0.0;
     }
 
-    pub(super) fn stop_bounce(&mut self) {
+    pub fn stop_bounce(&mut self) {
         self.overshoot = 0.0;
     }
 
-    pub(super) fn overshoot(&self) -> f32 {
+    pub fn overshoot(&self) -> f32 {
         self.overshoot
     }
 }
-
-#[cfg(test)]
-mod tests;

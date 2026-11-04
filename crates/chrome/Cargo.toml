@@ -1,0 +1,8 @@
+[package]
+name = "chrome"
+version = "0.1.0"
+edition = "2024"
+description = "Dialog chrome for Rune apps: the corner cut a control sits in"
+
+[dependencies]
+rune.workspace = true

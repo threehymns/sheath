@@ -13,7 +13,6 @@ mod places;
 pub(crate) mod preview;
 mod rules_view;
 mod scan;
-mod scroll;
 mod scrolling;
 mod selection;
 mod sheets;
@@ -24,7 +23,8 @@ mod watch;
 #[cfg(all(test, not(target_arch = "wasm32")))]
 pub(crate) use watch::changed;
 
-pub use commands::{Palette, SettingsTab};
+pub use actions_ui::Palette;
+pub use commands::SettingsTab;
 pub use drag::{FileDrag, list_drag};
 pub use drop::PlaceAt;
 pub use entry::{Entry, Preview};
@@ -62,7 +62,6 @@ use paths::{default_location, start_location};
 #[cfg(test)]
 pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
-use scrolling::Scrolls;
 use watch::Watch;
 
 pub const ROW_HEIGHT: f32 = 30.0;
@@ -152,7 +151,7 @@ pub struct App {
     pub recorders: BTreeMap<Action, Recorder>,
     pub store: Store,
     pub rows_view: [f32; 4],
-    scrolls: Scrolls,
+    areas: scroll::Areas,
     pub places_at: BTreeMap<String, PlaceAt>,
     pub sections_at: BTreeMap<Section, [f32; 4]>,
     pub name_at: BTreeMap<String, f32>,
@@ -189,7 +188,7 @@ impl App {
     fn open_in(path: PathBuf, session: Session) -> App {
         let store = Store::open();
         let config = Settings::from_doc(store.doc(config::CONFIG));
-        let keybinds = Keybinds::from_doc(store.doc(config::KEYBINDS));
+        let keybinds = actions_kdl::keybinds::read(store.doc(config::KEYBINDS));
         let mut app = App::blank(config, store, keybinds);
         app.session = session;
         if let Some([kind, size, date]) = app.session.columns() {
@@ -294,7 +293,7 @@ impl App {
             recorders,
             store,
             rows_view: [0.0; 4],
-            scrolls: Scrolls::default(),
+            areas: scroll::Areas::default(),
             places_at: BTreeMap::new(),
             sections_at: BTreeMap::new(),
             name_at: BTreeMap::new(),
@@ -392,7 +391,7 @@ impl App {
         }
         self.rule_delete_ask = None;
         self.config = Settings::from_doc(self.store.doc(config::CONFIG));
-        self.keybinds = Keybinds::from_doc(self.store.doc(config::KEYBINDS));
+        self.keybinds = actions_kdl::keybinds::read(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();
         self.inspector.set_open(self.config.inspector);
         self.reload_rules();

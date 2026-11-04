@@ -1,0 +1,10 @@
+[package]
+name = "actions-ui"
+version = "0.1.0"
+edition = "2024"
+description = "The command palette, keybind editor and settings rows for the actions kernel"
+
+[dependencies]
+actions.workspace = true
+rune.workspace = true
+rune-kit.workspace = true

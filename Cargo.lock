@@ -3,6 +3,30 @@
 version = 4
 
 [[package]]
+name = "actions"
+version = "0.1.0"
+dependencies = [
+ "rune",
+]
+
+[[package]]
+name = "actions-kdl"
+version = "0.1.0"
+dependencies = [
+ "actions",
+ "kdl",
+]
+
+[[package]]
+name = "actions-ui"
+version = "0.1.0"
+dependencies = [
+ "actions",
+ "rune",
+ "rune-kit",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -428,6 +452,13 @@ name = "cfg_aliases"
 version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+
+[[package]]
+name = "chrome"
+version = "0.1.0"
+dependencies = [
+ "rune",
+]
 
 [[package]]
 name = "chrono"
@@ -3778,6 +3809,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "scroll"
+version = "0.1.0"
+dependencies = [
+ "rune",
+]
+
+[[package]]
 name = "sctk-adwaita"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3927,8 +3965,12 @@ dependencies = [
 name = "sheath"
 version = "0.1.0"
 dependencies = [
+ "actions",
+ "actions-kdl",
+ "actions-ui",
  "arboard",
  "avif-decode",
+ "chrome",
  "chrono",
  "fff-search",
  "ghostty-vt",
@@ -3942,6 +3984,7 @@ dependencies = [
  "rune-kit",
  "rune-theme-opencode",
  "rune-tty",
+ "scroll",
  "tempfile",
  "trash",
  "wasm-bindgen",

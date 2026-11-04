@@ -1,8 +1,8 @@
 mod fields;
 
 use crate::app::{App, RuleEdit, RuleMenu, RuleProp};
-use crate::corner::CornerCut;
 use crate::rules::{EntryKind, Kind, Matcher};
+use chrome::CornerCut;
 use fields::{rule_field, rule_name_field};
 use rune::{Color, El, Shadow, Tx, col, row, text};
 use rune_kit::{

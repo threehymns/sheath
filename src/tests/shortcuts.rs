@@ -125,7 +125,7 @@ fn a_broken_keybinds_file_keeps_the_defaults_and_says_so() {
         "and the report names the file: {}",
         problem.report
     );
-    let binds = Keybinds::from_doc(store.doc(crate::config::KEYBINDS));
+    let binds = actions_kdl::keybinds::read(store.doc(crate::config::KEYBINDS));
     assert_eq!(
         binds.chord(Action::Rename),
         Keybinds::defaults().chord(Action::Rename)

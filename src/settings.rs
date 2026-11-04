@@ -1,6 +1,6 @@
-use kdl::{KdlDocument, KdlNode};
+use kdl::KdlDocument;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 // A setting the file does not name keeps its default; saving removes the key instead of writing
 // the default down.
 pub enum Setting {
@@ -95,12 +95,6 @@ impl Setting {
         }
     }
 
-    fn from_name(name: &str) -> Option<Setting> {
-        Setting::ALL
-            .into_iter()
-            .find(|setting| setting.name() == name)
-    }
-
     fn value(self, settings: &Settings) -> bool {
         match self {
             Setting::ShowHidden => settings.show_hidden,
@@ -176,24 +170,10 @@ impl Settings {
 
     pub fn from_doc(doc: Option<&KdlDocument>) -> Settings {
         let mut settings = Settings::defaults();
-        let Some(doc) = doc else {
-            return settings;
-        };
-        for node in doc.nodes() {
-            let children = node
-                .children()
-                .into_iter()
-                .flat_map(|kids| kids.nodes())
-                .filter(|_| node.name().value() == "settings");
-            for child in children {
-                let Some(setting) = Setting::from_name(child.name().value()) else {
-                    continue;
-                };
-                settings.present[setting.index()] = true;
-                if let Some(on) = child.get(0).and_then(|entry| entry.as_bool()) {
-                    setting.set(&mut settings, on);
-                }
-            }
+        let parsed: Vec<(Setting, bool)> = actions_kdl::settings::read(doc);
+        for (setting, on) in parsed {
+            settings.present[setting.index()] = true;
+            setting.set(&mut settings, on);
         }
         settings
     }
@@ -203,16 +183,7 @@ impl Settings {
     }
 
     pub fn write(&self, doc: &mut KdlDocument, setting: Setting) {
-        let body = format!(
-            "{} {}",
-            setting.name(),
-            if setting.value(self) {
-                "#true"
-            } else {
-                "#false"
-            }
-        );
-        write_child(doc, "settings", setting.name(), &body);
+        actions_kdl::settings::write(doc, setting, setting.value(self));
     }
 
     pub fn remember(&mut self, changed: Setting, on: bool) {
@@ -226,70 +197,24 @@ impl Settings {
     }
 
     pub fn clear(doc: &mut KdlDocument, setting: Setting) {
-        remove_child(doc, "settings", setting.name());
+        actions_kdl::settings::remove(doc, setting);
     }
 }
 
-fn parent_index(doc: &KdlDocument, parent: &str) -> Option<usize> {
-    doc.nodes()
-        .iter()
-        .position(|node| node.name().value() == parent)
-}
+impl actions::Setting for Setting {
+    const ALL: &'static [Self] = &Setting::ALL;
 
-// Rewrites the one child and keeps the parent's indentation, so the file's comments and layout
-// survive a save.
-pub fn write_child(doc: &mut KdlDocument, parent: &str, name: &str, body: &str) {
-    let Some(index) = parent_index(doc, parent) else {
-        let text = format!("\n{parent} {{\n    {body}\n}}\n");
-        if let Ok(parsed) = text.parse::<KdlDocument>()
-            && let Some(node) = parsed.nodes().first()
-        {
-            doc.nodes_mut().push(node.clone());
-        }
-        return;
-    };
-    let has_children = doc.nodes()[index].children().is_some();
-    let existing = doc.nodes()[index]
-        .children()
-        .into_iter()
-        .flat_map(|kids| kids.nodes())
-        .find(|node| node.name().value() == name)
-        .and_then(|node| node.format().map(|format| format.leading.clone()));
-    let leading = existing.unwrap_or_else(|| "\n    ".to_owned());
-    if !has_children {
-        let text = format!("{leading}{parent} {{\n    {body}\n}}\n");
-        if let Ok(parsed) = text.parse::<KdlDocument>()
-            && let Some(node) = parsed.nodes().first()
-        {
-            doc.nodes_mut()[index] = node.clone();
-        }
-        return;
+    fn from_name(name: &str) -> Option<Setting> {
+        Setting::ALL
+            .into_iter()
+            .find(|setting| setting.name() == name)
     }
-    let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() else {
-        return;
-    };
-    let text = format!("{leading}{body}\n");
-    let Ok(node) = text.parse::<KdlNode>() else {
-        return;
-    };
-    if let Some(slot) = children
-        .nodes_mut()
-        .iter_mut()
-        .find(|child| child.name().value() == name)
-    {
-        *slot = node;
-    } else {
-        children.nodes_mut().push(node);
-    }
-}
 
-pub fn remove_child(doc: &mut KdlDocument, parent: &str, name: &str) {
-    let Some(index) = parent_index(doc, parent) else {
-        return;
-    };
-    if let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() {
-        children
-            .nodes_mut()
-            .retain(|node| node.name().value() != name);
+    fn name(self) -> &'static str {
+        Setting::name(self)
+    }
+
+    fn id(self) -> &'static str {
+        Setting::id(self)
     }
 }

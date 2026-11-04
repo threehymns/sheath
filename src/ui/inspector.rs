@@ -300,7 +300,7 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
         }
         Some(Preview::Text(body)) => {
             let body: String = body.chars().take(6_000).collect();
-            panel = panel.child(super::scroll_area::scrolled(
+            panel = panel.child(scroll::area(
                 s,
                 "preview-scroll",
                 col().w_full().grow(1.0).min_h(0.0).scroll_edge_fade(12.0),

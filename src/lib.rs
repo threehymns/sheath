@@ -1,11 +1,9 @@
 mod app;
 mod clock;
 mod config;
-mod corner;
 mod format;
 mod icons;
 mod keybinds;
-mod keycaps;
 mod notice;
 mod places;
 mod recorder;

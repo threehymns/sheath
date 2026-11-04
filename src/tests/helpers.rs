@@ -52,7 +52,7 @@ pub(super) fn app_in_config_dir(dir: &TempDir) -> (App, std::path::PathBuf) {
     let path = dir.path().join("keybinds.kdl");
     let mut app = app(dir);
     app.store = crate::config::Store::at(dir.path().to_path_buf());
-    app.keybinds = Keybinds::from_doc(app.store.doc(crate::config::KEYBINDS));
+    app.keybinds = actions_kdl::keybinds::read(app.store.doc(crate::config::KEYBINDS));
     app.recorders = Keybinds::recorders();
     app.config = Settings::from_doc(app.store.doc(crate::config::CONFIG));
     app.inspector.set_open(app.config.inspector);
@@ -70,7 +70,7 @@ pub(super) fn saved_settings(dir: &TempDir) -> Settings {
 
 pub(super) fn saved_keybinds(dir: &TempDir) -> Keybinds {
     let store = crate::config::Store::at(dir.path().to_path_buf());
-    Keybinds::from_doc(store.doc(crate::config::KEYBINDS))
+    actions_kdl::keybinds::read(store.doc(crate::config::KEYBINDS))
 }
 
 pub(super) fn names(app: &App) -> Vec<&str> {

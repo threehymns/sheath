@@ -19,7 +19,7 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
         .min_h(0.0)
         .transition(Transition::none())
         .child(grid_toolbar(s, k).transition(mount(cut)))
-        .child(super::scroll_area::scrolled(
+        .child(scroll::area(
             s,
             FILES,
             col()

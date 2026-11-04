@@ -1,13 +1,15 @@
 use rune::{El, Icon, col, el, icon, row, text};
 use rune_kit::Kit;
 
-use super::{SETTINGS_ROW_HEIGHT, SETTINGS_ROW_INSET};
+pub const ROW_HEIGHT: f32 = 48.0;
 
-pub(super) fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
+pub const ROW_INSET: f32 = 16.0;
+
+pub fn settings_section(k: &Kit, key: &str, title: &str, rows: Vec<El>) -> El {
     settings_section_action(k, key, title, None, rows, true)
 }
 
-pub(crate) fn settings_section_action(
+pub fn settings_section_action(
     k: &Kit,
     key: &str,
     title: &str,
@@ -41,12 +43,12 @@ pub(crate) fn settings_section_action(
             .key(format!("{key}-label"))
             .font(k.ty.ui_medium.lh(16.0))
             .color(k.c.text_muted)
-            .mx(SETTINGS_ROW_INSET)
+            .mx(ROW_INSET)
             .grow(1.0)
             .truncate(),
     );
     if let Some(action) = action {
-        label = label.child(action.mr(SETTINGS_ROW_INSET));
+        label = label.child(action.mr(ROW_INSET));
     }
     col().key(key).w_full().gap(8.0).child(label).child(card)
 }
@@ -54,11 +56,11 @@ pub(crate) fn settings_section_action(
 fn settings_rule(k: &Kit) -> El {
     row()
         .w_full()
-        .px(SETTINGS_ROW_INSET)
+        .px(ROW_INSET)
         .child(el().h(1.0).grow(1.0).fill(k.c.border_muted))
 }
 
-pub(super) fn settings_row(
+pub fn settings_row(
     k: &Kit,
     glyph: &'static Icon,
     label: &str,
@@ -80,8 +82,8 @@ pub(super) fn settings_row(
     }
     row()
         .w_full()
-        .min_h(SETTINGS_ROW_HEIGHT)
-        .px(SETTINGS_ROW_INSET)
+        .min_h(ROW_HEIGHT)
+        .px(ROW_INSET)
         .py(8.0)
         .gap(12.0)
         .center_y()

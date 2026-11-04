@@ -51,7 +51,7 @@ pub(super) fn file_table(s: &App, k: &'static Kit, cut: bool) -> El {
         .min_h(0.0)
         .transition(Transition::none())
         .child(file_header(s, k, &style).transition(mount(cut)))
-        .child(super::scroll_area::scrolled(
+        .child(scroll::area(
             s,
             FILES,
             viewport,

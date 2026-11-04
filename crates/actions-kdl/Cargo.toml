@@ -1,0 +1,9 @@
+[package]
+name = "actions-kdl"
+version = "0.1.0"
+edition = "2024"
+description = "The KDL codec for the actions kernel: keybinds and settings blocks"
+
+[dependencies]
+actions.workspace = true
+kdl.workspace = true

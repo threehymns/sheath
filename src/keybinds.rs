@@ -1,10 +1,11 @@
-use std::collections::BTreeMap;
+use rune::Icon;
+use rune_kit::{Kit, glyphs};
+use rune_theme_opencode as theme;
 
-use kdl::KdlDocument;
+use crate::icons;
 
-use crate::recorder::Recorder;
-use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
-
+/// The app's commands. The enum stays here so `perform` is an exhaustive match; everything the
+/// keymap needs about them is in the shared `actions::Action` implementation below.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Action {
     CommandBar,
@@ -46,6 +47,9 @@ pub enum Action {
     ToggleFoldersFirst,
 }
 
+/// The shared keymap, with this app's action type.
+pub type Keybinds = actions::Keybinds<Action>;
+
 impl Action {
     pub const ALL: [Action; 37] = [
         Action::CommandBar,
@@ -86,10 +90,6 @@ impl Action {
         Action::ToggleInspector,
         Action::ToggleFoldersFirst,
     ];
-
-    pub fn ignores_shift(self) -> bool {
-        self == Action::CommandBar
-    }
 
     pub fn id(self) -> &'static str {
         match self {
@@ -175,11 +175,7 @@ impl Action {
         }
     }
 
-    fn from_id(id: &str) -> Option<Action> {
-        Action::ALL.iter().copied().find(|action| action.id() == id)
-    }
-
-    fn default_chord(self) -> Option<&'static str> {
+    pub fn default_chord(self) -> Option<&'static str> {
         match self {
             Action::ViewFolderRules
             | Action::ViewEntryRules
@@ -259,302 +255,99 @@ impl Action {
             }
         }
     }
-}
 
-pub struct Keybinds {
-    chords: BTreeMap<Action, Shortcut>,
-}
-
-impl Keybinds {
-    pub fn defaults() -> Keybinds {
-        Keybinds {
-            chords: default_chords(),
-        }
-    }
-
-    pub fn from_doc(doc: Option<&KdlDocument>) -> Keybinds {
-        let mut binds = Keybinds::defaults();
-        let Some(doc) = doc else {
-            return binds;
-        };
-        for (action, chord) in parse(doc) {
-            match chord {
-                Some(chord) => {
-                    binds.chords.insert(action, chord);
-                }
-                None => {
-                    binds.chords.remove(&action);
-                }
-            }
-        }
-        binds
-    }
-
-    pub fn write(&self, doc: &mut KdlDocument, action: Action) {
-        let current = self.chords.get(&action);
-        if current == default_shortcut(action).as_ref() {
-            crate::settings::remove_child(doc, "keybinds", action.id());
-            return;
-        }
-        let text = match current {
-            Some(chord) => format!("{} \"{chord}\"", action.id()),
-            None => format!("{} \"\"", action.id()),
-        };
-        crate::settings::write_child(doc, "keybinds", action.id(), &text);
-    }
-
-    pub fn chord(&self, action: Action) -> Option<&Shortcut> {
-        self.chords.get(&action)
-    }
-
-    pub fn recorders() -> BTreeMap<Action, Recorder> {
-        Action::ALL
-            .into_iter()
-            .map(|action| (action, Recorder::default()))
-            .collect()
-    }
-
-    pub fn accelerator(&self, action: Action) -> String {
-        self.chord(action)
-            .map(ToString::to_string)
-            .unwrap_or_default()
-    }
-
-    pub fn keycaps(&self, action: Action) -> Vec<String> {
-        self.chord(action)
-            .map(Shortcut::menu_keycaps)
-            .unwrap_or_default()
-    }
-
-    pub fn menu_label(&self, action: Action) -> String {
-        let separator = if cfg!(target_os = "macos") { "" } else { "+" };
-        self.keycaps(action).join(separator)
-    }
-
-    pub fn matches(&self, action: Action, event: &KeyEvent) -> bool {
-        self.chord(action)
-            .is_some_and(|chord| matches(chord, event, action.ignores_shift()))
-    }
-
-    pub fn set(
-        &mut self,
-        action: Action,
-        shortcut: Option<&Shortcut>,
-    ) -> Result<(), ShortcutError> {
-        if let Some(chord) = shortcut
-            && self
-                .chords
-                .iter()
-                .any(|(other, bound)| *other != action && bound == chord)
-        {
-            return Err(ShortcutError::Conflict);
-        }
-        match shortcut {
-            Some(chord) => {
-                self.chords.insert(action, chord.clone());
-            }
-            None => {
-                self.chords.remove(&action);
-            }
-        }
-        Ok(())
-    }
-
-    pub fn is_custom(&self, action: Action) -> bool {
-        self.chords.get(&action) != default_shortcut(action).as_ref()
-    }
-
-    pub fn reset(&mut self, action: Action) {
-        match default_shortcut(action) {
-            Some(chord) => self.chords.insert(action, chord),
-            None => self.chords.remove(&action),
-        };
-    }
-}
-
-fn default_chords() -> BTreeMap<Action, Shortcut> {
-    let mut chords = BTreeMap::new();
-    for action in Action::ALL {
-        if let Some(chord) = default_shortcut(action) {
-            chords.insert(action, chord);
-        }
-    }
-    chords
-}
-
-fn default_shortcut(action: Action) -> Option<Shortcut> {
-    let text = action.default_chord()?;
-    match text.parse::<Shortcut>() {
-        Ok(chord) => Some(chord),
-        Err(_) => {
-            debug_assert!(
-                false,
-                "{} has an invalid default chord: {text}",
-                action.id()
-            );
-            None
+    pub fn icon(self, k: &Kit) -> &'static Icon {
+        match self {
+            Action::CommandBar => &glyphs::KEYBOARD,
+            Action::FocusSearch => k.glyph.search,
+            Action::OpenSettings => &theme::icons::SETTINGS_GEAR,
+            Action::Back => &icons::CHEVRON_LEFT,
+            Action::Forward => &icons::CHEVRON_RIGHT,
+            Action::EnclosingFolder => &icons::ARROW_UP,
+            Action::GoToFolder => &icons::DRIVE,
+            Action::Refresh => &icons::REFRESH,
+            Action::NewFolder => &icons::FOLDER_PLUS,
+            Action::NewFile => &glyphs::FILE,
+            Action::ToggleHidden => k.glyph.eye,
+            Action::Rename => &theme::icons::EDIT,
+            Action::Move => &glyphs::FOLDER,
+            Action::Trash => &theme::icons::TRASH,
+            Action::Delete => &theme::icons::WARNING,
+            Action::Copy => &theme::icons::COPY,
+            Action::CopyPath | Action::CopyName => &icons::CLIPBOARD,
+            Action::Cut => &icons::SCISSORS,
+            Action::Paste => &icons::CLIPBOARD,
+            Action::Duplicate => &theme::icons::OUTLINE_COPY,
+            Action::SelectAll => &icons::CHECK_SQUARE,
+            Action::DeselectAll => &icons::SQUARE,
+            Action::InvertSelection => &icons::HALF_SQUARE,
+            Action::ViewFolderRules
+            | Action::ViewEntryRules
+            | Action::SaveLayoutRule
+            | Action::PickRule => &theme::icons::EDIT,
+            Action::ShowEntry | Action::HideEntry => k.glyph.eye,
+            Action::OpenTerminal => &icons::TERMINAL,
+            Action::Reveal => &glyphs::FOLDER_OPEN,
+            Action::AddPlace => &icons::FOLDER_PLUS,
+            Action::MakeAlias => &icons::LINK,
+            Action::ToggleLayout => &icons::GRID,
+            Action::ToggleInspector => &icons::INSPECTOR,
+            Action::ToggleFoldersFirst => &icons::LIST,
         }
     }
 }
 
-fn parse(doc: &KdlDocument) -> Vec<(Action, Option<Shortcut>)> {
-    let mut out = Vec::new();
-    for node in doc.nodes() {
-        if node.name().value() != "keybinds" {
-            continue;
-        }
-        for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
-            let Some(action) = Action::from_id(child.name().value()) else {
-                continue;
-            };
-            let raw = child
-                .get(0)
-                .and_then(|value| value.as_string())
-                .unwrap_or_default()
-                .trim();
-            let chord = if raw.is_empty() {
-                None
-            } else {
-                match raw.parse::<Shortcut>() {
-                    Ok(chord) => Some(chord),
-                    Err(_) => continue,
-                }
-            };
-            out.push((action, chord));
+impl actions::Action for Action {
+    const ALL: &'static [Self] = &Action::ALL;
+
+    fn from_id(id: &str) -> Option<Action> {
+        Action::ALL.iter().copied().find(|action| action.id() == id)
+    }
+
+    fn id(self) -> &'static str {
+        Action::id(self)
+    }
+
+    fn label(self) -> &'static str {
+        Action::label(self)
+    }
+
+    fn default_chord(self) -> Option<&'static str> {
+        Action::default_chord(self)
+    }
+
+    fn scopes(self) -> actions::Scopes {
+        let typing = !matches!(
+            self,
+            Action::FocusSearch
+                | Action::Rename
+                | Action::Move
+                | Action::Trash
+                | Action::Delete
+                | Action::Copy
+                | Action::Cut
+                | Action::Paste
+                | Action::Duplicate
+                | Action::SelectAll
+                | Action::DeselectAll
+                | Action::InvertSelection
+        );
+        let pane = matches!(
+            self,
+            Action::CommandBar | Action::OpenSettings | Action::OpenTerminal
+        );
+        actions::Scopes {
+            while_typing: typing,
+            in_pane: pane,
+            in_modal: true,
         }
     }
-    out
-}
 
-fn matches(chord: &Shortcut, event: &KeyEvent, ignore_shift: bool) -> bool {
-    let want = chord.modifiers();
-    let held = event.mods;
-    let logo = cfg!(target_os = "macos") || want.logo == held.logo;
-    if (want.shift != held.shift && !ignore_shift)
-        || want.alt != held.alt
-        || want.cmd != held.cmd
-        || want.ctrl != held.ctrl
-        || !logo
-    {
-        return false;
+    fn in_palette(self) -> bool {
+        self != Action::CommandBar
     }
-    physical(&event.key) == Some(chord.physical_key())
-}
 
-// Rune matches accelerators by physical position, so the logical key an event carries is mapped
-// back to it.
-fn physical(key: &Key) -> Option<PhysicalKeyCode> {
-    use PhysicalKeyCode as Code;
-    Some(match key {
-        Key::Command(c) => char_key(*c)?,
-        Key::Text(text) => {
-            let mut chars = text.chars();
-            let c = chars.next()?;
-            if chars.next().is_some() {
-                return None;
-            }
-            char_key(c)?
-        }
-        Key::Enter => Code::Enter,
-        Key::Backspace => Code::Backspace,
-        Key::Delete => Code::Delete,
-        Key::Left => Code::ArrowLeft,
-        Key::Right => Code::ArrowRight,
-        Key::Up => Code::ArrowUp,
-        Key::Down => Code::ArrowDown,
-        Key::Home => Code::Home,
-        Key::End => Code::End,
-        Key::PageUp => Code::PageUp,
-        Key::PageDown => Code::PageDown,
-        Key::Escape => Code::Escape,
-        Key::Tab => Code::Tab,
-        Key::Function(n) => function_key(*n)?,
-        _ => return None,
-    })
-}
-
-fn char_key(c: char) -> Option<PhysicalKeyCode> {
-    use PhysicalKeyCode as Code;
-    Some(match c.to_ascii_lowercase() {
-        'a' => Code::KeyA,
-        'b' => Code::KeyB,
-        'c' => Code::KeyC,
-        'd' => Code::KeyD,
-        'e' => Code::KeyE,
-        'f' => Code::KeyF,
-        'g' => Code::KeyG,
-        'h' => Code::KeyH,
-        'i' => Code::KeyI,
-        'j' => Code::KeyJ,
-        'k' => Code::KeyK,
-        'l' => Code::KeyL,
-        'm' => Code::KeyM,
-        'n' => Code::KeyN,
-        'o' => Code::KeyO,
-        'p' => Code::KeyP,
-        'q' => Code::KeyQ,
-        'r' => Code::KeyR,
-        's' => Code::KeyS,
-        't' => Code::KeyT,
-        'u' => Code::KeyU,
-        'v' => Code::KeyV,
-        'w' => Code::KeyW,
-        'x' => Code::KeyX,
-        'y' => Code::KeyY,
-        'z' => Code::KeyZ,
-        '0' => Code::Digit0,
-        '1' => Code::Digit1,
-        '2' => Code::Digit2,
-        '3' => Code::Digit3,
-        '4' => Code::Digit4,
-        '5' => Code::Digit5,
-        '6' => Code::Digit6,
-        '7' => Code::Digit7,
-        '8' => Code::Digit8,
-        '9' => Code::Digit9,
-        '-' => Code::Minus,
-        '=' => Code::Equal,
-        ',' => Code::Comma,
-        '.' => Code::Period,
-        '/' => Code::Slash,
-        ';' => Code::Semicolon,
-        '\'' => Code::Quote,
-        '[' => Code::BracketLeft,
-        ']' => Code::BracketRight,
-        '\\' => Code::Backslash,
-        '`' => Code::Backquote,
-        ' ' => Code::Space,
-        _ => return None,
-    })
-}
-
-fn function_key(n: u8) -> Option<PhysicalKeyCode> {
-    use PhysicalKeyCode as Code;
-    Some(match n {
-        1 => Code::F1,
-        2 => Code::F2,
-        3 => Code::F3,
-        4 => Code::F4,
-        5 => Code::F5,
-        6 => Code::F6,
-        7 => Code::F7,
-        8 => Code::F8,
-        9 => Code::F9,
-        10 => Code::F10,
-        11 => Code::F11,
-        12 => Code::F12,
-        13 => Code::F13,
-        14 => Code::F14,
-        15 => Code::F15,
-        16 => Code::F16,
-        17 => Code::F17,
-        18 => Code::F18,
-        19 => Code::F19,
-        20 => Code::F20,
-        21 => Code::F21,
-        22 => Code::F22,
-        23 => Code::F23,
-        24 => Code::F24,
-        _ => return None,
-    })
+    fn ignores_shift(self) -> bool {
+        self == Action::CommandBar
+    }
 }

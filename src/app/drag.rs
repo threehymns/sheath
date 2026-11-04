@@ -259,7 +259,7 @@ impl App {
     fn area_push(&self, at: (f32, f32)) -> Option<(&'static str, f32)> {
         let (x, y) = at;
         let mut hit: Option<(&'static str, [f32; 4])> = None;
-        for (key, rect) in self.scrolls.visible_regions() {
+        for (key, rect) in self.areas.visible_regions() {
             let covers = rect[3] > 0.0
                 && x >= rect[0]
                 && x <= rect[0] + rect[2]

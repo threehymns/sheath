@@ -81,7 +81,7 @@ pub(super) fn rule_picker_layer(s: &App, k: &Kit, layers: &mut Vec<El>) {
                 .w_full()
                 .fill(k.c.border_muted),
         )
-        .child(super::scroll_area::scrolled(
+        .child(scroll::area(
             s,
             "rule-picker-scroll",
             col().w_full().max_h(380.0).scroll_edge_fade(12.0),

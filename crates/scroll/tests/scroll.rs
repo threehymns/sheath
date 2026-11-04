@@ -1,6 +1,6 @@
 use rune::{GesturePhase, WheelEvent};
 
-use super::*;
+use scroll::{Limits, Scroll, Step};
 
 /// The viewport as the tests drive it: it applies what a step asks for and reports where it
 /// landed.

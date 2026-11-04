@@ -1,24 +1,11 @@
 use crate::app::App;
 use crate::keybinds::Action;
+use actions_ui::PaletteHost;
 use rune::{Key, KeyEvent, Tx};
 
 pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     if s.palette.is_some() {
-        if matches!(event.key, Key::Escape) {
-            s.close_palette();
-            return true;
-        }
-        if s.keybinds.matches(Action::CommandBar, event) {
-            s.close_palette();
-            return true;
-        }
-        match event.key {
-            Key::Down => s.palette_move(1, tx),
-            Key::Up => s.palette_move(-1, tx),
-            Key::Enter => s.run_palette_command(tx),
-            _ => return false,
-        }
-        return true;
+        return s.palette_key(event, tx);
     }
     if s.rule_picker.is_some() {
         match event.key {
