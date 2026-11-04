@@ -49,6 +49,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         match event.key {
             Key::Escape => {
                 s.term.close_search();
+                s.terminal_frame(tx);
                 return true;
             }
             Key::Enter => {
@@ -57,6 +58,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
                 } else {
                     s.term.search_next();
                 }
+                s.terminal_frame(tx);
                 return true;
             }
             _ => {}
@@ -69,6 +71,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
     // chords and the commands that leave the pane reach the app while it has focus.
     if s.term.is_open() && s.term.focus && !terminal_search {
         if s.terminal_chord(event, tx) {
+            s.terminal_frame(tx);
             return true;
         }
         for action in [
@@ -82,6 +85,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
             }
         }
         if s.term.key(event) {
+            s.terminal_frame(tx);
             return true;
         }
     }

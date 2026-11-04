@@ -233,7 +233,11 @@ fn a_double_click_takes_a_word_and_a_triple_click_its_line() {
 
     // Alt+drag is a block: the columns between the ends, on every row between them.
     engine.feed(b"\x1b[2J\x1b[Habcdef\r\nghijkl\r\nmnopqr");
-    assert!(engine.begin_selection((1, 0), 1, true));
+    engine.clear_selection();
+    assert!(
+        !engine.begin_selection((1, 0), 1, true),
+        "the press alone selects nothing"
+    );
     assert!(engine.select_to((3, 2)));
     assert_eq!(
         engine.selected().as_deref(),

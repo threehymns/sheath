@@ -46,6 +46,14 @@ pub struct Window {
 }
 
 impl Window {
+    /// Asks for the frame a pane change needs when the shell will not: a selection that came or
+    /// went is drawn by the next frame, not by anything the shell writes.
+    fn wake_frame(&self, tx: &mut Tx) {
+        if self.term.frame_stale() {
+            tx.wake_after(Duration::ZERO);
+        }
+    }
+
     pub fn start() -> Window {
         let mut term = Terminal::new();
         term.open(start_dir());
@@ -178,6 +186,7 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
     }
     if event.mods.shift && event.is_command('a') {
         s.term.select_all();
+        s.wake_frame(tx);
         return true;
     }
     if event.mods.shift && event.is_command('v') {
@@ -188,7 +197,14 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
         return true;
     }
-    s.term.key(event)
+    let taken = s.term.key(event);
+    // Escape dismissing a selection moves rows the shell knows nothing about, and the frame's
+    // poll has already run by the time this key is routed: without a wake the wash stays on
+    // screen until something else draws.
+    if taken {
+        s.wake_frame(tx);
+    }
+    taken
 }
 
 fn main() {

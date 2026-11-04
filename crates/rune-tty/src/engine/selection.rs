@@ -14,6 +14,12 @@ impl Engine {
         let Some(anchor) = self.anchor else {
             return false;
         };
+        // A single click's own cell is not something its gesture selects: the wash starts at the
+        // first other cell the pointer reaches, so a click that never leaves the cell it started
+        // on selects nothing, and a drag back onto it washes nothing again.
+        if self.clicks <= 1 && at == anchor {
+            return self.vt.set_selection(None).is_ok();
+        }
         let point = |(x, y): (u16, u16)| Point::Viewport(PointCoordinate { x, y: y as u32 });
         let (Ok(start), Ok(end)) = (self.vt.grid_ref(point(anchor)), self.vt.grid_ref(point(at)))
         else {
@@ -78,11 +84,22 @@ impl Engine {
     }
 
     /// Starts a selection at a viewport point. A double click takes the word under it and a
-    /// triple click the whole line, which are the two gestures Ghostty's selection reads.
+    /// triple click the whole line, which are the two gestures Ghostty's selection reads. A
+    /// single press only marks where a drag would start: the cell under the pointer is not a
+    /// selection of its own, so the wash waits for the pointer to reach another cell and a plain
+    /// click selects nothing. It says whether the grid changed, which a press that dismissed a
+    /// selection does even though it selects nothing.
     pub fn begin_selection(&mut self, at: (u16, u16), clicks: u8, block: bool) -> bool {
         self.anchor = Some(at);
         self.clicks = clicks;
         self.block = block && clicks == 1;
+        if clicks <= 1 {
+            // A new gesture starts clean: whatever the last one selected is gone, and this click
+            // has not selected anything yet.
+            let dismissed = self.has_selection();
+            let _ = self.vt.set_selection(None);
+            return dismissed;
+        }
         let point = Point::Viewport(PointCoordinate {
             x: at.0,
             y: at.1 as u32,
@@ -96,12 +113,11 @@ impl Engine {
                 .select_word(SelectWordOptions::new(at_ref))
                 .ok()
                 .flatten(),
-            3.. => self
+            _ => self
                 .vt
                 .select_line(SelectLineOptions::new(at_ref))
                 .ok()
                 .flatten(),
-            _ => None,
         };
         if let Some(selection) = derived {
             return self.vt.set_selection(Some(&selection)).is_ok();
@@ -127,6 +143,12 @@ impl Engine {
         self.clicks = 0;
         self.block = false;
         let _ = self.vt.set_selection(None);
+    }
+
+    /// Whether the grid holds a selection. A key that dismisses one asks this, so it never pays
+    /// for formatting the text a select-all can make a quarter million rows long.
+    pub fn has_selection(&self) -> bool {
+        matches!(self.vt.selection(), Ok(Some(_)))
     }
 
     /// The selected text, with hard-wrapped rows joined and trailing blanks trimmed.

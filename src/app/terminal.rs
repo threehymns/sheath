@@ -29,6 +29,16 @@ impl App {
         }
     }
 
+    /// Asks for the frame a pane change needs when the shell will not ask for one. A key can
+    /// move rows the shell knows nothing about — Escape dismissing a selection, a select-all
+    /// widening it — and the frame's poll has already run by the time the key is routed, so
+    /// without this the rows wait for whatever draws next.
+    pub fn terminal_frame(&self, tx: &mut Tx) {
+        if self.term.frame_stale() {
+            tx.wake_after(std::time::Duration::ZERO);
+        }
+    }
+
     /// Drains the PTY and rebuilds the frame when it changed. Runs in the frame's poll, so the
     /// waker the reader thread holds only has to ask for the next frame.
     pub(super) fn poll_terminal(&mut self, tx: &mut Tx) -> bool {

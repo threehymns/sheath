@@ -232,7 +232,15 @@ fn a_selection_reaches_the_frame_without_new_output() {
     engine.fill(&mut frame);
     assert_eq!(frame.lines[0].selection, None, "nothing is selected yet");
 
-    engine.begin_selection((0, 0), 1, false);
+    assert!(
+        !engine.begin_selection((0, 0), 1, false),
+        "a click on its own selects nothing"
+    );
+    engine.fill(&mut frame);
+    assert_eq!(
+        frame.lines[0].selection, None,
+        "the cell under a press is not washed"
+    );
     engine.select_to((2, 0));
     engine.fill(&mut frame);
     assert_eq!(
@@ -243,5 +251,105 @@ fn a_selection_reaches_the_frame_without_new_output() {
     assert_eq!(
         frame.lines[1].selection, None,
         "and a row it does not cover is left alone"
+    );
+
+    // A press that dismisses the wash changes the rows too, so the frame has to be rebuilt for
+    // it just as it is for the drag that made it.
+    assert!(
+        engine.begin_selection((0, 2), 2, false),
+        "a double click selects a word"
+    );
+    assert!(
+        engine.begin_selection((0, 0), 1, false),
+        "the click that follows clears it"
+    );
+    engine.fill(&mut frame);
+    assert_eq!(
+        frame.lines[0].selection, None,
+        "and the row is read again without the wash"
+    );
+    assert!(
+        !engine.begin_selection((0, 0), 1, false),
+        "a click with nothing to clear changes nothing"
+    );
+}
+
+/// The pane's own frame follows the selection without waiting for the shell: a press and the
+/// drag that widens it carry no output of their own, so the poll right after them is the only
+/// thing that can put the wash on screen.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_selection_reaches_the_pane_frame_without_new_output() {
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let theme = rune_tty::theme(true);
+    let mut pane = Terminal::new();
+    // A laid-out screen, so the grid has the columns the drag reaches across.
+    rune_tty::layout_screen(&mut pane, [0.0, 0.0, 400.0, 200.0]);
+    pane.open(dir.path().to_path_buf());
+    // Wait for the prompt's own output to stop: the poll after the selection must have nothing
+    // to drain, or the frame it rebuilds could be the shell's doing rather than the gesture's.
+    let mut settled = false;
+    for _ in 0..200 {
+        let drew = pane.poll(Some(&wake), theme);
+        if !drew && !pane.frame.lines.is_empty() {
+            settled = true;
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    assert!(settled, "the shell's first frame settled");
+    assert!(
+        !pane.begin_selection((0, 0), 1, false),
+        "one click selects nothing"
+    );
+    pane.poll(Some(&wake), theme);
+    assert_eq!(
+        pane.frame.lines[0].selection, None,
+        "the click left the rows as it found them"
+    );
+    assert!(pane.extend_selection((2, 0)), "the drag selects from it");
+    assert!(
+        pane.frame_stale(),
+        "the rows are behind the grid until a poll reads them"
+    );
+    // The poll refreshes the rows before the view is built from them, and says so: no output
+    // arrived, so a window that only drew what the shell wrote would never draw this frame.
+    assert!(
+        pane.poll(Some(&wake), theme),
+        "the poll asks for the frame the gesture changed"
+    );
+    assert!(
+        !pane.frame_stale(),
+        "and the rows it read are the ones it holds"
+    );
+    assert_eq!(
+        pane.frame.lines[0].selection,
+        Some((0, 2)),
+        "the row the drag covers is read again without a keystroke"
+    );
+
+    // Escape dismisses the wash rather than reaching the shell, and the poll after it is what
+    // clears the rows the view draws.
+    use rune::{Key, KeyEvent, Mods};
+    pane.focus = true;
+    assert!(
+        pane.key(&KeyEvent {
+            key: Key::Escape,
+            mods: Mods::default(),
+        }),
+        "the pane takes the key"
+    );
+    assert!(
+        pane.frame_stale(),
+        "the clear left rows the view has not drawn"
+    );
+    assert!(
+        pane.poll(Some(&wake), theme),
+        "and the clear asks for its frame too"
+    );
+    assert_eq!(
+        pane.frame.lines[0].selection, None,
+        "Escape cleared the selection"
     );
 }

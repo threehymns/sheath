@@ -104,18 +104,26 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
         key: Key::Enter,
         mods: Mods::default(),
     });
+    // Wheel back until the pane holds five rows of history, which is what the two notches below
+    // need: the poll may report a frame the shell did not write, so "it drew" no longer means
+    // "it has output", and the history itself is what says there is something to scroll.
     let mut scrolled = false;
-    for _ in 0..40 {
-        pump(&mut pane);
-        if pane.wheel(pane.line * 3.0) && pane.scroll_back() == 3 {
+    for _ in 0..200 {
+        pane.scroll_to_bottom();
+        pane.poll(Some(&wake), theme);
+        if pane.wheel(pane.line * 5.0) && pane.scroll_back() == 5 {
             scrolled = true;
             break;
         }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     assert!(
         scrolled,
         "the output above the viewport is history to scroll"
     );
+    // Back to three, then the wheel below is the gesture that has to settle the frame.
+    assert!(pane.wheel(-pane.line * 2.0));
+    assert_eq!(pane.scroll_back(), 3);
 
     // No poll between the wheel and this read: the frame the view draws is already there.
     let top = pane.frame.lines[0].text.clone();

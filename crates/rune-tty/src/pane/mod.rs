@@ -15,7 +15,7 @@ pub use mouse::MouseAction;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use rune::{KeyEvent, TextEdit, Waker};
+use rune::{Key, KeyEvent, TextEdit, Waker};
 
 use crate::Theme;
 #[cfg(not(target_arch = "wasm32"))]
@@ -175,6 +175,14 @@ impl Terminal {
             .then(|| BLINK.saturating_sub(Instant::now().saturating_duration_since(self.blink_at)))
     }
 
+    /// Whether the rows the view draws are behind what the pane holds: a selection, a search or
+    /// a clear changed them without the shell writing a byte. A poll clears it by rebuilding the
+    /// frame, and nothing in the shell's output asks for that frame, so a window whose key
+    /// handler changed the rows asks its loop for the next one itself.
+    pub fn frame_stale(&self) -> bool {
+        self.fresh
+    }
+
     /// Reads the PTY, resizes the grid to the rect it was laid out in, and rebuilds the frame
     /// when anything moved.
     pub fn poll(&mut self, wake: Option<&Waker>, theme: Theme) -> bool {
@@ -228,12 +236,17 @@ impl Terminal {
             if engine.holding() {
                 return redraw;
             }
-            if redraw || self.fresh || split(self.scroll).1 > 0.0 {
+            // A stale frame is a change the shell knows nothing about: a selection, a copy or a
+            // search moved the rows without a byte arriving, so the app has to be told to draw
+            // them. `refresh` takes the flag, so it is read first.
+            let stale = self.fresh;
+            if redraw || stale || split(self.scroll).1 > 0.0 {
                 self.refresh();
             }
             if redraw {
                 self.clamp_scroll();
             }
+            redraw |= stale;
             redraw
         }
     }
@@ -261,6 +274,17 @@ impl Terminal {
         // is what makes a blinking cursor feel like it lags the keyboard.
         self.blink_at = Instant::now();
         self.blink_on = true;
+        // Escape ends a selection before the shell sees it: the wash is the pane's own state, so
+        // the key dismisses it the way it dismisses a dialog, and a shell that got it would read
+        // a cancel nobody typed at it. Modifiers keep their meaning and go straight to the shell.
+        let m = event.mods;
+        if matches!(event.key, Key::Escape)
+            && !(m.shift || m.cmd || m.ctrl || m.alt)
+            && self.has_selection()
+        {
+            self.clear_selection();
+            return true;
+        }
         #[cfg(not(target_arch = "wasm32"))]
         {
             let Some(engine) = self.engine.as_mut() else {

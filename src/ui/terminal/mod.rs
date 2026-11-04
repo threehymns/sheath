@@ -254,9 +254,10 @@ fn search_field(s: &App, k: &'static Kit) -> El {
             // The focused field sees its keys before the app does, so Escape and Return are
             // handled here: Escape closes the find section, Return walks the matches.
             .on_key(
-                |s: &mut App, event: &rune::KeyEvent, _: &mut Tx| match event.key {
+                |s: &mut App, event: &rune::KeyEvent, tx: &mut Tx| match event.key {
                     Key::Escape => {
                         s.term.close_search();
+                        s.terminal_frame(tx);
                         true
                     }
                     Key::Enter => {
@@ -265,6 +266,7 @@ fn search_field(s: &App, k: &'static Kit) -> El {
                         } else {
                             s.term.search_next();
                         }
+                        s.terminal_frame(tx);
                         true
                     }
                     _ => false,
