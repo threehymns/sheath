@@ -17,7 +17,7 @@ mod drag;
 mod tree;
 mod view;
 
-pub use drag::{DropTarget, Edge};
+pub use drag::{DragPreview, DropTarget, Edge};
 
 use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
 
@@ -68,8 +68,10 @@ pub struct Panes {
     next: u64,
     /// The split whose divider is being dragged, if any.
     resizing: Option<Resizing>,
-    /// The block a header drag has picked up, and where letting it go would put it.
+    /// The block a header drag has picked up, where the pointer is, and where letting it go
+    /// would put the block.
     dragging: Option<u64>,
+    drag_at: Option<(f32, f32)>,
     drop: Option<DropTarget>,
     /// The folder a shell opened from this tab starts in before one reports its own (OSC 7).
     dir: PathBuf,
@@ -91,6 +93,7 @@ impl Panes {
             next: 2,
             resizing: None,
             dragging: None,
+            drag_at: None,
             drop: None,
             dir,
         }
@@ -141,9 +144,14 @@ impl Panes {
 
     /// The tab's name: the folder its focused shell is in, as a block's header says it.
     pub fn title(&self) -> String {
+        self.name(self.focus)
+    }
+
+    /// The folder a block's shell is in, as its header names it.
+    pub fn name(&self, id: u64) -> String {
         let dir = self
-            .focused()
-            .and_then(|term| term.pwd())
+            .block(id)
+            .and_then(|block| block.term.pwd())
             .unwrap_or_else(|| self.dir.clone());
         dir.file_name()
             .map(|name| name.to_string_lossy().into_owned())
@@ -207,6 +215,7 @@ impl Panes {
         self.blocks.remove(index).term.close();
         if self.dragging == Some(id) || self.drop.is_some_and(|drop| drop.pane() == id) {
             self.dragging = None;
+            self.drag_at = None;
             self.drop = None;
         }
         // The tree is rebuilt from what is left: `remove` takes the node it walks, and the
@@ -234,6 +243,7 @@ impl Panes {
         self.zoomed = false;
         self.resizing = None;
         self.dragging = None;
+        self.drag_at = None;
         self.drop = None;
     }
 
@@ -285,6 +295,7 @@ impl Panes {
         self.zoomed = !self.zoomed;
         // A zoomed tab has no second pane to drop a header on.
         self.dragging = None;
+        self.drag_at = None;
         self.drop = None;
     }
 

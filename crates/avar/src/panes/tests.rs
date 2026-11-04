@@ -180,6 +180,33 @@ fn a_header_dropped_off_any_pane_or_cancelled_moves_nothing() {
 }
 
 #[test]
+fn a_header_drag_previews_the_pane_and_where_it_would_land() {
+    let mut p = tab();
+    p.split(Side::Right);
+    let left = 1;
+    let right = p.focus_id();
+    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
+    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+    let (from, to) = (p.name(left), p.name(right));
+
+    p.drag_begin(left);
+    assert!(p.drag_preview().is_none(), "a press alone carries nothing");
+
+    p.drag_over((150.0, 50.0));
+    let preview = p.drag_preview().expect("the drag is in hand");
+    assert_eq!(preview.at, (150.0, 50.0));
+    assert_eq!(preview.label, format!("Swap {from} with {to}"));
+
+    p.drag_over((150.0, 5.0));
+    let preview = p.drag_preview().expect("the drag is in hand");
+    assert_eq!(preview.at, (150.0, 5.0), "the badge follows the pointer");
+    assert_eq!(preview.label, format!("Move {from} above {to}"));
+
+    p.drag_end(false);
+    assert!(p.drag_preview().is_none(), "the badge goes with the drop");
+}
+
+#[test]
 fn a_resize_stops_at_the_smallest_share() {
     let mut p = tab();
     p.split(Side::Right);

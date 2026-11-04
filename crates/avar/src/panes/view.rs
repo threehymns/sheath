@@ -206,7 +206,7 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
             }
         });
     if headers {
-        let name = folder(block);
+        let name = p.name(id);
         let header = header(
             tab,
             block,
@@ -397,15 +397,4 @@ fn holds(node: &Node, id: u64) -> bool {
         Node::Block(block) => *block == id,
         Node::Split { first, second, .. } => holds(first, id) || holds(second, id),
     }
-}
-
-/// The folder a block's shell is in, as its header names it.
-fn folder(block: &Block) -> String {
-    let Some(dir) = block.term.pwd() else {
-        return "Terminal".to_owned();
-    };
-    dir.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| dir.display().to_string())
 }
