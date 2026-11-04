@@ -16,7 +16,7 @@ use rune_tty::Terminal;
 mod tree;
 mod view;
 
-use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
+use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side, swap};
 
 /// Which way a split puts its new block beside the focused one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +38,11 @@ pub enum Dir {
 const MIN_SHARE: f32 = 0.18;
 /// Points of gap between two blocks: the gap is the divider the pointer drags.
 pub const GAP: f32 = 6.0;
+
+/// Whether a point falls inside a rect, as a header drop asks of the panes it passes over.
+fn inside(rect: [f32; 4], (x, y): (f32, f32)) -> bool {
+    x >= rect[0] && x <= rect[0] + rect[2] && y >= rect[1] && y <= rect[1] + rect[3]
+}
 
 /// A shell in a tab, with the rect it was last laid out in: a directional focus needs the rects.
 pub struct Block {
@@ -65,6 +70,10 @@ pub struct Panes {
     next: u64,
     /// The split whose divider is being dragged, if any.
     resizing: Option<Resizing>,
+    /// The block a header drag has picked up, and the block under the pointer it would swap
+    /// with when it is let go.
+    dragging: Option<u64>,
+    over: Option<u64>,
     /// The folder a shell opened from this tab starts in before one reports its own (OSC 7).
     dir: PathBuf,
 }
@@ -84,6 +93,8 @@ impl Panes {
             zoomed: false,
             next: 2,
             resizing: None,
+            dragging: None,
+            over: None,
             dir,
         }
     }
@@ -129,6 +140,48 @@ impl Panes {
 
     pub fn is_zoomed(&self) -> bool {
         self.zoomed
+    }
+
+    /// The block a dragged header is over: the pane the two would swap.
+    pub fn drop_target(&self) -> Option<u64> {
+        self.over
+    }
+
+    /// Picks a block up by its header. A zoomed tab draws one pane and leaves the others with
+    /// no rect to aim at, so there is nothing to drop a header on.
+    pub fn drag_begin(&mut self, id: u64) {
+        if self.zoomed || self.block(id).is_none() {
+            return;
+        }
+        self.dragging = Some(id);
+        self.over = None;
+    }
+
+    /// The pointer moved over the tab: the pane under it is the one a release would swap with.
+    pub fn drag_over(&mut self, at: (f32, f32)) {
+        let Some(from) = self.dragging else {
+            self.over = None;
+            return;
+        };
+        self.over = self
+            .blocks
+            .iter()
+            .find(|block| block.id != from && inside(block.rect, at))
+            .map(|block| block.id);
+    }
+
+    /// The header was let go: over another pane, the two swap places in the tab and their shells
+    /// keep running. Anywhere else, or on a cancelled drag, nothing moves.
+    pub fn drag_end(&mut self, cancelled: bool) {
+        let Some(from) = self.dragging.take() else {
+            self.over = None;
+            return;
+        };
+        let to = self.over.take();
+        let Some(to) = to.filter(|to| *to != from && !cancelled) else {
+            return;
+        };
+        swap(&mut self.root, from, to);
     }
 
     /// The tab's name: the folder its focused shell is in, as a block's header says it.
@@ -197,6 +250,10 @@ impl Panes {
             return;
         };
         self.blocks.remove(index).term.close();
+        if self.dragging == Some(id) || self.over == Some(id) {
+            self.dragging = None;
+            self.over = None;
+        }
         // The tree is rebuilt from what is left: `remove` takes the node it walks, and the
         // placeholder is never drawn because the last block was handled above.
         let root = std::mem::replace(&mut self.root, Node::Block(0));
@@ -221,6 +278,8 @@ impl Panes {
         self.blocks.clear();
         self.zoomed = false;
         self.resizing = None;
+        self.dragging = None;
+        self.over = None;
     }
 
     /// Gives the keyboard to a block, which is how a press in a grid says which shell to type at.
@@ -269,6 +328,9 @@ impl Panes {
     /// Rex's zoom: the focused block takes the tab and the others keep running out of sight.
     pub fn toggle_zoom(&mut self) {
         self.zoomed = !self.zoomed;
+        // A zoomed tab has no second pane to drop a header on.
+        self.dragging = None;
+        self.over = None;
     }
 
     /// Rex's `pane.resize`: the focused block grows toward `dir` by `amount` percent of the split
@@ -421,101 +483,4 @@ impl Panes {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A tab in the temporary folder with a block and no shell started: opening a terminal only
-    /// queues the shell for the first poll, and a test never polls.
-    fn tab() -> Panes {
-        Panes::new(std::env::temp_dir())
-    }
-
-    /// Every split's share, outermost first.
-    fn shares(node: &Node) -> Vec<f32> {
-        match node {
-            Node::Block(_) => Vec::new(),
-            Node::Split {
-                share,
-                first,
-                second,
-                ..
-            } => {
-                let mut out = vec![*share];
-                out.extend(shares(first));
-                out.extend(shares(second));
-                out
-            }
-        }
-    }
-
-    #[test]
-    fn a_split_puts_the_new_block_beside_the_one_it_divided() {
-        let mut p = tab();
-        let first = p.focus_id();
-        p.split(Side::Right);
-        assert_eq!(p.blocks(), 2);
-        assert_eq!(shares(&p.root), vec![0.5], "a new split is even");
-        assert_ne!(p.focus_id(), first, "the new block takes the keyboard");
-        assert!(
-            p.block(first).is_some(),
-            "the divided block keeps its shell"
-        );
-    }
-
-    #[test]
-    fn resize_grows_the_focused_block_toward_the_direction() {
-        let mut p = tab();
-        p.split(Side::Right);
-        let first = 1;
-        // The block on the right takes from the one on its left.
-        p.resize(Dir::Left, 10.0);
-        assert!(
-            (shares(&p.root)[0] - 0.4).abs() < 1e-4,
-            "{:?}",
-            shares(&p.root)
-        );
-        // It reaches the tab's right edge, so there is no boundary to push that way.
-        p.resize(Dir::Right, 10.0);
-        assert!(
-            (shares(&p.root)[0] - 0.4).abs() < 1e-4,
-            "{:?}",
-            shares(&p.root)
-        );
-        p.focus(first);
-        p.resize(Dir::Right, 15.0);
-        assert!(
-            (shares(&p.root)[0] - 0.55).abs() < 1e-4,
-            "{:?}",
-            shares(&p.root)
-        );
-    }
-
-    #[test]
-    fn a_resize_stops_at_the_smallest_share() {
-        let mut p = tab();
-        p.split(Side::Right);
-        for _ in 0..40 {
-            p.resize(Dir::Left, 5.0);
-        }
-        assert!((shares(&p.root)[0] - MIN_SHARE).abs() < 1e-4);
-    }
-
-    #[test]
-    fn balance_evens_every_split_and_a_closed_block_leaves_its_sibling_the_space() {
-        let mut p = tab();
-        p.split(Side::Right);
-        p.split(Side::Down);
-        assert_eq!(p.blocks(), 3);
-        p.resize(Dir::Up, 20.0);
-        p.balance();
-        assert!(shares(&p.root).iter().all(|s| (*s - 0.5).abs() < 1e-4));
-        let closing = p.focus_id();
-        p.close(closing);
-        assert_eq!(p.blocks(), 2);
-        assert!(p.block(closing).is_none());
-        assert!(
-            p.block(p.focus_id()).is_some(),
-            "the keyboard lands on a live block"
-        );
-    }
-}
+mod tests;

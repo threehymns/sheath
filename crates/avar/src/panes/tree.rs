@@ -110,6 +110,20 @@ pub(crate) fn balance_node(node: &mut Node) {
     }
 }
 
+/// Exchanges two blocks in the tree. Every split keeps its place and its share, so a header
+/// drag that lands on another pane only makes the two shells trade places.
+pub(crate) fn swap(node: &mut Node, a: u64, b: u64) {
+    match node {
+        Node::Block(id) if *id == a => *id = b,
+        Node::Block(id) if *id == b => *id = a,
+        Node::Block(_) => {}
+        Node::Split { first, second, .. } => {
+            swap(first, a, b);
+            swap(second, a, b);
+        }
+    }
+}
+
 /// Takes a block out of the tree, answering what stands in its place: its sibling, or `None` when
 /// the block was the whole tree.
 pub(crate) fn remove(node: Node, id: u64) -> Option<Node> {

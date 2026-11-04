@@ -207,12 +207,31 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
         });
     if headers {
         let name = folder(block);
-        body = body.child(header(tab, block, &name, p.focuses(id), p.is_zoomed(), k));
+        let header = header(
+            tab,
+            block,
+            &name,
+            p.focuses(id),
+            p.is_zoomed(),
+            p.drop_target() == Some(id),
+            k,
+        );
+        body = body.child(header);
     }
     body.child(grid(block, tab, scale, k))
 }
 
-fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &'static Kit) -> El {
+/// A block's header, which also drags: pressing it picks the pane up, and letting go over
+/// another pane swaps the two. `target` says the pointer is over this pane on a drag.
+fn header(
+    tab: u64,
+    block: &Block,
+    name: &str,
+    focused: bool,
+    zoomed: bool,
+    target: bool,
+    k: &'static Kit,
+) -> El {
     let id = block.id;
     let button = |glyph: &'static rune::Icon, label: &'static str| {
         IconButton::new(glyph)
@@ -241,29 +260,55 @@ fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &
         .on_press(move |s: &mut Window| s.tabs.close_block(tab, id))
         .build(k)
         .key(format!("block-{id}-close"));
-    row()
+    let mut bar = row()
         .key(format!("block-{id}-header"))
         .w_full()
         .h(HEADER)
         .px(8.0)
         .gap(2.0)
         .center_y()
-        .child(
-            text(name.to_owned())
-                .key(format!("block-{id}-name"))
-                .font(k.ty.small)
-                .color(if focused {
-                    k.c.text_base
-                } else {
-                    k.c.text_muted
-                })
-                .grow(1.0)
-                .truncate(),
-        )
-        .child(split_right)
-        .child(split_down)
-        .child(zoom)
-        .child(close)
+        // The pointer's point in the header is the pane's own top-left plus it, because the
+        // header is the first thing the pane draws.
+        .on_drag(move |s: &mut Window, d: &mut Drag, tx: &mut Tx| {
+            let Some(rect) = s
+                .tabs
+                .panes_mut(tab)
+                .and_then(|p| p.block(id))
+                .map(|block| block.rect)
+            else {
+                return;
+            };
+            let at = (rect[0] + d.x, rect[1] + d.y);
+            let Some(p) = s.tabs.panes_mut(tab) else {
+                return;
+            };
+            match d.phase {
+                Phase::Down => p.drag_begin(id),
+                Phase::Move => p.drag_over(at),
+                Phase::Up => p.drag_end(d.cancelled()),
+            }
+            // The pane under the drag fills as it is aimed at, and the fill goes with the drop.
+            tx.instant();
+        });
+    if target {
+        bar = bar.fill(k.c.hover);
+    }
+    bar.child(
+        text(name.to_owned())
+            .key(format!("block-{id}-name"))
+            .font(k.ty.small)
+            .color(if focused {
+                k.c.text_base
+            } else {
+                k.c.text_muted
+            })
+            .grow(1.0)
+            .truncate(),
+    )
+    .child(split_right)
+    .child(split_down)
+    .child(zoom)
+    .child(close)
 }
 
 /// One block's grid, with its wheel, pointer, drag and layout wired to that block's shell.
