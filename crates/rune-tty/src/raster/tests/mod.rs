@@ -414,6 +414,40 @@ fn picture_sets_the_streamed_image_to_the_grid_size() {
     assert_eq!(image.size(), (5 * 16, (3 + 2) * 32));
 }
 
+/// Two panes on screen stream two images. A cache they shared would hand them one `Pixels` and
+/// diff each pane against the frame the other painted, which is a split whose cards both show the
+/// last frame written and freeze there.
+#[test]
+fn two_terminals_stream_their_own_images() {
+    let screen = |cols: u16| Frame {
+        cols,
+        rows: 2,
+        lines: vec![Line::default(), Line::default()],
+        ..Frame::default()
+    };
+    let mut left = crate::Terminal::default();
+    left.cell = 8.0;
+    left.line = 16.0;
+    left.frame = screen(4);
+    let mut right = crate::Terminal::default();
+    right.cell = 8.0;
+    right.line = 16.0;
+    right.frame = screen(6);
+    let a = left.picture(1.0, palette()).expect("an image");
+    let b = right.picture(1.0, palette()).expect("an image");
+    // One image between them would have been resized by whichever pane painted last.
+    assert_eq!(
+        a.size(),
+        (4 * 8, (2 + 2) * 16),
+        "the left pane keeps its own image"
+    );
+    assert_eq!(
+        b.size(),
+        (6 * 8, (2 + 2) * 16),
+        "the right pane keeps its own image"
+    );
+}
+
 /// A wide character covers two columns, so the glyph drawn after it starts two cells along. The
 /// frame's own record of the wide columns is what the painter advances by; this row marks a
 /// narrow glyph wide on purpose, so the test does not depend on a face that installs a CJK one.

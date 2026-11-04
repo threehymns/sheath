@@ -184,7 +184,7 @@ fn texture(t: &Terminal, scale: f32, k: &'static Kit) -> Option<El> {
         selection: crate::raster::rgb(k.c.text_accent),
         search: crate::raster::rgb(k.c.text_accent),
     };
-    let picture = crate::raster::picture(&t.frame, t.cell, t.line, scale, palette)?;
+    let picture = t.picture(scale, palette)?;
     Some(
         el().key("terminal-texture")
             .absolute(0.0, -t.line)

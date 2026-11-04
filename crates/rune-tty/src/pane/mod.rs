@@ -98,6 +98,11 @@ pub struct Terminal {
     /// answer was read for: a move inside that cell never reaches the engine.
     hover: Option<(u16, u16, u16)>,
     hover_cell: Option<(u16, u16)>,
+    /// The grid's streamed image and the rows it was painted from. The cache diffs each frame
+    /// against the last one it painted, so it belongs to this terminal: a window with two panes
+    /// streams two images, one per shell, rather than one image they take turns writing.
+    #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+    pub(crate) raster: std::cell::RefCell<Option<crate::raster::Cache>>,
     #[cfg(not(target_arch = "wasm32"))]
     engine: Option<Engine>,
 }
@@ -130,6 +135,8 @@ impl Default for Terminal {
             link_press: false,
             hover: None,
             hover_cell: None,
+            #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
+            raster: std::cell::RefCell::new(None),
             #[cfg(not(target_arch = "wasm32"))]
             engine: None,
         }

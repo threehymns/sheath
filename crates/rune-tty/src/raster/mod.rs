@@ -27,6 +27,7 @@ mod perf;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
 use std::cell::RefCell;
 
 use rune::Pixels;
@@ -62,7 +63,10 @@ struct Stamp {
 }
 
 /// The raster and the image it last produced, which the pane streams until the grid changes.
-struct Cache {
+///
+/// One per terminal: the diff below is against the rows this cache painted, so a window holding
+/// several panes must not share it.
+pub(crate) struct Cache {
     raster: Raster,
     pixels: Pixels,
     /// The pixels of the image last handed to [`Pixels`], kept so the rows that did not change
@@ -122,30 +126,26 @@ impl Cache {
     }
 }
 
-thread_local! {
-    static CACHE: RefCell<Option<Cache>> = const { RefCell::new(None) };
-}
-
-/// The visible grid as an RGBA image, at device pixels, with one overscan row above and below.
-/// Its top is one row above the viewport: the view hangs it there and lets the clip cut it.
-/// `None` until a font and a size are known.
-pub fn picture(
-    frame: &Frame,
-    cell: f32,
-    line: f32,
-    scale: f32,
-    palette: Palette,
-) -> Option<Pixels> {
-    if frame.cols == 0 || frame.rows == 0 {
-        return None;
-    }
-    CACHE.with(|slot| {
-        let mut slot = slot.borrow_mut();
-        let face = crate::fonts::generation();
-        if slot.as_ref().is_none_or(|cache| cache.face != face) {
-            *slot = Some(Cache::new(face));
+impl Cache {
+    /// The visible grid as an RGBA image, at device pixels, with one overscan row above and
+    /// below. Its top is one row above the viewport: the view hangs it there and lets the clip
+    /// cut it. `None` until a font and a size are known.
+    fn compose(
+        &mut self,
+        frame: &Frame,
+        cell: f32,
+        line: f32,
+        scale: f32,
+        palette: Palette,
+    ) -> Option<Pixels> {
+        if frame.cols == 0 || frame.rows == 0 {
+            return None;
         }
-        let cache = slot.as_mut().expect("the cache was just filled");
+        let face = crate::fonts::generation();
+        if self.face != face {
+            *self = Cache::new(face);
+        }
+        let cache = self;
         let cell_px = (cell * scale).round().max(1.0) as u32;
         let line_px = (line * scale).round().max(1.0) as u32;
         let width = u32::from(frame.cols) * cell_px;
@@ -263,14 +263,40 @@ pub fn picture(
         cache.generation = frame.generation;
         cache.pixels.set(width, height, cache.rgba.clone());
         Some(cache.pixels.clone())
+    }
+}
+
+impl crate::Terminal {
+    /// The grid as the image this terminal streams. The cache is the terminal's own, so every
+    /// pane on screen holds its own [`Pixels`] instead of taking turns writing one.
+    pub fn picture(&self, scale: f32, palette: Palette) -> Option<Pixels> {
+        let mut slot = self.raster.borrow_mut();
+        let cache = slot.get_or_insert_with(|| Cache::new(crate::fonts::generation()));
+        cache.compose(&self.frame, self.cell, self.line, scale, palette)
+    }
+}
+
+/// The pane's image path for a test or a benchmark that has a frame and no terminal: one cache
+/// per test thread, which is what a single pane holds.
+#[cfg(test)]
+fn picture(frame: &Frame, cell: f32, line: f32, scale: f32, palette: Palette) -> Option<Pixels> {
+    TEST.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let cache = slot.get_or_insert_with(|| Cache::new(crate::fonts::generation()));
+        cache.compose(frame, cell, line, scale, palette)
     })
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST: RefCell<Option<Cache>> = const { RefCell::new(None) };
 }
 
 /// The image the last [`picture`] composed, for a test that compares it with a whole compose: the
 /// streamed [`Pixels`] belongs to the runtime, and its bytes are not readable from here.
 #[cfg(test)]
 fn streamed_for_test() -> Vec<u8> {
-    CACHE.with(|slot| {
+    TEST.with(|slot| {
         slot.borrow()
             .as_ref()
             .map(|cache| cache.rgba.clone())
