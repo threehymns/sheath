@@ -19,7 +19,7 @@ cargo run -- ~/Downloads  # start somewhere else
 cargo run -- README.md    # start beside a file, with it selected
 ```
 
-`rune-tty` (`crates/term`) is the pane itself; `avar` (`crates/terminal`) is a window that is
+`rune-tty` (`crates/rune-tty`) is the pane itself; `avar` (`crates/avar`) is a window that is
 only that pane, with no file manager around it:
 
 ```sh

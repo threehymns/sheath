@@ -9,13 +9,13 @@ description = "A file manager PoC built with the Rune UI framework"
 # `cargo test` select this package and only this one, and `--workspace` or `-p avar` reaches the
 # terminal. `crates/` holds what the app shares rather than owns.
 [workspace]
-members = ["crates/term", "crates/terminal"]
+members = ["crates/rune-tty", "crates/avar"]
 resolver = "3"
 
 [workspace.dependencies]
 # The terminal, shared by the app's pane and the standalone `avar` window. `path` is what the
 # workspace builds; `version` is what a published crate needs, so the two are always in step.
-rune-tty = { path = "crates/term", version = "0.1.0" }
+rune-tty = { path = "crates/rune-tty", version = "0.1.0" }
 # Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends. One pin
 # for the whole workspace, so the pane and the app are never built against two different Runes.
 rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", default-features = false }
