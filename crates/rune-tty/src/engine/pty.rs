@@ -20,7 +20,7 @@ use rune::Waker;
 pub const QUEUE_LIMIT: usize = 2 * 1024 * 1024;
 
 /// Bytes the reader takes off the pty per read.
-const CHUNK: usize = 16 * 1024;
+const CHUNK: usize = 256 * 1024;
 
 /// The shell and the two ends of its PTY, with the queue the reader thread fills.
 pub struct Session {
