@@ -283,12 +283,28 @@ fn perf_video_stream() {
     let mut last_report = start;
     let mut last_image = 0u32;
     let mut image_changes = 0u64;
+    // PERF_PACED runs the loop the way the app's frame loop does: one poll per display frame,
+    // so the parse budget is a share of the wall clock instead of the whole of it.
+    let paced = std::env::var("PERF_PACED").is_ok();
+    let frame_time = std::time::Duration::from_secs_f64(1.0 / 60.0);
+    let pace = |at: Instant| {
+        if paced {
+            let spent = at.elapsed();
+            if spent < frame_time {
+                std::thread::sleep(frame_time - spent);
+            }
+        }
+    };
     while Instant::now() < deadline && !engine.shell_exited() {
         let at = Instant::now();
         let changed = engine.drain();
         let after_drain = Instant::now();
         if !changed {
-            std::thread::yield_now();
+            if paced {
+                pace(at);
+            } else {
+                std::thread::yield_now();
+            }
             continue;
         }
         changed_frames += 1;
@@ -328,6 +344,7 @@ fn perf_video_stream() {
             );
             last_parsed = stats.parsed;
         }
+        pace(at);
     }
     let elapsed = start.elapsed().as_secs_f64();
     let stats = engine.stats();
@@ -384,4 +401,59 @@ fn perf_terminal_beside_a_long_list() {
     let (tm, tp) = stats(typing);
     println!("list+terminal idle frame: median {im:.3} ms, p95 {ip:.3} ms");
     println!("list+terminal one-row frame: median {tm:.3} ms, p95 {tp:.3} ms");
+}
+
+/// How fast the pane takes plain bytes off the pty: the ceiling any program that streams a lot
+/// of output runs into. A video frame through the kitty graphics protocol is megabytes, so this
+/// is what decides how many of them the screen can show.
+#[test]
+#[ignore]
+fn perf_pty_throughput() {
+    let root = tempfile::tempdir().unwrap();
+    let script = root.path().join("flood");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\nhead -c 100000000 /dev/zero | tr '\\0' 'y'\n",
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    // SAFETY: this is a manual benchmark, and the process was started by the test harness.
+    unsafe { std::env::set_var("SHELL", &script) };
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        root.path(),
+        80,
+        24,
+        (8.0, 16.0),
+        1.0,
+        rune_tty::theme(true),
+        wake,
+    )
+    .expect("an engine");
+    unsafe { std::env::remove_var("SHELL") };
+    let start = Instant::now();
+    let mut settled = 0;
+    while start.elapsed() < std::time::Duration::from_secs(60) {
+        if engine.drain() {
+            settled = 0;
+        } else if engine.shell_exited() && engine.stats().queued == 0 {
+            settled += 1;
+            if settled > 20 {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+    let stats = engine.stats();
+    let elapsed = start.elapsed().as_secs_f64();
+    let mib = stats.parsed as f64 / (1024.0 * 1024.0);
+    println!(
+        "pty throughput: {mib:.1} MiB in {elapsed:.2}s — {:.1} MiB/s, {} KiB left queued",
+        mib / elapsed,
+        stats.queued >> 10
+    );
 }
