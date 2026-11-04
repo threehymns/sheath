@@ -70,6 +70,14 @@ pub static ZOOM: Icon = Icon {
     body: r#"<path d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
 };
 
+/// Restore: the zoomed block coming back to its share of the tab, the same four corners as
+/// [`ZOOM`] pointing in.
+pub static RESTORE: Icon = Icon {
+    name: "avar-restore",
+    view: 16.0,
+    body: r#"<path d="M2.5 6H6V2.5M13.5 6H10V2.5M2.5 10H6V13.5M13.5 10H10V13.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>"#,
+};
+
 /// The reset button beside a changed shortcut.
 pub static UNDO: Icon = Icon {
     name: "avar-undo",

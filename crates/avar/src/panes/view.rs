@@ -156,6 +156,7 @@ pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
 pub fn card(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
     let id = block.id;
     let focused = p.focuses(id);
+    let zoomed = p.is_zoomed();
     let name = folder(block);
     col()
         .key(format!("block-{id}"))
@@ -178,11 +179,11 @@ pub fn card(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit) -> 
                 p.set_rect(id, rect);
             }
         })
-        .child(header(tab, block, &name, focused, k))
+        .child(header(tab, block, &name, focused, zoomed, k))
         .child(grid(block, tab, scale, k))
 }
 
-fn header(tab: u64, block: &Block, name: &str, focused: bool, k: &'static Kit) -> El {
+fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &'static Kit) -> El {
     let id = block.id;
     let button = |glyph: &'static rune::Icon, label: &'static str| {
         IconButton::new(glyph)
@@ -199,10 +200,14 @@ fn header(tab: u64, block: &Block, name: &str, focused: bool, k: &'static Kit) -
         .on_press(move |s: &mut Window| s.tabs.split_at(tab, id, Side::Down))
         .build(k)
         .key(format!("block-{id}-split-down"));
-    let zoom = button(&icons::ZOOM, "Zoom pane")
-        .on_press(move |s: &mut Window| s.tabs.zoom_at(tab, id))
-        .build(k)
-        .key(format!("block-{id}-zoom"));
+    // The block filling the tab offers to come back to its share of it, the way Rex's zoom
+    // button turns into one.
+    let zoom = if zoomed {
+        button(&icons::RESTORE, "Restore pane").on_press(move |s: &mut Window| s.tabs.toggle_zoom())
+    } else {
+        button(&icons::ZOOM, "Zoom pane").on_press(move |s: &mut Window| s.tabs.zoom_at(tab, id))
+    };
+    let zoom = zoom.build(k).key(format!("block-{id}-zoom"));
     let close = button(&rune_kit::glyphs::CLOSE, "Close pane")
         .on_press(move |s: &mut Window| s.tabs.close_block(tab, id))
         .build(k)
