@@ -1,6 +1,20 @@
-//! The three glyphs Avar needs that neither `rune_kit::glyphs` nor the theme draws: a clipboard,
-//! a checked square and an undo arrow.
+//! The glyphs Avar needs that neither `rune_kit::glyphs` nor the theme draws: a clipboard, a
+//! checked square, an undo arrow, and the plus and left arrow the tab actions go by.
 use rune::Icon;
+
+/// The new tab button, beside the tab rail.
+pub static PLUS: Icon = Icon {
+    name: "avar-plus",
+    view: 16.0,
+    body: r#"<path d="M8 3.5v9M3.5 8h9" stroke="currentColor" stroke-linecap="round"/>"#,
+};
+
+/// The tab before this one; the kit draws the arrow the other way.
+pub static ARROW_LEFT: Icon = Icon {
+    name: "avar-arrow-left",
+    view: 16.0,
+    body: r#"<path d="M13.5 8H2.5M7 3.5L2.5 8L7 12.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
 
 pub static CLIPBOARD: Icon = Icon {
     name: "avar-clipboard",

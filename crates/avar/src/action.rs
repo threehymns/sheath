@@ -11,15 +11,25 @@ use crate::icons;
 pub enum Action {
     CommandBar,
     OpenSettings,
+    NewTab,
+    CloseTab,
+    NextTab,
+    PrevTab,
+    SplitPane,
     Copy,
     Paste,
     SelectAll,
 }
 
 impl Action {
-    pub const ALL: [Action; 5] = [
+    pub const ALL: [Action; 10] = [
         Action::CommandBar,
         Action::OpenSettings,
+        Action::NewTab,
+        Action::CloseTab,
+        Action::NextTab,
+        Action::PrevTab,
+        Action::SplitPane,
         Action::Copy,
         Action::Paste,
         Action::SelectAll,
@@ -29,6 +39,11 @@ impl Action {
         match self {
             Action::CommandBar => "command-bar",
             Action::OpenSettings => "open-settings",
+            Action::NewTab => "new-tab",
+            Action::CloseTab => "close-tab",
+            Action::NextTab => "next-tab",
+            Action::PrevTab => "prev-tab",
+            Action::SplitPane => "split-pane",
             Action::Copy => "copy",
             Action::Paste => "paste",
             Action::SelectAll => "select-all",
@@ -39,6 +54,11 @@ impl Action {
         match self {
             Action::CommandBar => "Command Bar",
             Action::OpenSettings => "Shortcuts",
+            Action::NewTab => "New Tab",
+            Action::CloseTab => "Close Tab",
+            Action::NextTab => "Next Tab",
+            Action::PrevTab => "Previous Tab",
+            Action::SplitPane => "Split Pane",
             Action::Copy => "Copy",
             Action::Paste => "Paste",
             Action::SelectAll => "Select All",
@@ -55,6 +75,11 @@ impl Action {
             match self {
                 Action::CommandBar => "ctrl+p",
                 Action::OpenSettings => "super+comma",
+                Action::NewTab => "super+t",
+                Action::CloseTab => "super+w",
+                Action::NextTab => "ctrl+tab",
+                Action::PrevTab => "ctrl+shift+tab",
+                Action::SplitPane => "super+d",
                 // A shell is typing in the window, so a bare Ctrl/Cmd-C is the shell's: the
                 // window's own copy and paste are the shifted ones, as the app's pane has them.
                 Action::Copy => "shift+super+c",
@@ -67,6 +92,13 @@ impl Action {
             match self {
                 Action::CommandBar => "ctrl+p",
                 Action::OpenSettings => "ctrl+comma",
+                // Ctrl-T and Ctrl-W are the shell's own keys (transpose, erase word), so the
+                // tab commands take the shifted pair a terminal usually gives them.
+                Action::NewTab => "ctrl+shift+t",
+                Action::CloseTab => "ctrl+shift+w",
+                Action::NextTab => "ctrl+tab",
+                Action::PrevTab => "ctrl+shift+tab",
+                Action::SplitPane => "ctrl+shift+d",
                 Action::Copy => "shift+ctrl+c",
                 Action::Paste => "shift+ctrl+v",
                 Action::SelectAll => "shift+ctrl+a",
@@ -78,6 +110,11 @@ impl Action {
         match self {
             Action::CommandBar => &glyphs::KEYBOARD,
             Action::OpenSettings => &theme::icons::SETTINGS_GEAR,
+            Action::NewTab => &icons::PLUS,
+            Action::CloseTab => &glyphs::CLOSE,
+            Action::NextTab => &glyphs::ARROW_RIGHT,
+            Action::PrevTab => &icons::ARROW_LEFT,
+            Action::SplitPane => &rune_kit::shell::INSPECTOR,
             Action::Copy => &theme::icons::COPY,
             Action::Paste => &icons::CLIPBOARD,
             Action::SelectAll => &icons::CHECK_SQUARE,
