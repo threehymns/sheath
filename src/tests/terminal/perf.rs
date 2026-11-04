@@ -346,6 +346,11 @@ fn perf_video_stream() {
         }
         pace(at);
     }
+    if std::env::var("PERF_DUMP").is_ok() {
+        for line in &frame.lines {
+            println!("| {}", line.text);
+        }
+    }
     let elapsed = start.elapsed().as_secs_f64();
     let stats = engine.stats();
     spans.sort_by(f64::total_cmp);
