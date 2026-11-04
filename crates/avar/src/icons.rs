@@ -16,6 +16,26 @@ pub static ARROW_LEFT: Icon = Icon {
     body: r#"<path d="M13.5 8H2.5M7 3.5L2.5 8L7 12.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
+/// The focus and resize arrows that point up and down; the kit draws the horizontal pair.
+pub static ARROW_UP: Icon = Icon {
+    name: "avar-arrow-up",
+    view: 16.0,
+    body: r#"<path d="M8 13.5V2.5M3.5 7L8 2.5L12.5 7" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+pub static ARROW_DOWN: Icon = Icon {
+    name: "avar-arrow-down",
+    view: 16.0,
+    body: r#"<path d="M8 2.5V13.5M3.5 9L8 13.5L12.5 9" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+/// Balance: a window whose columns are drawn an equal width.
+pub static BALANCE: Icon = Icon {
+    name: "avar-balance",
+    view: 16.0,
+    body: r#"<rect x="2" y="3" width="12" height="10" rx="2" stroke="currentColor" fill="none"/><path d="M6 3.5V12.5M10 3.5V12.5" stroke="currentColor"/>"#,
+};
+
 pub static CLIPBOARD: Icon = Icon {
     name: "avar-clipboard",
     view: 16.0,

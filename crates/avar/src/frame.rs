@@ -91,6 +91,15 @@ fn toolbar(s: &Window, k: &Kit) -> Toolbar {
         .on_press(|s: &mut Window| s.tabs.split(Side::Down))
         .build(k)
         .key("split-down");
+    let balance = IconButton::new(&icons::BALANCE)
+        .variant(IconButtonVariant::GhostMuted)
+        .control_size(ControlSize::Regular)
+        .label("Balance panes")
+        .help("Make every split even")
+        .shortcut(s.keybinds.menu_label(Action::BalancePanes))
+        .on_press(|s: &mut Window| s.tabs.balance())
+        .build(k)
+        .key("balance-panes");
     let new = IconButton::new(&icons::PLUS)
         .variant(IconButtonVariant::GhostMuted)
         .control_size(ControlSize::Regular)
@@ -104,5 +113,6 @@ fn toolbar(s: &Window, k: &Kit) -> Toolbar {
         .title(s.tabs.title())
         .trailing(split_right)
         .trailing(split_down)
+        .trailing(balance)
         .trailing(new)
 }

@@ -213,6 +213,20 @@ impl Tabs {
         self.sync_focus();
     }
 
+    /// Resizes the focused block toward a direction, in the tab on screen.
+    pub fn resize(&mut self, dir: Dir, amount: f32) {
+        if let Some(tab) = self.rows.get_mut(self.active) {
+            tab.panes.resize(dir, amount);
+        }
+    }
+
+    /// Puts every split in the tab on screen back to even halves.
+    pub fn balance(&mut self) {
+        if let Some(tab) = self.rows.get_mut(self.active) {
+            tab.panes.balance();
+        }
+    }
+
     /// Moves the keyboard to the nearest block in a direction, in the tab on screen.
     pub fn focus_dir(&mut self, dir: Dir) {
         if let Some(tab) = self.rows.get_mut(self.active) {

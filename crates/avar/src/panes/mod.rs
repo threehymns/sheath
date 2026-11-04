@@ -13,7 +13,10 @@ use rune::{El, TextStyle, Tx, Waker};
 use rune_kit::Kit;
 use rune_tty::Terminal;
 
+mod tree;
 mod view;
+
+use tree::{Node, balance_node, path_to, place, remove, split_parts, split_side};
 
 /// Which way a split puts its new block beside the focused one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,21 +44,6 @@ pub struct Block {
     pub id: u64,
     term: Terminal,
     rect: [f32; 4],
-}
-
-/// How a tab's blocks tile: one block, or two layouts divided along one axis. `share` is the
-/// part of the split the first side takes, and `length` is the split's extent along that axis,
-/// which a drag turns points into a share.
-enum Node {
-    Block(u64),
-    Split {
-        id: u64,
-        side: Side,
-        share: f32,
-        length: f32,
-        first: Box<Node>,
-        second: Box<Node>,
-    },
 }
 
 /// The divider being dragged: the split it belongs to and the share the drag started from, so a
@@ -283,6 +271,48 @@ impl Panes {
         self.zoomed = !self.zoomed;
     }
 
+    /// Rex's `pane.resize`: the focused block grows toward `dir` by `amount` percent of the split
+    /// it shares with its neighbour on that side. The boundary that moves is the deepest one on
+    /// the direction's axis with a block on the far side, so a resize acts on the pane the user
+    /// can see rather than on the tab's outermost split. A block that already reaches that edge
+    /// of the tab has no boundary to move, and nothing happens.
+    pub fn resize(&mut self, dir: Dir, amount: f32) {
+        let mut path = Vec::new();
+        if !path_to(&self.root, self.focus, &mut path) {
+            return;
+        }
+        // Left and up mean the block is the split's second child: the neighbour is the first.
+        let (side, in_second) = match dir {
+            Dir::Left => (Side::Right, true),
+            Dir::Right => (Side::Right, false),
+            Dir::Up => (Side::Down, true),
+            Dir::Down => (Side::Down, false),
+        };
+        let Some(split) = path.iter().rev().find_map(|(split, second)| {
+            (split_side(&self.root, *split) == Some(side) && *second == in_second).then_some(*split)
+        }) else {
+            return;
+        };
+        let Some((share, _)) = split_parts(&mut self.root, split) else {
+            return;
+        };
+        // The split's share is the first child's part, so a block that is the second child grows
+        // by taking from it.
+        let step = amount.max(0.0) / 100.0;
+        let wanted = if in_second {
+            *share - step
+        } else {
+            *share + step
+        };
+        *share = wanted.clamp(MIN_SHARE, 1.0 - MIN_SHARE);
+    }
+
+    /// Rex's `pane.balance`: every split in the tab goes back to even halves.
+    pub fn balance(&mut self) {
+        balance_node(&mut self.root);
+        self.resizing = None;
+    }
+
     /// Records where a block was laid out, for a directional focus.
     pub fn set_rect(&mut self, id: u64, rect: [f32; 4]) {
         if let Some(block) = self.blocks.iter_mut().find(|block| block.id == id) {
@@ -384,96 +414,102 @@ impl Panes {
     }
 }
 
-/// Swaps the block `id` for `divided`, keeping everything around it.
-fn place(node: &mut Node, id: u64, divided: Node) -> bool {
-    match node {
-        Node::Block(block) => {
-            if *block == id {
-                *node = divided;
-                true
-            } else {
-                false
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A tab in the temporary folder with a block and no shell started: opening a terminal only
+    /// queues the shell for the first poll, and a test never polls.
+    fn tab() -> Panes {
+        Panes::new(std::env::temp_dir())
+    }
+
+    /// Every split's share, outermost first.
+    fn shares(node: &Node) -> Vec<f32> {
+        match node {
+            Node::Block(_) => Vec::new(),
+            Node::Split {
+                share,
+                first,
+                second,
+                ..
+            } => {
+                let mut out = vec![*share];
+                out.extend(shares(first));
+                out.extend(shares(second));
+                out
             }
         }
-        Node::Split { first, second, .. } => {
-            if contains(first, id) {
-                place(first, id, divided)
-            } else {
-                place(second, id, divided)
-            }
+    }
+
+    #[test]
+    fn a_split_puts_the_new_block_beside_the_one_it_divided() {
+        let mut p = tab();
+        let first = p.focus_id();
+        p.split(Side::Right);
+        assert_eq!(p.blocks(), 2);
+        assert_eq!(shares(&p.root), vec![0.5], "a new split is even");
+        assert_ne!(p.focus_id(), first, "the new block takes the keyboard");
+        assert!(
+            p.block(first).is_some(),
+            "the divided block keeps its shell"
+        );
+    }
+
+    #[test]
+    fn resize_grows_the_focused_block_toward_the_direction() {
+        let mut p = tab();
+        p.split(Side::Right);
+        let first = 1;
+        // The block on the right takes from the one on its left.
+        p.resize(Dir::Left, 10.0);
+        assert!(
+            (shares(&p.root)[0] - 0.4).abs() < 1e-4,
+            "{:?}",
+            shares(&p.root)
+        );
+        // It reaches the tab's right edge, so there is no boundary to push that way.
+        p.resize(Dir::Right, 10.0);
+        assert!(
+            (shares(&p.root)[0] - 0.4).abs() < 1e-4,
+            "{:?}",
+            shares(&p.root)
+        );
+        p.focus(first);
+        p.resize(Dir::Right, 15.0);
+        assert!(
+            (shares(&p.root)[0] - 0.55).abs() < 1e-4,
+            "{:?}",
+            shares(&p.root)
+        );
+    }
+
+    #[test]
+    fn a_resize_stops_at_the_smallest_share() {
+        let mut p = tab();
+        p.split(Side::Right);
+        for _ in 0..40 {
+            p.resize(Dir::Left, 5.0);
         }
+        assert!((shares(&p.root)[0] - MIN_SHARE).abs() < 1e-4);
     }
-}
 
-fn contains(node: &Node, id: u64) -> bool {
-    match node {
-        Node::Block(block) => *block == id,
-        Node::Split { first, second, .. } => contains(first, id) || contains(second, id),
-    }
-}
-
-/// Takes a block out of the tree, answering what stands in its place: its sibling, or `None` when
-/// the block was the whole tree.
-fn remove(node: Node, id: u64) -> Option<Node> {
-    let Node::Split {
-        id: split,
-        side,
-        share,
-        length,
-        first,
-        second,
-    } = node
-    else {
-        return None;
-    };
-    if matches!(*first, Node::Block(block) if block == id) {
-        return Some(*second);
-    }
-    if matches!(*second, Node::Block(block) if block == id) {
-        return Some(*first);
-    }
-    if contains(&first, id) {
-        let first = remove(*first, id)?;
-        Some(Node::Split {
-            id: split,
-            side,
-            share,
-            length,
-            first: Box::new(first),
-            second,
-        })
-    } else {
-        let second = remove(*second, id)?;
-        Some(Node::Split {
-            id: split,
-            side,
-            share,
-            length,
-            first,
-            second: Box::new(second),
-        })
-    }
-}
-
-/// A split's share and its extent along the axis, which are the only two numbers a drag writes.
-fn split_parts(node: &mut Node, id: u64) -> Option<(&mut f32, &mut f32)> {
-    match node {
-        Node::Block(_) => None,
-        Node::Split {
-            id: split,
-            share,
-            length,
-            first,
-            second,
-            ..
-        } => {
-            if *split == id {
-                Some((share, length))
-            } else if let Some(parts) = split_parts(first, id) {
-                Some(parts)
-            } else {
-                split_parts(second, id)
-            }
-        }
+    #[test]
+    fn balance_evens_every_split_and_a_closed_block_leaves_its_sibling_the_space() {
+        let mut p = tab();
+        p.split(Side::Right);
+        p.split(Side::Down);
+        assert_eq!(p.blocks(), 3);
+        p.resize(Dir::Up, 20.0);
+        p.balance();
+        assert!(shares(&p.root).iter().all(|s| (*s - 0.5).abs() < 1e-4));
+        let closing = p.focus_id();
+        p.close(closing);
+        assert_eq!(p.blocks(), 2);
+        assert!(p.block(closing).is_none());
+        assert!(
+            p.block(p.focus_id()).is_some(),
+            "the keyboard lands on a live block"
+        );
     }
 }
