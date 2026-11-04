@@ -5,7 +5,7 @@
 //! instead, and only a release writes the change. A cancel drops the preview, so the layout on
 //! screen is the one the user had before they picked the header up.
 
-use super::tree::{Node, place, remove, swap};
+use super::tree::{Node, place, remove, sibling, swap};
 use super::{HEADER, Panes, Side};
 
 /// Whether a point falls inside a rect, as a header drop asks of the panes it passes over.
@@ -107,7 +107,8 @@ impl Panes {
     }
 
     /// The pointer travelled `travel` points from the press: the pane under it, and the edge it
-    /// is over, are where a release would put the block, and the tab draws that layout now.
+    /// is over, are where a release would put the block, and the tab draws that layout now. Its
+    /// own pane counts too, so an edge drop can turn the split it sits in.
     pub fn drag_over(&mut self, travel: (f32, f32)) {
         let Some(from) = self.dragging else {
             self.press = None;
@@ -122,15 +123,18 @@ impl Panes {
         self.drop = self
             .blocks
             .iter()
-            .find(|block| block.id != from && inside(block.rect, at))
-            .map(|block| DropTarget::at(block.rect, block.id, at));
+            .find(|block| inside(block.rect, at))
+            .map(|block| DropTarget::at(block.rect, block.id, at))
+            // A pane's own body has nothing to trade places with.
+            .filter(|drop| *drop != DropTarget::Swap(from));
         self.preview = self.drop.and_then(|drop| self.preview_of(from, drop));
     }
 
     /// The header was let go. Over another pane's body the two swap places; over one of its
-    /// edges the dragged block takes that side of the pane in a fresh even split. Either way
-    /// both shells keep running. Anywhere else, or on a cancelled drag, the preview goes and
-    /// nothing moves.
+    /// edges the dragged block takes that side of the pane in a fresh even split. Over its own
+    /// edge it takes that side of the split it was in, which turns a row into a column or back.
+    /// Either way both shells keep running. Anywhere else, or on a cancelled drag, the preview
+    /// goes and nothing moves.
     pub fn drag_end(&mut self, cancelled: bool) {
         let Some(from) = self.dragging.take() else {
             self.press = None;
@@ -145,10 +149,23 @@ impl Panes {
         };
         match drop {
             DropTarget::Swap(to) if to != from => swap(&mut self.root, from, to),
-            DropTarget::Split { pane, edge } if pane != from => {
-                self.move_beside(from, pane, edge);
+            drop => {
+                if let Some((pane, edge)) = self.beside_target(from, drop) {
+                    self.move_beside(from, pane, edge);
+                }
             }
-            _ => {}
+        }
+    }
+
+    /// The pane and edge a split drop lands beside: the pane under the pointer, or — when the
+    /// header was let go over its own pane — the neighbour on the other side of the nearest
+    /// split, which is the one the drop turns against. None for a body drop, or for a pane that
+    /// fills the tab on its own.
+    fn beside_target(&self, from: u64, drop: DropTarget) -> Option<(u64, Edge)> {
+        match drop {
+            DropTarget::Split { pane, edge } if pane != from => Some((pane, edge)),
+            DropTarget::Split { edge, .. } => sibling(&self.root, from).map(|pane| (pane, edge)),
+            DropTarget::Swap(_) => None,
         }
     }
 
@@ -161,10 +178,10 @@ impl Panes {
                 swap(&mut root, from, to);
                 Some(root)
             }
-            DropTarget::Split { pane, edge } if pane != from => {
+            drop => {
+                let (pane, edge) = self.beside_target(from, drop)?;
                 beside(self.root.clone(), from, pane, edge, PREVIEW_SPLIT)
             }
-            _ => None,
         }
     }
 

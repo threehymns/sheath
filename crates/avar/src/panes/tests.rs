@@ -180,6 +180,86 @@ fn dropping_a_header_on_a_pane_edge_splits_beside_it() {
 }
 
 #[test]
+fn dropping_a_header_on_its_own_edge_turns_the_split() {
+    let (mut p, left, right) = pair();
+
+    // The left pane's own bottom band: it takes the bottom of the row it sits in, and the pane
+    // beside it keeps the top, so the row becomes a column.
+    p.drag_begin((50.0, 10.0));
+    p.drag_over((0.0, 80.0));
+    assert_eq!(
+        p.drop,
+        Some(DropTarget::Split {
+            pane: left,
+            edge: Edge::Bottom
+        })
+    );
+    let preview = p.preview.as_ref().expect("the turn is previewed");
+    assert_eq!(order(preview), vec![right, left]);
+    assert_eq!(sides(preview), vec![Side::Down], "the preview is a column");
+    assert_eq!(
+        sides(&p.root),
+        vec![Side::Right],
+        "the tab waits for the drop"
+    );
+    p.drag_end(false);
+
+    assert_eq!(order(&p.root), vec![right, left]);
+    assert_eq!(sides(&p.root), vec![Side::Down], "the row became a column");
+    assert_eq!(p.blocks(), 2, "the pane is not duplicated");
+}
+
+#[test]
+fn a_self_drop_takes_the_side_of_its_nearest_sibling() {
+    let mut p = tab();
+    p.split(Side::Right);
+    let right = p.focus_id();
+    p.split(Side::Down);
+    let bottom = p.focus_id();
+    let left = 1;
+    p.set_rect(left, [0.0, 0.0, 100.0, 100.0]);
+    p.set_rect(right, [100.0, 0.0, 100.0, 100.0]);
+    p.set_rect(bottom, [100.0, 100.0, 100.0, 100.0]);
+
+    // The left pane drops on its own bottom: it takes the bottom of its own column, under the
+    // pane it shared that column with, and the pane in the other column keeps its place.
+    p.drag_begin((50.0, 10.0));
+    p.drag_over((0.0, 80.0));
+    p.drag_end(false);
+
+    assert_eq!(order(&p.root), vec![right, left, bottom]);
+    assert_eq!(sides(&p.root), vec![Side::Down, Side::Down]);
+}
+
+#[test]
+fn a_header_dropped_on_its_own_body_or_in_a_single_pane_tab_stays_put() {
+    let (mut p, left, right) = pair();
+
+    p.drag_begin((50.0, 10.0));
+    p.drag_over((0.0, 40.0));
+    assert_eq!(p.drop, None, "there is nothing to trade with");
+    assert!(p.preview.is_none());
+    p.drag_end(false);
+    assert_eq!(order(&p.root), vec![left, right]);
+
+    let mut p = tab();
+    let only = p.focus_id();
+    p.set_rect(only, [0.0, 0.0, 100.0, 100.0]);
+    p.drag_begin((50.0, 10.0));
+    p.drag_over((0.0, 80.0));
+    assert_eq!(
+        p.drop,
+        Some(DropTarget::Split {
+            pane: only,
+            edge: Edge::Bottom
+        })
+    );
+    assert!(p.preview.is_none(), "a whole tree cannot divide itself");
+    p.drag_end(false);
+    assert_eq!(order(&p.root), vec![only]);
+}
+
+#[test]
 fn a_drag_previews_the_layout_and_a_cancel_puts_it_back() {
     let (mut p, left, right) = pair();
 

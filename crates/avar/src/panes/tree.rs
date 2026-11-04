@@ -168,6 +168,30 @@ pub(crate) fn remove(node: Node, id: u64) -> Option<Node> {
     }
 }
 
+/// A block from the other side of the nearest split `id` sits in: the neighbour a self-drop turns
+/// its split against. None when the block is the whole tree, with nothing beside it.
+pub(crate) fn sibling(node: &Node, id: u64) -> Option<u64> {
+    let Node::Split { first, second, .. } = node else {
+        return None;
+    };
+    let (near, far) = if contains(first, id) {
+        (first, second)
+    } else if contains(second, id) {
+        (second, first)
+    } else {
+        return None;
+    };
+    sibling(near, id).or_else(|| first_block(far))
+}
+
+/// The block a split would divide if it placed something in `node`: its first leaf.
+fn first_block(node: &Node) -> Option<u64> {
+    match node {
+        Node::Block(id) => Some(*id),
+        Node::Split { first, .. } => first_block(first),
+    }
+}
+
 /// A split's share and its extent along the axis, which are the only two numbers a drag writes.
 pub(crate) fn split_parts(node: &mut Node, id: u64) -> Option<(&mut f32, &mut f32)> {
     match node {
