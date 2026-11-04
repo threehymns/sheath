@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
-use rune::{ScrollPos, WheelEvent};
+use rune::{ScrollPos, Tx, WheelEvent};
 
 use crate::scroll::{Limits, Scroll, Step};
 
@@ -92,12 +92,15 @@ impl Areas {
         state.frame(t)
     }
 
-    /// The drag push and the physics for this frame, as the steps to apply.
-    pub fn step_key(&mut self, key: &'static str, limits: Limits, push: f32) -> (Step, Step) {
+    /// The drag push and the physics for this frame, applied by the crate. Returns whether the
+    /// frame must be redrawn.
+    pub fn step_key(&mut self, key: &'static str, limits: Limits, push: f32, tx: &mut Tx) -> bool {
         let state = self.state(key);
         let nudged = state.nudge(push, limits.max);
         let stepped = state.step(limits);
-        (nudged, stepped)
+        crate::area::apply(key, nudged, tx);
+        crate::area::apply(key, stepped, tx);
+        nudged.redraw || stepped.redraw
     }
 
     pub fn stop(&mut self) {

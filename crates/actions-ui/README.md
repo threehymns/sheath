@@ -29,7 +29,7 @@ compile error at the call site.
 ## Using it
 
 ```rust
-impl actions_ui::PaletteHost<Action> for App { /* six methods */ }
+impl actions_ui::PaletteHost<Action> for App { /* eight methods */ }
 impl actions_ui::KeybindHost<Action> for App { /* seven methods */ }
 
 let (scrim, slot) = actions_ui::palette::layers(self, k, Action::icon);
@@ -37,5 +37,5 @@ layers.push(scrim);
 layers.push(slot);
 ```
 
-Keys are stable (`command-<id>`, `record-<id>-field`, `reset-binding-<id>`, `settings-shortcuts`)
+Keys are stable (`command-<id>`, `record-<id>-field`, `reset-binding-<id>`, `settings-shortcuts`)`
 so an app's tests keep addressing the same widgets.

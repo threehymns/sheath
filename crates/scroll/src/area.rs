@@ -11,7 +11,7 @@ pub trait Host {
     fn scroll_limits(&self, key: &'static str) -> Limits;
     /// Records the viewport's rect. Returns whether anything the view reads moved, so a repeat
     /// of the same rect can skip the rebuild.
-    fn area_resized(&mut self, key: &'static str, rect: [f32; 4]) -> bool;
+    fn record_area(&mut self, key: &'static str, rect: [f32; 4]) -> bool;
 }
 
 /// A vertical scroll area with the crate's wheel: inertia, overscroll past the ends, and the
@@ -38,14 +38,14 @@ pub fn area<H: Host + 'static>(s: &H, key: &'static str, view: El, content: El) 
         .on_scroll_offset(move |at| told.set(at))
         .on_layout_tx(move |s: &mut H, rect, tx: &mut Tx| {
             // A new size changes what the view builds; a repeat of the same rect can skip it.
-            if !s.area_resized(key, rect) {
+            if !s.record_area(key, rect) {
                 tx.live_only();
             }
         })
         .child(content.offset(0.0, overshoot))
 }
 
-pub fn apply(key: &'static str, step: Step, tx: &mut Tx) {
+pub(crate) fn apply(key: &'static str, step: Step, tx: &mut Tx) {
     if let Some(at) = step.scroll_to {
         tx.scroll_to_instant(key, 0.0, at);
     }

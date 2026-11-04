@@ -6,7 +6,7 @@ mod recorder;
 mod search;
 mod setting;
 
-pub use action::{Action, Context, Scopes};
+pub use action::Action;
 pub use keybinds::{Keybinds, default_shortcut};
 pub use recorder::{Outcome, Recorder};
 pub use search::matching;

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use actions::{Action, Keybinds, Recorder};
 use rune::{El, Icon, PhysicalInput, col, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, shortcut_error_message};
@@ -10,8 +8,10 @@ use crate::settings::{settings_row, settings_section};
 /// What the keybind editor needs from the app. The host owns the bindings, their recorders and
 /// the file they are saved in; the crate only draws them.
 pub trait KeybindHost<A: Action>: Sized {
-    fn recorders(&self) -> &BTreeMap<A, Recorder>;
-    fn recorders_mut(&mut self) -> &mut BTreeMap<A, Recorder>;
+    /// The action's recorder, or `None` to keep that action out of the editor.
+    fn recorder(&self, action: A) -> Option<&Recorder>;
+    /// Puts the action's field into recording mode.
+    fn begin_recording(&mut self, action: A);
     fn keybinds(&self) -> &Keybinds<A>;
     fn record_key(&mut self, action: A, event: &PhysicalInput) -> bool;
     fn reset_binding(&mut self, action: A);
@@ -29,7 +29,7 @@ pub fn page<A: Action, H: KeybindHost<A> + 'static>(
 ) -> El {
     let mut rows = Vec::new();
     for action in A::ALL.iter().copied() {
-        if !s.recorders().contains_key(&action) {
+        if s.recorder(action).is_none() {
             continue;
         }
         rows.push(settings_row(
@@ -77,9 +77,8 @@ pub fn page<A: Action, H: KeybindHost<A> + 'static>(
 
 fn recorder_field<A: Action, H: KeybindHost<A> + 'static>(s: &H, k: &Kit, action: A) -> El {
     let recorder = s
-        .recorders()
-        .get(&action)
-        .expect("every action has a recorder");
+        .recorder(action)
+        .expect("the page only draws actions it has a recorder for");
     let labels = recorder.keycaps(s.keybinds().chord(action));
     let placeholder = if recorder.is_recording() {
         "Press shortcut"
@@ -110,9 +109,7 @@ fn recorder_field<A: Action, H: KeybindHost<A> + 'static>(s: &H, k: &Kit, action
         .radius(k.radius.sm)
         .focusable(true)
         .focus_ring(2.0, 2.0, k.c.border_focus)
-        .on_press(move |s: &mut H| {
-            s.recorders_mut().entry(action).or_default().begin();
-        })
+        .on_press(move |s: &mut H| s.begin_recording(action))
         .on_physical_input(move |s: &mut H, event, _| s.record_key(action, event))
         .child(if labels.is_empty() {
             text(placeholder)

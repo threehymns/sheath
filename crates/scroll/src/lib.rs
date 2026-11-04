@@ -3,6 +3,6 @@ mod area;
 mod areas;
 mod scroll;
 
-pub use area::{Host, apply, area};
+pub use area::{Host, area};
 pub use areas::Areas;
 pub use scroll::{Limits, Scroll, Step};

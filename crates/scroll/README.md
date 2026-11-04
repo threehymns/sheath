@@ -13,8 +13,8 @@ scrollable surface can.
 * **No app vocabulary and no domain dependencies.** No files, no paths, no settings, no actions.
   The host answers two questions: what the area's limits are, and whether a resize matters to it.
 * **`rune` only.** Not `rune-kit`, not any other workspace crate.
-* **The host keeps its own per-frame loop.** `Areas::begin_frame` and `step_key` return the
-  steps; `apply` hands them to `Tx`. The crate never owns the window.
+* **The host keeps its own per-frame loop.** `Areas::begin_frame` starts an area's frame;
+  `step_key` applies its steps through `Tx`. The crate never owns the window.
 
 ## How the rule is enforced
 
@@ -30,7 +30,7 @@ impl scroll::Host for App {
     fn areas(&self) -> &scroll::Areas { &self.areas }
     fn areas_mut(&mut self) -> &mut scroll::Areas { &mut self.areas }
     fn scroll_limits(&self, _key: &'static str) -> scroll::Limits { /* from settings */ }
-    fn area_resized(&mut self, _key: &'static str, _rect: [f32; 4]) -> bool { false }
+    fn record_area(&mut self, _key: &'static str, _rect: [f32; 4]) -> bool { false }
 }
 
 let list = scroll::area(self, "files-table", view, content);

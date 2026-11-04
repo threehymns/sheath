@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 use crate::app::App;
 use crate::config;
 use crate::keybinds::{Action, Keybinds};
@@ -268,12 +266,12 @@ impl PaletteHost<Action> for App {
 }
 
 impl KeybindHost<Action> for App {
-    fn recorders(&self) -> &BTreeMap<Action, Recorder> {
-        &self.recorders
+    fn recorder(&self, action: Action) -> Option<&Recorder> {
+        self.recorders.get(&action)
     }
 
-    fn recorders_mut(&mut self) -> &mut BTreeMap<Action, Recorder> {
-        &mut self.recorders
+    fn begin_recording(&mut self, action: Action) {
+        self.recorders.entry(action).or_default().begin();
     }
 
     fn keybinds(&self) -> &Keybinds {

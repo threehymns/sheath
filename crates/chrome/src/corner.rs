@@ -117,7 +117,7 @@ fn arc(points: &mut Vec<[f32; 2]>, center: [f32; 2], radius: f32, from: f32, to:
 /// A control placed in a panel's corner, and the bite that makes room for it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CornerControl {
-    /// The panel's rect: x, y, width, height.
+    /// The panel's rect: x, y, width, height. The height is read only for a bottom corner.
     pub panel: [f32; 4],
     pub corner: Corner,
     /// The panel's own radius; the bite stays concentric with it.

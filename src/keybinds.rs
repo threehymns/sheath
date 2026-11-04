@@ -316,33 +316,6 @@ impl actions::Action for Action {
         Action::default_chord(self)
     }
 
-    fn scopes(self) -> actions::Scopes {
-        let typing = !matches!(
-            self,
-            Action::FocusSearch
-                | Action::Rename
-                | Action::Move
-                | Action::Trash
-                | Action::Delete
-                | Action::Copy
-                | Action::Cut
-                | Action::Paste
-                | Action::Duplicate
-                | Action::SelectAll
-                | Action::DeselectAll
-                | Action::InvertSelection
-        );
-        let pane = matches!(
-            self,
-            Action::CommandBar | Action::OpenSettings | Action::OpenTerminal
-        );
-        actions::Scopes {
-            while_typing: typing,
-            in_pane: pane,
-            in_modal: true,
-        }
-    }
-
     fn in_palette(self) -> bool {
         self != Action::CommandBar
     }

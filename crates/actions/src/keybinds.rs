@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use rune::{Key, KeyEvent, PhysicalKeyCode, Shortcut, ShortcutError};
 
-use crate::action::{Action, Context};
+use crate::action::Action;
 use crate::recorder::Recorder;
 
 /// The chords an app's actions resolve to. The app defines the action type; this owns
@@ -66,17 +66,6 @@ impl<A: Action> Keybinds<A> {
     pub fn matches(&self, action: A, event: &KeyEvent) -> bool {
         self.chord(action)
             .is_some_and(|chord| matches(chord, event, action.ignores_shift()))
-    }
-
-    /// The action this event runs in `context`, in `A::ALL` order.
-    pub fn resolve(&self, event: &KeyEvent, context: Context) -> Option<A> {
-        A::ALL.iter().copied().find(|action| {
-            let scopes = action.scopes();
-            (!context.typing || scopes.while_typing)
-                && (!context.pane || scopes.in_pane)
-                && (!context.modal || scopes.in_modal)
-                && self.matches(*action, event)
-        })
     }
 
     pub fn set(&mut self, action: A, shortcut: Option<&Shortcut>) -> Result<(), ShortcutError> {

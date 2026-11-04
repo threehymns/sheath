@@ -1,6 +1,6 @@
 use actions::{Action, Keybinds};
 use rune::{Cursor, El, Icon, Key, KeyEvent, TextEdit, Tx, col, el, icon, row, text};
-use rune_kit::{Kit, TextInput, glyphs, scrim};
+use rune_kit::{Kit, TextInput, scrim};
 
 use crate::keycaps::{KeySize, tray};
 
@@ -48,6 +48,8 @@ impl Palette {
 /// What the command bar needs from the app: the state it stores, the chords, and what a chosen
 /// command does. The crate decides nothing about whether a command can run.
 pub trait PaletteHost<A: Action>: Sized {
+    /// The palette the host stores while the bar is open. Called only while the bar is being
+    /// drawn, so a host may treat a missing palette as a broken invariant.
     fn palette(&self) -> &Palette;
     fn palette_mut(&mut self) -> &mut Palette;
     fn keybinds(&self) -> &Keybinds<A>;
@@ -230,10 +232,4 @@ pub fn layers<A: Action, H: PaletteHost<A> + 'static>(
             .pt(72.0)
             .child(row().w_full().justify_center().child(panel)),
     )
-}
-
-/// The icon drawn beside a command in the palette. Kept here so an app with no icons still gets
-/// a glyph.
-pub fn default_icon(_: &Kit) -> &'static Icon {
-    &glyphs::KEYBOARD
 }

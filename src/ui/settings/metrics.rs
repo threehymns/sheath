@@ -2,7 +2,7 @@ pub(crate) const SETTINGS_DIALOG_WIDTH: f32 = 880.0;
 
 pub(crate) const SETTINGS_RAIL: f32 = 220.0;
 
-pub(crate) const SETTINGS_ROW_INSET: f32 = 16.0;
+pub(crate) use actions_ui::settings::ROW_INSET as SETTINGS_ROW_INSET;
 
 pub(crate) const SETTINGS_CARD_WIDTH: f32 = SETTINGS_DIALOG_WIDTH
     - SETTINGS_RAIL

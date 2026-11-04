@@ -32,7 +32,7 @@ impl scroll::Host for App {
 
     /// Records a viewport's rect from its layout, and says whether anything the view reads
     /// moved: only the list's own rect sizes the marquee and the grid's columns.
-    fn area_resized(&mut self, key: &'static str, rect: [f32; 4]) -> bool {
+    fn record_area(&mut self, key: &'static str, rect: [f32; 4]) -> bool {
         let sized = key == FILES && self.rows_view != rect;
         if key == FILES {
             self.rows_view = rect;
@@ -143,10 +143,7 @@ impl App {
                 .drag_push(dt)
                 .filter(|(target, _)| *target == key)
                 .map_or(0.0, |(_, points)| points);
-            let (nudged, stepped) = self.areas.step_key(key, limits, push);
-            redraw = redraw || nudged.redraw || stepped.redraw;
-            scroll::apply(key, nudged, tx);
-            scroll::apply(key, stepped, tx);
+            redraw |= self.areas.step_key(key, limits, push, tx);
         }
         self.follow_drag();
         redraw |= self.poll_terminal(tx);

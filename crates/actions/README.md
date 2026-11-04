@@ -15,7 +15,10 @@ shortcut is recorded. No files, no widgets, no app types.
 * **No app vocabulary.** Nothing here knows a config file name, a folder, or what an app draws.
 
 Depth lives at `Keybinds<A>`: defaults, conflict detection, physical-key matching, keycaps and
-menu labels sit behind nine methods. A second app reuses all of it by defining an enum.
+menu labels sit behind eleven methods. A second app reuses all of it by defining an enum.
+
+When a chord may fire is the app's policy. The kernel matches chords; the host decides whether
+a text field, the terminal pane or a modal should swallow the key first.
 
 ## How the rule is enforced
 
@@ -26,7 +29,7 @@ does not declare `actions-ui` or any app crate, so it cannot import them.
 ## Using it
 
 ```rust
-use actions::{Action, Keybinds, Scopes};
+use actions::{Action, Keybinds};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Command { Rename, Copy }
@@ -37,11 +40,10 @@ impl Action for Command {
     fn id(self) -> &'static str { /* ... */ }
     fn label(self) -> &'static str { /* ... */ }
     fn default_chord(self) -> Option<&'static str> { Some("f2") }
-    fn scopes(self) -> Scopes { Scopes::default() }
 }
 
 let binds = Keybinds::<Command>::defaults();
-if let Some(command) = binds.resolve(&event, &context) {
-    run(command);
+if binds.matches(Command::Rename, &event) {
+    run(Command::Rename);
 }
 ```
