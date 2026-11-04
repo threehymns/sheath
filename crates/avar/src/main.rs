@@ -93,6 +93,9 @@ pub struct Window {
     keybinds: Keybinds<Action>,
     recorders: BTreeMap<Action, Recorder>,
     store: config::Store,
+    /// The settings beside them, and the tab layout they currently ask for.
+    prefs: config::Store,
+    horizontal: bool,
     /// The settings window, with the tab it was left on, while it is up.
     settings: Option<SettingsTab>,
     /// The scroll areas the palette and the editor build, and the physics for them.
@@ -118,8 +121,12 @@ impl Window {
     }
 
     pub fn start() -> Window {
-        let store = config::Store::open();
+        let store = config::Store::open(config::KEYBINDS);
         let keybinds = actions_kdl::keybinds::read::<Action>(store.doc());
+        let prefs = config::Store::open(config::SETTINGS);
+        let horizontal = prefs
+            .setting(config::Setting::HorizontalTabs)
+            .unwrap_or_else(|| config::Setting::HorizontalTabs.default_on());
         Window {
             tabs: Tabs::new(start_dir()),
             rail: PaneState::new(tabs::RAIL).range(tabs::RAIL_MIN, tabs::RAIL_MAX),
@@ -130,6 +137,8 @@ impl Window {
             keybinds,
             recorders: Keybinds::<Action>::recorders(),
             store,
+            prefs,
+            horizontal,
             settings: None,
             areas: scroll::Areas::default(),
             frames: 0,
@@ -202,9 +211,21 @@ impl Window {
         self.tabs.open(dir);
     }
 
+    /// Whether the tabs are drawn as a bar across the top instead of the rail down the side.
+    pub(crate) fn horizontal_tabs(&self) -> bool {
+        self.horizontal
+    }
+
+    /// Puts the tabs along the top, or back in the rail, and writes the choice down so the next
+    /// window opens the same way.
+    pub(crate) fn set_horizontal_tabs(&mut self, on: bool) {
+        self.horizontal = on;
+        self.prefs.set_setting(config::Setting::HorizontalTabs, on);
+    }
+
     fn open_settings(&mut self) {
         if self.settings.is_none() {
-            self.settings = Some(SettingsTab::Shortcuts);
+            self.settings = Some(SettingsTab::Appearance);
         }
     }
 

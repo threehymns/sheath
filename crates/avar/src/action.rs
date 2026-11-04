@@ -89,7 +89,7 @@ impl Action {
     pub fn label(self) -> &'static str {
         match self {
             Action::CommandBar => "Command Bar",
-            Action::OpenSettings => "Shortcuts",
+            Action::OpenSettings => "Settings",
             Action::NewTab => "New Tab",
             Action::CloseTab => "Close Tab",
             Action::NextTab => "Next Tab",

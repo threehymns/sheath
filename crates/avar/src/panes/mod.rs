@@ -396,8 +396,15 @@ impl Panes {
         (redraw, blink, ended)
     }
 
-    /// The tab's layout: the blocks as cards, split by the gaps that resize them.
+    /// The tab's layout: the blocks as cards, split by the gaps that resize them. A tab holding
+    /// one block draws just its grid: a window that is one shell is a terminal, not a card.
     pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit) -> El {
+        if self.blocks.len() == 1 {
+            return match self.block(self.focus) {
+                Some(block) => view::bare(tab, block, scale, k),
+                None => rune::el(),
+            };
+        }
         if self.zoomed
             && let Some(block) = self.block(self.focus)
         {

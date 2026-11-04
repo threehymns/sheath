@@ -133,6 +133,24 @@ fn divider(tab: u64, split: u64, side: Side, k: &'static Kit) -> El {
     })
 }
 
+/// A tab's only block, with no card around it: the window opens as a terminal, so a fresh one
+/// shows a prompt and nothing else. The chrome arrives with the second pane or the second tab.
+pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
+    let id = block.id;
+    col()
+        .key(format!("block-{id}"))
+        .w_full()
+        .h_full()
+        .min_h(0.0)
+        .clip_rounded(0.0)
+        .on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
+            if let Some(p) = s.tabs.panes_mut(tab) {
+                p.set_rect(id, rect);
+            }
+        })
+        .child(grid(block, tab, scale, k))
+}
+
 /// One block: a card over the window's background, its folder in the header and its shell under
 /// it. The card that has the keyboard is the one drawn as active.
 pub fn card(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {

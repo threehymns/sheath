@@ -10,9 +10,9 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{El, TextStyle, Tx, Waker};
+use rune::{El, TextStyle, Tx, Waker, row, text};
 use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
-use rune_kit::{Kit, glyphs};
+use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, glyphs};
 use rune_tty::Terminal;
 
 use crate::Window;
@@ -26,6 +26,9 @@ pub const RAIL_MAX: f32 = 320.0;
 pub const GAP: f32 = 4.0;
 /// Tab rows are a little taller than a sidebar's default: a tab is the window's subject.
 const ROW: f32 = 32.0;
+/// The bar's height when the tabs are horizontal, and the chip that sits in it.
+const STRIP: f32 = 36.0;
+const CHIP: f32 = 26.0;
 
 /// Every tab the window has, in rail order, and the one on screen. Closing the last tab leaves
 /// the set empty, which is how the window knows it has nothing left to show.
@@ -61,6 +64,12 @@ impl Tabs {
     /// Nothing left to show: the window is done.
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
+    }
+
+    /// One tab holding one pane: the window opens as a terminal, so it draws no rail, no
+    /// toolbar and no card around the grid.
+    pub fn is_single(&self) -> bool {
+        self.rows.len() == 1 && self.rows[0].panes.blocks() == 1
     }
 
     pub fn active_id(&self) -> Option<u64> {
@@ -272,7 +281,6 @@ impl Tabs {
             let id = tab.id;
             let blocks = tab.panes.blocks();
             let mut row = SidebarRow::new(tab.panes.title())
-                .icon(&glyphs::CURSOR_TEXT)
                 .height(ROW)
                 .selected(index == self.active);
             // A split tab says how many blocks it holds, so a tab that looked away still shows
@@ -295,6 +303,78 @@ impl Tabs {
             rail = rail.child(row);
         }
         rail.build(k)
+    }
+
+    /// The tabs as a bar across the top of the tab on screen, for the horizontal layout in the
+    /// settings: one chip per tab, the active one filled, and its close button on the chip.
+    pub fn strip(&self, k: &Kit) -> El {
+        let mut bar = row()
+            .key("tab-strip")
+            .role("tablist")
+            .w_full()
+            .h(STRIP)
+            .px(6.0)
+            .gap(2.0)
+            .center_y()
+            .transition(rune::Transition::none());
+        for (index, tab) in self.rows.iter().enumerate() {
+            let id = tab.id;
+            let selected = index == self.active;
+            let blocks = tab.panes.blocks();
+            let title = tab.panes.title();
+            let mut chip = row()
+                .key(format!("tab-{id}"))
+                .role("tab")
+                .label(title.clone())
+                .h(CHIP)
+                .min_w(0.0)
+                .max_w(200.0)
+                .px(8.0)
+                .gap(6.0)
+                .center_y()
+                .radius(k.radius.sm)
+                .motion(k.motion.control)
+                .child(
+                    text(title)
+                        .key("label")
+                        .font(k.ty.small)
+                        .color(if selected {
+                            k.c.text_base
+                        } else {
+                            k.c.text_muted
+                        })
+                        .truncate()
+                        .grow(1.0)
+                        .shrink(),
+                );
+            // A split tab says how many blocks it holds, as its row in the rail does.
+            if blocks > 1 {
+                chip = chip.child(
+                    text(format!("{blocks}"))
+                        .key("count")
+                        .font(k.ty.small)
+                        .color(k.c.text_faint),
+                );
+            }
+            if selected {
+                chip = chip.fill(k.c.pressed);
+            }
+            bar = bar.child(
+                chip.child(
+                    IconButton::new(&glyphs::CLOSE)
+                        .variant(IconButtonVariant::GhostMuted)
+                        .control_size(ControlSize::Mini)
+                        .label("Close tab")
+                        .help("Close tab")
+                        .on_press(move |s: &mut Window| s.tabs.close(id))
+                        .build(k)
+                        .key(format!("tab-{id}-close")),
+                )
+                .hover(k.c.hover)
+                .on_press(move |s: &mut Window| s.tabs.select(id)),
+            );
+        }
+        bar
     }
 
     /// A tab's layout, ready to draw: the blocks of the tab on screen, split as it was left.

@@ -1,10 +1,11 @@
-//! The window's frame: rune-kit's split view around the tab rail and the tab on screen, and the
-//! toolbar over it. How the window is composed lives here and nowhere else, so the panes and the
-//! window's state stay out of each other's way.
+//! The window's frame: rune-kit's split view around the tabs and the tab on screen, and the
+//! toolbar over it. A window holding a single shell draws none of that — the terminal is the
+//! window until a second pane or tab asks for the chrome. How the window is composed lives here
+//! and nowhere else, so the panes and the window's state stay out of each other's way.
 
 use std::time::Instant;
 
-use rune::{Cx, El, Spring};
+use rune::{Cx, El, Spring, col};
 use rune_kit::shell::{PaneMotion, SidebarToggle, SplitView};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, Toolbar};
 use rune_theme_opencode as theme;
@@ -34,29 +35,52 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         .active_id()
         .map(|id| s.tabs.layout(id, s.scale.get(), k))
         .unwrap_or_else(rune::el);
-    let content = SplitView::new(main)
-        .sidebar(&s.rail, |s: &mut Window| &mut s.rail, s.tabs.rail(k))
-        .toolbar(toolbar(s, k))
+    // A window showing a single shell is only the terminal: no rail, no toolbar, no card around
+    // the grid. The chrome arrives with the second tab or the second pane, and the chords that
+    // make either of them work do so without it.
+    let single = s.tabs.is_single();
+    let horizontal = s.horizontal_tabs() && !single;
+    let main = if horizontal {
+        col()
+            .key("workspace")
+            .w_full()
+            .h_full()
+            .min_h(0.0)
+            .child(s.tabs.strip(k))
+            .child(main.grow(1.0).min_h(0.0))
+    } else {
+        main
+    };
+    let mut shell = SplitView::new(main)
         .titlebar_inset(cx.titlebar_inset())
         .frame_inset(FRAME)
-        .toolbar_in_panel()
-        .sidebar_padding(RAIL_PADDING.0, RAIL_PADDING.1)
-        .sidebar_toggle(
-            SidebarToggle::new()
-                .size(ControlSize::Large)
-                .past_lights(16.0)
-                .edge(12.0)
-                .gap(4.0)
-                .in_header(),
-        )
         .pane_motion(
             PaneMotion::new()
                 .spring(Spring::new(0.32, 0.0))
                 .scale_with_width(320.0, 0.16, 0.32)
                 .fade_tail(0.15),
         )
-        .reduced_motion(cx.is_reduced_motion())
-        .build(k);
+        .reduced_motion(cx.is_reduced_motion());
+    if !single {
+        shell = shell.toolbar(toolbar(s, k));
+    }
+    if horizontal {
+        shell = shell.toolbar_in_panel();
+    } else if !single {
+        shell = shell
+            .sidebar(&s.rail, |s: &mut Window| &mut s.rail, s.tabs.rail(k))
+            .toolbar_in_panel()
+            .sidebar_padding(RAIL_PADDING.0, RAIL_PADDING.1)
+            .sidebar_toggle(
+                SidebarToggle::new()
+                    .size(ControlSize::Large)
+                    .past_lights(16.0)
+                    .edge(12.0)
+                    .gap(4.0)
+                    .in_header(),
+            );
+    }
+    let content = shell.build(k);
     s.built.set(s.built.get() + at.elapsed());
     let mut layers = Vec::new();
     if s.palette.is_some() {
@@ -71,7 +95,8 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
 }
 
 /// The window's toolbar: the tab's name and the three ways to make another block. The rail's
-/// toggle sits beside these, so the rail hides the way the app's sidebar does.
+/// toggle sits beside these, so the rail hides the way the app's sidebar does. A window holding
+/// one shell has none of this.
 fn toolbar(s: &Window, k: &Kit) -> Toolbar {
     let split_right = IconButton::new(&icons::SPLIT_RIGHT)
         .variant(IconButtonVariant::GhostMuted)

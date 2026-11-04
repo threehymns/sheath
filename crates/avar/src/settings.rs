@@ -3,9 +3,10 @@
 //! frame rather than a dialog of its own.
 
 use actions_ui::keybind_page;
+use actions_ui::settings::{settings_row, settings_section};
 use chrome::{Corner, CornerControl};
 use rune::{El, Icon, col, icon, row, text};
-use rune_kit::{Button, ButtonVariant, ControlSize, Kit, glyphs, scrim};
+use rune_kit::{Button, ButtonVariant, ControlSize, Kit, Switch, glyphs, scrim};
 
 use crate::Window;
 use crate::action::Action;
@@ -20,30 +21,33 @@ const INSET: f32 = 8.0;
 const DONE_SIZE: (f32, f32) = (76.0, 26.0);
 const DONE_GAP: f32 = 8.0;
 
-/// The settings sections. Avar has one so far, and the rail keeps the shape the app's dialog has
-/// for the second.
+/// The settings sections, in the order the rail lists them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
+    Appearance,
     Shortcuts,
 }
 
 impl SettingsTab {
-    pub const ALL: [SettingsTab; 1] = [SettingsTab::Shortcuts];
+    pub const ALL: [SettingsTab; 2] = [SettingsTab::Appearance, SettingsTab::Shortcuts];
 
     pub fn id(self) -> &'static str {
         match self {
+            SettingsTab::Appearance => "appearance",
             SettingsTab::Shortcuts => "shortcuts",
         }
     }
 
     pub fn label(self) -> &'static str {
         match self {
+            SettingsTab::Appearance => "Appearance",
             SettingsTab::Shortcuts => "Shortcuts",
         }
     }
 
     fn icon(self) -> &'static Icon {
         match self {
+            SettingsTab::Appearance => &rune_kit::shell::SIDEBAR,
             SettingsTab::Shortcuts => &glyphs::KEYBOARD,
         }
     }
@@ -104,6 +108,7 @@ pub fn layer(s: &Window, tab: SettingsTab, k: &Kit, layers: &mut Vec<El>) {
         .child(nav.grow(1.0))
         .child(version);
     let body = match tab {
+        SettingsTab::Appearance => appearance_page(s, k),
         SettingsTab::Shortcuts => keybind_page(s, k, Action::icon, &icons::UNDO),
     };
     let panel_radius = RADIUS - INSET;
@@ -185,6 +190,30 @@ pub fn layer(s: &Window, tab: SettingsTab, k: &Kit, layers: &mut Vec<El>) {
             .items_center()
             .child(dialog),
     );
+}
+
+/// The appearance page: the layout the window draws its tabs in.
+fn appearance_page(s: &Window, k: &Kit) -> El {
+    let horizontal = Switch::new(s.horizontal_tabs())
+        .hide_label()
+        .on_toggle(|s: &mut Window| s.set_horizontal_tabs(!s.horizontal_tabs()))
+        .build(k)
+        .key("horizontal-tabs");
+    settings_section(
+        k,
+        "appearance-tabs",
+        "Tabs",
+        vec![settings_row(
+            k,
+            &rune_kit::shell::SIDEBAR,
+            "Horizontal workspace tabs",
+            Some(
+                "Draw the tabs as a bar across the top of the window instead of a rail down its \
+                 side.",
+            ),
+            horizontal,
+        )],
+    )
 }
 
 fn header(k: &Kit, tab: SettingsTab) -> El {
