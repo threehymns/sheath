@@ -24,4 +24,5 @@ mod sheets;
 mod shortcuts;
 mod sidebar;
 mod terminal;
+mod thumbs;
 mod watch;

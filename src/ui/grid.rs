@@ -1,13 +1,17 @@
 use crate::app::{
     App, FILES, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
-use rune::{Align, Cursor, El, GrowthSpec, Spring, Transition, Tx, col, el, icon, row, text};
+use rune::{
+    Align, Cursor, El, GrowthSpec, Spring, SurfaceFit, Transition, Tx, col, el, icon, row, text,
+};
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
 
 use super::table::{HEADER_HEIGHT, browser_style, mount, sort_label};
 
 const SORT_BUTTON_HEIGHT: f32 = 20.0;
+// The thumbnail a tile draws, square so the name below it never shifts when one lands.
+const THUMB_BOX: f32 = 44.0;
 
 pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
     let columns = s.grid_columns();
@@ -55,7 +59,7 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                     },
                     move |s: &App, r| grid_row(s, r, columns, k),
                 )
-                .virtual_rows_version((s.keys_version(), columns)),
+                .virtual_rows_version((s.keys_version(), columns, s.thumbs_version())),
         ))
 }
 
@@ -164,7 +168,7 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
         .justify_center()
         .transition(Transition::none())
         .hover_motion(Spring::NONE, Spring::NONE)
-        .child(icon(glyph, 34.0).color(icon_color))
+        .child(tile_picture(s, k, entry, glyph, icon_color))
         .child(
             text(entry.name.clone())
                 .font(k.ty.caption())
@@ -188,5 +192,34 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
         tile.fill(k.alpha(k.c.text_accent, 0.16))
     } else {
         tile.hover(k.c.hover)
+    }
+}
+
+/// The tile's picture: the thumbnail when one has decoded, the file icon otherwise,
+/// both centred in one square so the name below never moves when a picture lands.
+fn tile_picture(
+    s: &App,
+    k: &'static Kit,
+    entry: &crate::app::Entry,
+    glyph: &'static rune::Icon,
+    icon_color: rune::Color,
+) -> El {
+    if let Some(image) = s
+        .config
+        .show_thumbnails
+        .then(|| s.thumbnail(entry))
+        .flatten()
+    {
+        el().key(format!("thumb-{}", entry.id))
+            .w(THUMB_BOX)
+            .h(THUMB_BOX)
+            .radius(k.radius.sm)
+            .pixels_fit(image.pixels(), SurfaceFit::Fill)
+    } else {
+        row()
+            .w(THUMB_BOX)
+            .h(THUMB_BOX)
+            .center()
+            .child(icon(glyph, 34.0).color(icon_color))
     }
 }

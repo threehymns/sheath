@@ -209,6 +209,12 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_grid_setting())
         .build(k)
         .key("setting-grid");
+    let thumbnails = Switch::new(s.config.show_thumbnails)
+        .label("Show thumbnails")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_show_thumbnails())
+        .build(k)
+        .key("setting-thumbnails");
     let inertia = Switch::new(s.config.scroll_inertia)
         .label("Scroll inertia")
         .hide_label()
@@ -246,6 +252,13 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 "Grid layout",
                 Some("Show the folder as tiles instead of a table of rows."),
                 setting_control(s, k, Setting::GridLayout, grid),
+            ),
+            settings_row(
+                k,
+                &icons::PICTURES,
+                "Show thumbnails",
+                Some("Show a small picture for each image, in the list and the grid."),
+                setting_control(s, k, Setting::ShowThumbnails, thumbnails),
             ),
         ],
     );

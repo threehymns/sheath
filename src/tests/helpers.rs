@@ -146,6 +146,24 @@ pub(super) fn trackpad_burst(rt: &mut Runtime<App>, frames: usize) -> Vec<f32> {
     at
 }
 
+pub(super) fn scroll_settings_into_view(rt: &mut Runtime<App>, key: &str) {
+    for _ in 0..10 {
+        let panel = rt.presented("settings-scroll").expect("the page scrolls").0;
+        let inside = rt.presented(key).is_some_and(|(rect, _)| {
+            rect[1] >= panel[1] - 0.5 && rect[1] + rect[3] <= panel[1] + panel[3] + 0.5
+        });
+        if inside {
+            return;
+        }
+        let (x, y) = rt.find("settings-scroll").expect("the page is on screen");
+        rt.wheel_event(WheelEvent::new(0.0, -240.0).at(x, y));
+        for _ in 0..8 {
+            rt.frame(1.0 / 60.0);
+        }
+    }
+    panic!("{key} never scrolled into view");
+}
+
 pub(super) fn command_bar_event(app: &App, shifted: bool) -> KeyEvent {
     let mut mods = app
         .keybinds

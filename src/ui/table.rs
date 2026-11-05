@@ -4,8 +4,8 @@ use crate::icons;
 use crate::keybinds::Action;
 use chrono::{DateTime, Local};
 use rune::{
-    Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, memo, row,
-    text,
+    Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, SurfaceFit, Transition, Tx, col, el, icon,
+    memo, row, text,
 };
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
@@ -260,12 +260,15 @@ fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle, now: DateTime
 // What a row paints: the entry's own content, its two row positions (the parity of the stripe,
 // the drag's drop target), the theme and the clock's day. A commit that changed none of these
 // reuses the built row, which is what keeps a re-windowing commit off the visible rows.
+// The thumbnail a list row draws, square so the name after it never shifts when one lands.
+pub(super) const THUMB_BOX: f32 = 20.0;
+
 #[derive(Hash)]
 struct RowVersion<'a> {
     day: (i32, u32),
     dark: bool,
     scale: u32,
-    columns: (bool, bool, bool),
+    columns: (bool, bool, bool, bool),
     widths: (u32, u32, u32),
     stripe: bool,
     drop: bool,
@@ -279,6 +282,7 @@ struct RowVersion<'a> {
     modified: Option<std::time::SystemTime>,
     relative: Option<&'a str>,
     row_height: u32,
+    thumb: bool,
 }
 
 fn row_version<'a>(
@@ -297,6 +301,7 @@ fn row_version<'a>(
             s.config.show_kind,
             s.config.show_size,
             s.config.show_modified,
+            s.config.show_thumbnails,
         ),
         widths: (
             s.kind_width.to_bits(),
@@ -315,6 +320,7 @@ fn row_version<'a>(
         modified: entry.modified,
         relative: entry.relative.as_deref(),
         row_height: style.row_height.to_bits(),
+        thumb: s.config.show_thumbnails && s.has_thumbnail(entry),
     }
 }
 
@@ -403,7 +409,7 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .center_y()
         .w_full()
         .h_full()
-        .child(icon(glyph, 16.0).color(icon_color))
+        .child(leading(s, k, entry, glyph, icon_color))
         .child(name);
     if let Some(relative) = &entry.relative {
         content = content.child(
@@ -426,6 +432,35 @@ fn name_cell(s: &App, i: usize, k: &'static Kit, style: TableStyle) -> El {
         .px(style.cell_pad)
         .center_y()
         .child(content)
+}
+
+/// The row's leading picture: the thumbnail when one has decoded, the file icon otherwise,
+/// both centred in one square so the name after them never moves when a picture lands.
+fn leading(
+    s: &App,
+    k: &'static Kit,
+    entry: &crate::app::Entry,
+    glyph: &'static rune::Icon,
+    icon_color: rune::Color,
+) -> El {
+    if let Some(image) = s
+        .config
+        .show_thumbnails
+        .then(|| s.thumbnail(entry))
+        .flatten()
+    {
+        el().key(format!("thumb-{}", entry.id))
+            .w(THUMB_BOX)
+            .h(THUMB_BOX)
+            .radius(k.radius.sm)
+            .pixels_fit(image.pixels(), SurfaceFit::Fill)
+    } else {
+        row()
+            .w(THUMB_BOX)
+            .h(THUMB_BOX)
+            .center()
+            .child(icon(glyph, 16.0).color(icon_color))
+    }
 }
 
 fn kind_cell(s: &App, i: usize, style: TableStyle, width: f32) -> El {

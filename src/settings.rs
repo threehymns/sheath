@@ -15,10 +15,11 @@ pub enum Setting {
     ShowModified,
     ScrollInertia,
     Overscroll,
+    ShowThumbnails,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 11] = [
+    pub const ALL: [Setting; 12] = [
         Setting::ShowHidden,
         Setting::Inspector,
         Setting::GridLayout,
@@ -30,6 +31,7 @@ impl Setting {
         Setting::ShowModified,
         Setting::ScrollInertia,
         Setting::Overscroll,
+        Setting::ShowThumbnails,
     ];
 
     pub fn name(self) -> &'static str {
@@ -45,6 +47,7 @@ impl Setting {
             Setting::ShowModified => "show-modified",
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
+            Setting::ShowThumbnails => "show-thumbnails",
         }
     }
 
@@ -61,6 +64,7 @@ impl Setting {
             Setting::ShowModified => "modified-column",
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
+            Setting::ShowThumbnails => "thumbnails",
         }
     }
 
@@ -75,7 +79,8 @@ impl Setting {
             | Setting::ShowSize
             | Setting::ShowModified
             | Setting::ScrollInertia
-            | Setting::Overscroll => true,
+            | Setting::Overscroll
+            | Setting::ShowThumbnails => true,
         }
     }
 
@@ -92,6 +97,7 @@ impl Setting {
             Setting::ShowModified => 8,
             Setting::ScrollInertia => 9,
             Setting::Overscroll => 10,
+            Setting::ShowThumbnails => 11,
         }
     }
 
@@ -108,6 +114,7 @@ impl Setting {
             Setting::ShowModified => settings.show_modified,
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
+            Setting::ShowThumbnails => settings.show_thumbnails,
         }
     }
 
@@ -124,6 +131,7 @@ impl Setting {
             Setting::ShowModified => settings.show_modified = on,
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
+            Setting::ShowThumbnails => settings.show_thumbnails = on,
         }
     }
 }
@@ -141,7 +149,8 @@ pub struct Settings {
     pub show_modified: bool,
     pub scroll_inertia: bool,
     pub overscroll: bool,
-    present: [bool; 11],
+    pub show_thumbnails: bool,
+    present: [bool; 12],
 }
 
 impl Default for Settings {
@@ -158,7 +167,8 @@ impl Default for Settings {
             show_modified: true,
             scroll_inertia: true,
             overscroll: true,
-            present: [false; 11],
+            show_thumbnails: true,
+            present: [false; 12],
         }
     }
 }

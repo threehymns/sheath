@@ -15,6 +15,9 @@ pub struct Entry {
     kind: String,
     pub is_dir: bool,
     pub is_symlink: bool,
+    // Whether the name says the file is a picture, so the rows can ask for a thumbnail while
+    // the kind and size already came from the target's metadata.
+    pub is_image: bool,
     // The folder this row was found in, below the one on screen, when a search reached it.
     pub relative: Option<String>,
     pub size: u64,
@@ -65,6 +68,7 @@ impl Entry {
         // A colon keeps the id clear of the `/`-separated key paths Rune uses.
         let id = format!("f:{name}");
         let kind = crate::format::kind(&name, is_dir, is_symlink);
+        let is_image = !is_dir && is_image(&path);
         Some(Entry {
             name_key: format!("name-{id}"),
             id,
@@ -73,6 +77,7 @@ impl Entry {
             kind,
             is_dir,
             is_symlink,
+            is_image,
             relative: None,
             size: if is_dir { 0 } else { meta.len() },
             modified: meta.modified().or_else(|_| link_meta.modified()).ok(),

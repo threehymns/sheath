@@ -23,8 +23,8 @@ pub use grant::is_granted;
 pub use meta::{DirEntry, Metadata};
 pub use read::{metadata, read, read_dir, read_to_string};
 pub use state::{
-    Decoded, pick_folder, request_preview, set_waker, take_dirty, take_error, take_granted,
-    take_preview,
+    Decoded, pick_folder, request_preview, request_thumbnail, set_waker, take_dirty, take_error,
+    take_granted, take_preview, take_thumbnail,
 };
 pub use store::hydrate;
 pub use write::{

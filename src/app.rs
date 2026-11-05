@@ -18,6 +18,7 @@ mod selection;
 mod sheets;
 mod size;
 mod terminal;
+mod thumbs;
 mod watch;
 
 #[cfg(all(test, not(target_arch = "wasm32")))]
@@ -94,6 +95,10 @@ pub struct App {
     // Why the preview is not a picture, when this app's decoder could not read it.
     pub preview_error: Option<String>,
     previews: preview::Previewer,
+    // The rows' pictures, decoded at thumbnail size and kept per file.
+    thumbs: thumbs::Thumbs,
+    // Bumped whenever a thumbnail lands, so the grid keys its rows by it.
+    thumbs_version: u64,
     // Only a folder on demand: walking a tree costs too much to do for every row. The walk runs
     // on a worker, so the frame that asks for it never waits.
     pub folder_size: Option<(u64, usize)>,
@@ -247,6 +252,8 @@ impl App {
             preview_image: None,
             preview_error: None,
             previews: preview::Previewer::default(),
+            thumbs: thumbs::Thumbs::default(),
+            thumbs_version: 0,
             folder_size: None,
             sizer: size::Sizer::default(),
             finder: find::Finder::default(),
@@ -394,6 +401,7 @@ impl App {
         self.keybinds = actions_kdl::keybinds::read(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();
         self.inspector.set_open(self.config.inspector);
+        self.thumbs_version = self.thumbs_version.wrapping_add(1);
         self.reload_rules();
         self.reload();
     }
@@ -455,7 +463,9 @@ impl App {
     /// The image cache a window gets in `setup`, for tests that run without one.
     #[cfg(test)]
     pub(crate) fn use_images(&mut self, cache: rune::ImageCache) {
-        self.previews.attach(std::sync::Arc::new(cache));
+        let cache = std::sync::Arc::new(cache);
+        self.previews.attach(cache.clone());
+        self.thumbs.attach(cache);
     }
 }
 
@@ -464,8 +474,10 @@ pub fn setup(s: &mut App, wake: Waker) {
     crate::vfs::set_waker(wake.clone());
     s.sizer.set_waker(wake.clone());
     s.previews.set_waker(wake.clone());
-    s.previews
-        .attach(std::sync::Arc::new(rune::ImageCache::new(wake.clone())));
+    let cache = std::sync::Arc::new(rune::ImageCache::new(wake.clone()));
+    s.previews.attach(cache.clone());
+    s.thumbs.set_waker(wake.clone());
+    s.thumbs.attach(cache);
     s.scan.set_waker(wake.clone());
     s.finder.set_waker(wake.clone());
     s.store.watch(wake.clone());

@@ -37,12 +37,12 @@ const RECENT: usize = 6;
 // A held arrow key selects faster than this; waiting it out decodes only the row it stops on.
 const DEBOUNCE: Duration = Duration::from_millis(25);
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub(super) struct Key {
     pub(super) path: PathBuf,
     // An edited file has a new key, so an old preview is never shown for it.
-    modified: Option<SystemTime>,
-    pixels: u32,
+    pub(super) modified: Option<SystemTime>,
+    pub(super) pixels: u32,
 }
 
 /// A decoded preview, ready for a frame to draw. `image` is None when this app could not make
@@ -54,7 +54,7 @@ pub(super) struct Finished {
 }
 
 #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
-enum Decoded {
+pub(super) enum Decoded {
     Rgba {
         width: u32,
         height: u32,
@@ -63,6 +63,51 @@ enum Decoded {
     // SVG, or a format only Rune knows: let its image cache read and decode it.
     ViaRune(PathBuf),
     Failed(String),
+}
+
+impl Decoded {
+    /// Hand a decode to Rune's cache, waiting for its mips on this worker, so the landed image
+    /// is ready to draw. `pixels` is the decode's longest side and sizes an SVG handed over.
+    /// Before `setup` there is nowhere to put the pixels, so the answer is empty: the caller
+    /// asks again once the cache is attached.
+    pub(super) fn into_image(
+        self,
+        cache: Option<&ImageCache>,
+        pixels: u32,
+    ) -> (Option<Image>, Option<String>) {
+        match self {
+            Decoded::Rgba {
+                width,
+                height,
+                pixels: data,
+            } => match cache {
+                Some(cache) => (Some(settle(cache.rgba(width, height, data))), None),
+                None => (None, None),
+            },
+            Decoded::ViaRune(path) => match cache {
+                Some(cache) => (
+                    Some(settle(cache.file(
+                        &path,
+                        pixels as f32 / PREVIEW_SCALE,
+                        PREVIEW_SCALE,
+                    ))),
+                    None,
+                ),
+                None => (None, None),
+            },
+            Decoded::Failed(error) => (None, Some(error)),
+        }
+    }
+}
+
+/// Decode a file at a chosen longest side, for the thumbnails, which share the preview's
+/// decoders but not its size.
+pub(super) fn decode_at(path: &Path, pixels: u32) -> Decoded {
+    decode(&Key {
+        path: path.to_path_buf(),
+        modified: None,
+        pixels,
+    })
 }
 
 pub(super) struct Previewer {
@@ -193,35 +238,17 @@ pub(crate) fn bench_decode(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>),
 /// Decode and hand the result to Rune's cache, waiting for its mips on this worker. The landed
 /// preview is therefore ready to draw, and the UI thread does no image work at all.
 fn render(key: &Key, cache: Option<&ImageCache>) -> Finished {
-    let finished = |image, error| Finished {
+    let (image, error) = decode(key).into_image(cache, key.pixels);
+    Finished {
         key: key.clone(),
         image,
         error,
-    };
-    match decode(key) {
-        Decoded::Rgba {
-            width,
-            height,
-            pixels,
-        } => match cache {
-            Some(cache) => finished(Some(settle(cache.rgba(width, height, pixels))), None),
-            // Before setup (a unit test) there is nowhere to put the pixels.
-            None => finished(None, None),
-        },
-        Decoded::ViaRune(path) => match cache {
-            Some(cache) => finished(
-                Some(settle(cache.file(path, PREVIEW_POINTS, PREVIEW_SCALE))),
-                None,
-            ),
-            None => finished(None, None),
-        },
-        Decoded::Failed(error) => finished(None, Some(error)),
     }
 }
 
 /// Block until Rune has built the handle's mips. On the web there is no blocking; the handle
 /// lands pending, which this desktop app never hits.
-fn settle(image: Image) -> Image {
+pub(super) fn settle(image: Image) -> Image {
     #[cfg(not(target_arch = "wasm32"))]
     let _ = image.wait();
     image

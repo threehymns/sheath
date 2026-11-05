@@ -88,6 +88,8 @@ impl App {
         let mut redraw = self.land_scan();
         redraw |= self.land_find();
         redraw |= self.land_preview();
+        redraw |= self.land_thumbs();
+        self.request_thumbs();
         redraw |= self.land_folder_size();
         if let Some(id) = self.pending_reveal.take() {
             tx.scroll_into_view_in(FILES, id);

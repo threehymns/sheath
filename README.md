@@ -230,16 +230,18 @@ settings {
     show-kind #true
     show-size #true
     show-modified #true
+    show-thumbnails #true
     scroll-inertia #true
     overscroll #true
 }
 ```
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
-bar of the header's height, and is also the toolbar's layout button. `folders-first` keeps folders
+bar of the header's height, and is also the toolbar's layout button. `show-thumbnails` draws a
+picture for each image, falling back to the file icon. `folders-first` keeps folders
 above files in either layout, `confirm-trash` asks before trashing, and `confirm-delete` asks
 before deleting something for good. `show-kind`, `show-size` and `show-modified` keep or drop
-those columns in the list and their sort buttons above the tiles. `scroll-inertia` lets every
+those columns. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
 

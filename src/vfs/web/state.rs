@@ -27,6 +27,8 @@ struct WebState {
     wake: Option<Waker>,
     previews: VecDeque<Decoded>,
     previewing: BTreeSet<PathBuf>,
+    thumbnails: VecDeque<Decoded>,
+    thumbing: BTreeSet<PathBuf>,
 }
 
 /// A picture from a shared folder, decoded by the browser at preview size.
@@ -149,6 +151,66 @@ pub fn request_preview(path: &Path, modified: Option<SystemTime>, max: u32) -> b
 /// A picture the browser finished decoding, waiting for the next frame to draw it.
 pub fn take_preview() -> Option<Decoded> {
     STATE.with(|state| state.borrow_mut().previews.pop_front())
+}
+
+/// Asks the browser to decode one shared picture at thumbnail size. The pixels land in
+/// `take_thumbnail`, a queue of its own, so thumbnails and the inspector never steal each
+/// other's answers; a second request for the same file while the first is in flight is ignored.
+pub fn request_thumbnail(path: &Path, modified: Option<SystemTime>, max: u32) -> bool {
+    let Some((id, rel)) = grant_for(path) else {
+        return false;
+    };
+    if rel.is_empty() {
+        return false;
+    }
+    let path = path.to_path_buf();
+    if !STATE.with(|state| state.borrow_mut().thumbing.insert(path.clone())) {
+        return true;
+    }
+    browser::preview(id, &rel, max, move |result| {
+        let decoded = thumbnail_of(result, path, modified);
+        STATE.with(|state| {
+            let mut state = state.borrow_mut();
+            state.thumbing.remove(&decoded.path);
+            state.thumbnails.push_back(decoded);
+        });
+        wake();
+    });
+    true
+}
+
+/// A thumbnail the browser finished decoding, waiting for the next frame to draw it.
+pub fn take_thumbnail() -> Option<Decoded> {
+    STATE.with(|state| state.borrow_mut().thumbnails.pop_front())
+}
+
+fn thumbnail_of(
+    result: browser::Previewed,
+    path: PathBuf,
+    modified: Option<SystemTime>,
+) -> Decoded {
+    match result {
+        browser::Previewed::Rgba {
+            width,
+            height,
+            pixels,
+        } => Decoded {
+            path,
+            modified,
+            width,
+            height,
+            pixels,
+            error: None,
+        },
+        browser::Previewed::Failed(error) => Decoded {
+            path,
+            modified,
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+            error: Some(error),
+        },
+    }
 }
 
 /// The folder the user shared, waiting for the next frame to open it.
