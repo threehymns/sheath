@@ -1,16 +1,35 @@
 use crate::app::App;
+use crate::keybinds::Action;
 use crate::places::{Place, Section};
 use rune::{El, Tx};
 use rune_kit::shell::Reorder;
-use rune_kit::{Kit, Sidebar, SidebarRow, SidebarSection};
+use rune_kit::{
+    ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, SidebarRow, SidebarSection,
+};
+use rune_theme_opencode as theme;
 
 pub(super) fn sidebar(s: &App, k: &'static Kit) -> El {
     Sidebar::new()
+        .label("Places")
         .inset(10.0)
         .row_gap(1.0)
         .child(place_section(s, k, Section::Favourites))
         .child(place_section(s, k, Section::Locations))
+        .footer(settings_button(s, k))
         .build(k)
+}
+
+/// The window's one way into settings, in the footer so it sits in the sidebar's bottom corner.
+fn settings_button(s: &App, k: &'static Kit) -> El {
+    IconButton::new(&theme::icons::SETTINGS_GEAR)
+        .variant(IconButtonVariant::GhostMuted)
+        .control_size(ControlSize::Regular)
+        .label("Settings")
+        .help("Settings")
+        .shortcut(s.keybinds.accelerator(Action::OpenSettings))
+        .on_press(|s: &mut App| s.open_settings())
+        .build(k)
+        .key("open-settings")
 }
 
 fn place_section(s: &App, k: &'static Kit, section: Section) -> El {

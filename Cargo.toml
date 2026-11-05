@@ -66,8 +66,10 @@ rune-kit.workspace = true
 rune-theme-opencode.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Platform integration the desktop build uses: notifications over D-Bus and Rune's audio.
-rune = { workspace = true, features = ["dbus", "ogg-audio", "svg"] }
+# Platform integration the desktop build uses: notifications over D-Bus, Rune's audio and
+# the OS accessibility adapters. Rune builds nothing for the tree until an assistive client
+# asks, and the adapters are named only here so the web build does not grow them.
+rune = { workspace = true, features = ["accessibility", "dbus", "ogg-audio", "svg"] }
 avif-decode = { version = "3", default-features = false }
 # fff is the file finder behind the recursive search: it indexes the folder on screen and ranks
 # the matches, so the app does not carry its own tree walk. Its index is native-only (LMDB,

@@ -11,6 +11,8 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
     let crumbs = crumbs(&s.cwd);
     let mut bar = row()
         .key("path-bar")
+        .role("navigation")
+        .label(format!("Current folder: {}", s.cwd.display()))
         .w_full()
         .h(40.0)
         .px(12.0)

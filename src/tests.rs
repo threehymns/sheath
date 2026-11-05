@@ -1,3 +1,4 @@
+mod a11y;
 mod browse;
 mod commands;
 mod drag;

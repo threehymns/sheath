@@ -242,22 +242,6 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .build(k)
         .key("new-folder");
 
-    let (hidden_icon, hidden_label) = if s.show_hidden {
-        (k.glyph.eye, "Hide Hidden Files")
-    } else {
-        (k.glyph.eye_off, "Show Hidden Files")
-    };
-    let hidden = IconButton::new(hidden_icon)
-        .variant(IconButtonVariant::GhostMuted)
-        .control_size(ControlSize::Regular)
-        .label(hidden_label)
-        .help(hidden_label)
-        .shortcut(s.keybinds.accelerator(Action::ToggleHidden))
-        .expanded(s.show_hidden)
-        .on_press(|s: &mut App| s.toggle_hidden())
-        .build(k)
-        .key("toggle-hidden");
-
     let (layout_icon, layout_label) = if s.is_grid() {
         (&icons::LIST, "List Layout")
     } else {
@@ -285,26 +269,14 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .build(k)
         .key("toggle-inspector");
 
-    let settings = IconButton::new(&theme::icons::SETTINGS_GEAR)
-        .variant(IconButtonVariant::GhostMuted)
-        .control_size(ControlSize::Regular)
-        .label("Settings")
-        .help("Settings")
-        .shortcut(s.keybinds.accelerator(Action::OpenSettings))
-        .on_press(|s: &mut App| s.open_settings())
-        .build(k)
-        .key("open-settings");
-
     Toolbar::new()
         .leading(back)
         .leading(forward)
         .leading(up)
         .center(search)
         .trailing(new_folder)
-        .trailing(hidden)
         .trailing(layout)
         .trailing(inspector)
-        .trailing(settings)
 }
 
 fn nav_button(

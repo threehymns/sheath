@@ -138,6 +138,7 @@ fn header_cell(
 ) -> El {
     let mut cell = row()
         .role("columnheader")
+        .label(title)
         .h_full()
         .px(style.cell_pad)
         .center_y()
