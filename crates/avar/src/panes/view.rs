@@ -2,13 +2,23 @@
 //! zooms and closes it when the settings ask for one, and the gaps between panes that the
 //! pointer drags to resize them.
 
+use actions::Keybinds;
 use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
 use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
 
 use super::{Block, GAP, HEADER, Node, Panes, Side};
 use crate::Window;
+use crate::action::Action;
 use crate::icons;
+
+/// The chrome every pane in a tab's tree draws with: whether headers show, the block zoomed
+/// into the tab, and the window's chords for the buttons a header carries.
+pub struct Chrome<'a> {
+    pub headers: bool,
+    pub zoom: Option<u64>,
+    pub binds: &'a Keybinds<Action>,
+}
 
 /// A tab's layout: panes divided by the gaps between them, each split nested in the last. With
 /// `zoom` set, every split on that block's path gives it the whole share and the other side is
@@ -19,18 +29,10 @@ use crate::icons;
 /// compositing layer of its own, so every pane of a split would be another layer the window
 /// composites afresh on each of the animation's frames. Everything below the wrapper mounts at
 /// once and inherits its fade instead.
-pub fn tree(
-    p: &Panes,
-    tab: u64,
-    node: &Node,
-    scale: f32,
-    k: &'static Kit,
-    headers: bool,
-    zoom: Option<u64>,
-) -> El {
+pub fn tree(p: &Panes, tab: u64, node: &Node, scale: f32, k: &'static Kit, chrome: &Chrome) -> El {
     match node {
         Node::Block(id) => match p.block(*id) {
-            Some(block) => pane(p, tab, block, scale, k, headers),
+            Some(block) => pane(p, tab, block, scale, k, chrome),
             None => rune::el(),
         },
         Node::Split {
@@ -44,13 +46,13 @@ pub fn tree(
             let split = *id;
             let side = *side;
             let column = side == Side::Right;
-            let first_holds = zoom.is_some_and(|focus| holds(first, focus));
-            let second_holds = zoom.is_some_and(|focus| holds(second, focus));
+            let first_holds = chrome.zoom.is_some_and(|focus| holds(first, focus));
+            let second_holds = chrome.zoom.is_some_and(|focus| holds(second, focus));
             let zoomed = first_holds || second_holds;
             // Zoomed, the focused pane takes the whole split and the other side is empty, so
             // the pane widens (or narrows) on the layout spring instead of flying there with
             // its text scaled. Otherwise the split keeps the shares it was left with.
-            let (first_share, second_share) = match zoom {
+            let (first_share, second_share) = match chrome.zoom {
                 Some(_) if first_holds => (1.0, 0.0),
                 Some(_) if second_holds => (0.0, 1.0),
                 _ => (*share, 1.0 - *share),
@@ -58,12 +60,12 @@ pub fn tree(
             let first = if zoomed && !first_holds {
                 rune::el()
             } else {
-                tree(p, tab, first, scale, k, headers, zoom)
+                tree(p, tab, first, scale, k, chrome)
             };
             let second = if zoomed && !second_holds {
                 rune::el()
             } else {
-                tree(p, tab, second, scale, k, headers, zoom)
+                tree(p, tab, second, scale, k, chrome)
             };
             let divider = divider(tab, split, side, k);
             // A share moved by a command (a resize step, a balance) glides on the kit's layout
@@ -198,7 +200,14 @@ pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
 /// One block: its shell, and the header naming it when the settings ask for headers. The pane
 /// sits on the window's own background, with no card of its own, so a split reads as the
 /// terminal the window opened as.
-pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, headers: bool) -> El {
+pub fn pane(
+    p: &Panes,
+    tab: u64,
+    block: &Block,
+    scale: f32,
+    k: &'static Kit,
+    chrome: &Chrome,
+) -> El {
     let id = block.id;
     let mut body = col()
         .key(format!("block-{id}"))
@@ -213,9 +222,17 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
                 p.set_rect(id, rect);
             }
         });
-    if headers {
+    if chrome.headers {
         let name = p.name(id);
-        let header = header(tab, block, &name, p.focuses(id), p.is_zoomed(), k);
+        let header = header(
+            tab,
+            block,
+            &name,
+            p.focuses(id),
+            p.is_zoomed(),
+            k,
+            chrome.binds,
+        );
         body = body.child(header);
     }
     body.child(grid(block, tab, scale, k))
@@ -224,32 +241,43 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
 /// A block's header, which also drags: pressing it picks the pane up, letting go over another
 /// pane's body swaps the two, and letting go on one of its edges splits beside it. The drag
 /// previews the layout itself, so nothing here marks where a drop would land.
-fn header(tab: u64, block: &Block, name: &str, focused: bool, zoomed: bool, k: &'static Kit) -> El {
+fn header(
+    tab: u64,
+    block: &Block,
+    name: &str,
+    focused: bool,
+    zoomed: bool,
+    k: &'static Kit,
+    binds: &Keybinds<Action>,
+) -> El {
     let id = block.id;
-    let button = |glyph: &'static rune::Icon, label: &'static str| {
+    let button = |glyph: &'static rune::Icon, label: &'static str, action: Action| {
         IconButton::new(glyph)
             .variant(IconButtonVariant::GhostMuted)
             .control_size(ControlSize::Mini)
             .label(label)
             .help(label)
+            .shortcut(binds.accelerator(action))
     };
-    let split_right = button(&icons::SPLIT_RIGHT, "Split right")
+    let split_right = button(&icons::SPLIT_RIGHT, "Split right", Action::SplitRight)
         .on_press(move |s: &mut Window| s.tabs.split_at(tab, id, Side::Right))
         .build(k)
         .key(format!("block-{id}-split-right"));
-    let split_down = button(&icons::SPLIT_DOWN, "Split down")
+    let split_down = button(&icons::SPLIT_DOWN, "Split down", Action::SplitDown)
         .on_press(move |s: &mut Window| s.tabs.split_at(tab, id, Side::Down))
         .build(k)
         .key(format!("block-{id}-split-down"));
     // The block filling the tab offers to come back to its share of it, the way Rex's zoom
     // button turns into one.
     let zoom = if zoomed {
-        button(&icons::RESTORE, "Restore pane").on_press(move |s: &mut Window| s.tabs.toggle_zoom())
+        button(&icons::RESTORE, "Restore pane", Action::ZoomPane)
+            .on_press(move |s: &mut Window| s.tabs.toggle_zoom())
     } else {
-        button(&icons::ZOOM, "Zoom pane").on_press(move |s: &mut Window| s.tabs.zoom_at(tab, id))
+        button(&icons::ZOOM, "Zoom pane", Action::ZoomPane)
+            .on_press(move |s: &mut Window| s.tabs.zoom_at(tab, id))
     };
     let zoom = zoom.build(k).key(format!("block-{id}-zoom"));
-    let close = button(&rune_kit::glyphs::CLOSE, "Close pane")
+    let close = button(&rune_kit::glyphs::CLOSE, "Close pane", Action::ClosePane)
         .on_press(move |s: &mut Window| s.tabs.close_block(tab, id))
         .build(k)
         .key(format!("block-{id}-close"));

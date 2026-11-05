@@ -39,7 +39,7 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
         .active_id()
         .map(|id| {
             s.tabs
-                .layout(id, s.scale.get(), k, s.pane_headers())
+                .layout(id, s.scale.get(), k, s.pane_headers(), &s.keybinds)
                 .transition(s.tab_swap())
         })
         .unwrap_or_else(rune::el);
@@ -66,7 +66,7 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
                 .h_full()
                 .min_h(0.0)
                 .fill(k.c.bg_deep)
-                .child(s.tabs.strip(k))
+                .child(s.tabs.strip(k, &s.keybinds))
                 .child(main.grow(1.0).min_h(0.0))
         } else {
             main
@@ -104,7 +104,7 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
             .h_full()
             .min_h(0.0)
             .fill(k.c.bg_deep)
-            .child(s.tabs.strip(k))
+            .child(s.tabs.strip(k, &s.keybinds))
             .child(main.grow(1.0).min_h(0.0))
     } else if tabs {
         row()

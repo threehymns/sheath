@@ -9,9 +9,12 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use actions::Keybinds;
 use rune::{El, TextStyle, Tx, Waker};
 use rune_kit::Kit;
 use rune_tty::Terminal;
+
+use crate::action::Action;
 
 mod drag;
 mod tree;
@@ -461,17 +464,28 @@ impl Panes {
     /// one block with no headers draws just its grid: a window that is one shell is a terminal,
     /// not a pane. A zoomed pane keeps its place in the tree and takes the whole share of every
     /// split on its path, so it glides to the tab's edge on the layout spring.
-    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit, headers: bool) -> El {
+    pub fn layout(
+        &self,
+        tab: u64,
+        scale: f32,
+        k: &'static Kit,
+        headers: bool,
+        binds: &Keybinds<Action>,
+    ) -> El {
+        let chrome = view::Chrome {
+            headers,
+            zoom: self.zoomed.then_some(self.focus),
+            binds,
+        };
         if self.blocks.len() == 1 {
             return match self.block(self.focus) {
                 Some(block) if !headers => view::bare(tab, block, scale, k),
-                Some(block) => view::pane(self, tab, block, scale, k, headers),
+                Some(block) => view::pane(self, tab, block, scale, k, &chrome),
                 None => rune::el(),
             };
         }
-        let zoom = self.zoomed.then_some(self.focus);
         let root = self.preview.as_ref().unwrap_or(&self.root);
-        view::tree(self, tab, root, scale, k, headers, zoom)
+        view::tree(self, tab, root, scale, k, &chrome)
     }
 
     /// Puts the keyboard on the active block and takes it off every other one.

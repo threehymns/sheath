@@ -1,11 +1,13 @@
 //! The bar across the top of the tab on screen: one chip per tab, the active one filled, and a
 //! drag that reorders them across the bar.
 
+use actions::Keybinds;
 use rune::{Anim, Drag, El, Phase, Tx, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, glyphs};
 
 use super::Tabs;
 use crate::Window;
+use crate::action::Action;
 
 /// The bar's height when the tabs are horizontal, and the chip that sits in it.
 const STRIP: f32 = 36.0;
@@ -144,7 +146,7 @@ impl Tabs {
     /// The tabs as a bar across the top of the tab on screen, for the horizontal layout in the
     /// settings: one chip per tab, the active one filled, and its close button on the chip. A
     /// chip drags across the bar to reorder the tabs, as a row drags down the rail.
-    pub fn strip(&self, k: &Kit) -> El {
+    pub fn strip(&self, k: &Kit, binds: &Keybinds<Action>) -> El {
         let mut bar = row()
             .key("tab-strip")
             .role("tablist")
@@ -204,6 +206,7 @@ impl Tabs {
                             .control_size(ControlSize::Mini)
                             .label("Close tab")
                             .help("Close tab")
+                            .shortcut(binds.accelerator(Action::CloseTab))
                             .on_press_tx(move |s: &mut Window, tx: &mut Tx| {
                                 s.tabs.close(id);
                                 s.tab_switched(tx);

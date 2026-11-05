@@ -12,12 +12,14 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use actions::Keybinds;
 use rune::{Drag, El, Phase, TextStyle, Tx, Waker, col};
 use rune_kit::Kit;
 use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
 use rune_tty::Terminal;
 
 use crate::Window;
+use crate::action::Action;
 use crate::panes::{Dir, Panes, Side};
 
 mod strip;
@@ -346,7 +348,14 @@ impl Tabs {
     /// panes, and Rune captures a gesture by the element's path: a header that moved would stop
     /// resolving and the drag would freeze, so the gesture sits on this box instead, which stays
     /// put for the whole drag.
-    pub fn layout(&self, tab: u64, scale: f32, k: &'static Kit, headers: bool) -> El {
+    pub fn layout(
+        &self,
+        tab: u64,
+        scale: f32,
+        k: &'static Kit,
+        headers: bool,
+        binds: &Keybinds<Action>,
+    ) -> El {
         let Some(row) = self.rows.iter().find(|row| row.id == tab) else {
             return rune::el();
         };
@@ -375,7 +384,7 @@ impl Tabs {
                 tx.instant();
             });
         }
-        shell.child(row.panes.layout(tab, scale, k, headers))
+        shell.child(row.panes.layout(tab, scale, k, headers, binds))
     }
 
     /// Reads every block's shell, on screen or not, and closes the blocks whose shell ended. The
