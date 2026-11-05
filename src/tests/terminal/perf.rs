@@ -222,7 +222,7 @@ fn perf_terminal_unchanged_frame() {
 #[test]
 #[ignore]
 fn perf_video_stream() {
-    use rune_tty::raster::{Palette, picture};
+    use rune_tty::raster::Palette;
 
     if std::env::var_os("PERF_COMMAND").is_none() {
         eprintln!("set PERF_COMMAND to the video player and its arguments");
@@ -267,6 +267,11 @@ fn perf_video_stream() {
         search: rune_tty::raster::rgb(rune_theme_opencode::kit(true).c.text_accent),
     };
     let mut frame = Frame::default();
+    // The image cache belongs to the terminal that streams it, so the bench paints through one
+    // and swaps the live frame in and out of it.
+    let mut screen = rune_tty::Terminal::new();
+    screen.show_for_test(Frame::default());
+
     // The first fill composes the whole image; every later one diffs against it, as in the app.
     engine.drain();
     engine.fill(&mut frame);
@@ -310,7 +315,9 @@ fn perf_video_stream() {
         changed_frames += 1;
         engine.fill(&mut frame);
         let after_fill = Instant::now();
-        std::hint::black_box(picture(&frame, 8.0, 16.0, 2.0, palette));
+        std::mem::swap(&mut screen.frame, &mut frame);
+        std::hint::black_box(screen.picture(2.0, palette));
+        std::mem::swap(&mut screen.frame, &mut frame);
         let after_picture = Instant::now();
         parse += after_drain - at;
         readback += after_fill - after_drain;
