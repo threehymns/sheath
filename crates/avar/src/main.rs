@@ -30,11 +30,12 @@ use std::time::{Duration, Instant};
 use action::Action;
 use actions::{Keybinds, Outcome, Recorder};
 use actions_ui::{KeybindHost, Palette, PaletteHost};
+use motion::{TabDirection, TabTiming, TabTransition};
 use rune::{El, Key, KeyEvent, PhysicalInput, Shortcut, ShortcutError, Tx, Waker, col};
 use rune_kit::shell::PaneState;
 use rune_theme_opencode as theme;
 use scroll::Host;
-use settings::{Pick, SettingsTab, TabTiming, TabTransition};
+use settings::{Pick, SettingsTab};
 use tabs::Tabs;
 
 /// The chords that reach the window while a shell has the keyboard. Everything else is typed:
@@ -97,9 +98,11 @@ pub struct Window {
     headers: bool,
     /// Whether the window draws its own slim top bar above the panes.
     top_bar: bool,
-    /// How a tab gives way to the next one, and the spring that transition runs on.
+    /// How a tab gives way to the next one, the spring that transition runs on, and which edge
+    /// a slide comes in from.
     tab_transition: TabTransition,
     tab_timing: TabTiming,
+    tab_direction: TabDirection,
     /// The settings window, with the tab it was left on, while it is up.
     settings: Option<SettingsTab>,
     /// The appearance page's open dropdown, if one is.
@@ -147,6 +150,10 @@ impl Window {
             .choice(config::TAB_TIMING)
             .and_then(|name| TabTiming::from_name(&name))
             .unwrap_or_default();
+        let tab_direction = prefs
+            .choice(config::TAB_DIRECTION)
+            .and_then(|name| TabDirection::from_name(&name))
+            .unwrap_or_default();
         Window {
             tabs: Tabs::new(start_dir()),
             rail: PaneState::new(tabs::RAIL).range(tabs::RAIL_MIN, tabs::RAIL_MAX),
@@ -163,6 +170,7 @@ impl Window {
             top_bar,
             tab_transition,
             tab_timing,
+            tab_direction,
             settings: None,
             pick: None,
             areas: scroll::Areas::default(),

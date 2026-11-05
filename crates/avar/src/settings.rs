@@ -5,7 +5,7 @@
 use actions_ui::keybind_page;
 use actions_ui::settings::{settings_row, settings_section};
 use chrome::{Corner, CornerControl};
-use rune::{Effect, El, Icon, SpringPair, Transition, Tx, Vec2, col, icon, row, text};
+use rune::{El, Icon, Tx, col, icon, row, text};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, Kit, Select, SelectAppearance, Switch, glyphs, scrim,
 };
@@ -13,6 +13,7 @@ use rune_kit::{
 use crate::Window;
 use crate::action::Action;
 use crate::icons;
+use crate::motion::{TabDirection, TabTiming, TabTransition};
 
 const DIALOG_WIDTH: f32 = 880.0;
 const RAIL: f32 = 220.0;
@@ -55,168 +56,13 @@ impl SettingsTab {
     }
 }
 
-/// How the tab on screen gives way to the next one.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum TabTransition {
-    /// No motion: the next tab is simply there.
-    #[default]
-    Cut,
-    /// The next tab fades in as the last one fades out.
-    Fade,
-    /// The next tab slides in from the leading edge while the last one leaves through the
-    /// trailing one.
-    SlideHorizontal,
-    /// The same along the vertical axis: in from the top, out through the bottom.
-    SlideVertical,
-}
-
-impl TabTransition {
-    pub(crate) const ALL: [TabTransition; 4] = [
-        TabTransition::Cut,
-        TabTransition::Fade,
-        TabTransition::SlideHorizontal,
-        TabTransition::SlideVertical,
-    ];
-
-    /// The name `settings.kdl` writes.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            TabTransition::Cut => "cut",
-            TabTransition::Fade => "fade",
-            TabTransition::SlideHorizontal => "slide-horizontal",
-            TabTransition::SlideVertical => "slide-vertical",
-        }
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            TabTransition::Cut => "Cut",
-            TabTransition::Fade => "Fade",
-            TabTransition::SlideHorizontal => "Slide horizontal",
-            TabTransition::SlideVertical => "Slide vertical",
-        }
-    }
-
-    pub(crate) fn from_name(name: &str) -> Option<TabTransition> {
-        TabTransition::ALL
-            .into_iter()
-            .find(|transition| transition.name() == name)
-    }
-
-    pub(crate) fn from_label(label: &str) -> Option<TabTransition> {
-        TabTransition::ALL
-            .into_iter()
-            .find(|transition| transition.label() == label)
-    }
-
-    /// The presence effect alone; the window layers the chosen timing on top.
-    pub(crate) fn effect(self) -> Transition {
-        match self {
-            TabTransition::Cut => Transition::none(),
-            TabTransition::Fade => Transition::opacity(),
-            TabTransition::SlideHorizontal => Transition::slide(),
-            TabTransition::SlideVertical => {
-                let offset = |y: f32| Effect {
-                    offset_fraction: Vec2::new(0.0, y),
-                    ..Effect::IDENTITY
-                };
-                Transition {
-                    insertion: offset(-1.0),
-                    removal: offset(1.0),
-                    ..Transition::slide()
-                }
-            }
-        }
-    }
-}
-
-/// The spring a tab transition runs on, named after the motion tokens Rune already ships: from
-/// barely there through the springy presets that overshoot.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub(crate) enum TabTiming {
-    Instant,
-    Snap,
-    #[default]
-    Settle,
-    Reflow,
-    Glide,
-    Morph,
-    Pop,
-    Drift,
-}
-
-impl TabTiming {
-    pub(crate) const ALL: [TabTiming; 8] = [
-        TabTiming::Instant,
-        TabTiming::Snap,
-        TabTiming::Settle,
-        TabTiming::Reflow,
-        TabTiming::Glide,
-        TabTiming::Morph,
-        TabTiming::Pop,
-        TabTiming::Drift,
-    ];
-
-    /// The name `settings.kdl` writes.
-    pub(crate) fn name(self) -> &'static str {
-        match self {
-            TabTiming::Instant => "instant",
-            TabTiming::Snap => "snap",
-            TabTiming::Settle => "settle",
-            TabTiming::Reflow => "reflow",
-            TabTiming::Glide => "glide",
-            TabTiming::Morph => "morph",
-            TabTiming::Pop => "pop",
-            TabTiming::Drift => "drift",
-        }
-    }
-
-    pub(crate) fn label(self) -> &'static str {
-        match self {
-            TabTiming::Instant => "Instant",
-            TabTiming::Snap => "Snap",
-            TabTiming::Settle => "Settle",
-            TabTiming::Reflow => "Reflow",
-            TabTiming::Glide => "Glide",
-            TabTiming::Morph => "Morph",
-            TabTiming::Pop => "Pop",
-            TabTiming::Drift => "Drift",
-        }
-    }
-
-    pub(crate) fn from_name(name: &str) -> Option<TabTiming> {
-        TabTiming::ALL
-            .into_iter()
-            .find(|timing| timing.name() == name)
-    }
-
-    pub(crate) fn from_label(label: &str) -> Option<TabTiming> {
-        TabTiming::ALL
-            .into_iter()
-            .find(|timing| timing.label() == label)
-    }
-
-    pub(crate) fn springs(self) -> SpringPair {
-        use rune::tok::motion::pair;
-        match self {
-            TabTiming::Instant => pair::INSTANT,
-            TabTiming::Snap => pair::SNAP,
-            TabTiming::Settle => pair::SETTLE,
-            TabTiming::Reflow => pair::REFLOW,
-            TabTiming::Glide => pair::GLIDE,
-            TabTiming::Morph => pair::MORPH,
-            TabTiming::Pop => pair::POP,
-            TabTiming::Drift => pair::DRIFT,
-        }
-    }
-}
-
 /// Which dropdown on the appearance page is open. The kit's select is a plain trigger, so the
 /// window keeps the one listbox it has open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Pick {
     Transition,
     Timing,
+    Direction,
 }
 
 /// The scrim and the dialog, in the order they are pushed over the terminal.
@@ -401,6 +247,25 @@ fn appearance_page(s: &Window, k: &Kit, menus: &mut Vec<El>) -> El {
             s.clear_pick();
         })
         .build(k, menus);
+    let directions = TabDirection::ALL.map(TabDirection::label);
+    let direction = Select::new("tab-transition-direction", &directions)
+        .appearance(SelectAppearance::Field)
+        .width(176.0)
+        .current(Some(s.tab_direction().label()))
+        .open(s.pick() == Some(Pick::Direction))
+        .disabled(!matches!(
+            s.tab_transition(),
+            TabTransition::SlideHorizontal | TabTransition::SlideVertical
+        ))
+        .on_toggle(|s: &mut Window| s.toggle_pick(Pick::Direction))
+        .on_close(|s: &mut Window| s.clear_pick())
+        .on_choose(|s: &mut Window, value: &str, _: &mut Tx| {
+            if let Some(direction) = TabDirection::from_label(value) {
+                s.set_tab_direction(direction);
+            }
+            s.clear_pick();
+        })
+        .build(k, menus);
     let headers = Switch::new(s.pane_headers())
         .hide_label()
         .on_toggle(|s: &mut Window| s.set_pane_headers(!s.pane_headers()))
@@ -442,6 +307,17 @@ fn appearance_page(s: &Window, k: &Kit, menus: &mut Vec<El>) -> El {
                     "Transition timing",
                     Some("The spring the tab transition runs on. A cut has no timing to run on."),
                     timing,
+                ),
+                settings_row(
+                    k,
+                    &rune_kit::glyphs::DASH,
+                    "Slide direction",
+                    Some(
+                        "Which edge a sliding tab comes in from. Following the tab order, the \
+                         next tab slides in from the far side and the last one from the near \
+                         side; one way, every slide comes in from the leading edge.",
+                    ),
+                    direction,
                 ),
             ],
         ))

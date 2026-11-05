@@ -15,6 +15,9 @@ pub const SETTINGS: &str = "settings.kdl";
 pub const TAB_TRANSITION: &str = "tab-transition";
 /// The spring that tab transition runs on, by its Rune motion token name.
 pub const TAB_TIMING: &str = "tab-transition-timing";
+/// Which edge a sliding tab comes in from: `follow` (the side it sits on in the tab order) or
+/// `fixed` (the leading edge, or the top on the vertical axis).
+pub const TAB_DIRECTION: &str = "tab-transition-direction";
 
 /// What the settings file can name. A setting the file does not name keeps its default, and
 /// saving the default takes the line out instead of writing it down.

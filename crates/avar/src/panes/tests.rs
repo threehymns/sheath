@@ -441,7 +441,7 @@ fn balance_evens_every_split_and_a_closed_block_leaves_its_sibling_the_space() {
 /// animation, which is what made a split tab drop frames where a single one did not.
 #[test]
 fn a_cut_swaps_the_whole_tab_in_one_frame() {
-    use crate::settings::TabTransition;
+    use crate::motion::TabTransition;
     use rune::text::TextSystem;
     use rune::{Env, Runtime};
 

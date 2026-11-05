@@ -38,6 +38,9 @@ pub struct Tabs {
     rows: Vec<Tab>,
     active: usize,
     next: u64,
+    /// Whether the tab on screen came from further along the rail than the one it replaced,
+    /// which is the side a slide comes in from.
+    forward: bool,
     /// The rail's drag, owned here because it is the rail's own gesture.
     drag: Reorder,
     /// The bar's drag, which measures its chips rather than stepping rows.
@@ -61,6 +64,7 @@ impl Tabs {
             }],
             active: 0,
             next: 2,
+            forward: true,
             drag: Reorder::new().gap(GAP),
             strip: Strip::default(),
         }
@@ -85,6 +89,12 @@ impl Tabs {
 
     pub fn active_id(&self) -> Option<u64> {
         self.rows.get(self.active).map(|tab| tab.id)
+    }
+
+    /// Whether the tab on screen sits further along the rail than the one it replaced: a slide
+    /// that follows the tab order comes in from that side.
+    pub fn switched_forward(&self) -> bool {
+        self.forward
     }
 
     /// Where a shell opened from the window should start: where the shell the user is typing in
@@ -133,6 +143,7 @@ impl Tabs {
             panes: Panes::new(dir),
         });
         self.active = self.rows.len() - 1;
+        self.forward = true;
         self.sync_focus();
     }
 
@@ -149,6 +160,10 @@ impl Tabs {
         // stays the one on screen.
         if index < self.active {
             self.active -= 1;
+            self.forward = false;
+        } else if index == self.active {
+            // The tab that slid into the closed one's place came from further along the rail.
+            self.forward = true;
         }
         self.active = self.active.min(self.rows.len() - 1);
         self.sync_focus();
@@ -156,6 +171,7 @@ impl Tabs {
 
     pub fn select(&mut self, id: u64) {
         if let Some(index) = self.rows.iter().position(|tab| tab.id == id) {
+            self.forward = index > self.active;
             self.active = index;
         }
         self.sync_focus();
@@ -276,7 +292,9 @@ impl Tabs {
             return;
         }
         let count = self.rows.len() as isize;
-        self.active = (self.active as isize + by).rem_euclid(count) as usize;
+        let target = (self.active as isize + by).rem_euclid(count) as usize;
+        self.forward = target > self.active;
+        self.active = target;
         self.sync_focus();
     }
 
