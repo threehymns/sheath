@@ -1,5 +1,4 @@
 use crate::app::{App, ROW_HEIGHT};
-use std::collections::BTreeSet;
 
 pub const TILE_WIDTH: f32 = 104.0;
 pub const TILE_HEIGHT: f32 = 96.0;
@@ -83,11 +82,6 @@ impl App {
         (index < self.visible.len()).then_some(index)
     }
 
-    fn cell_of(&self, index: usize) -> (usize, usize) {
-        let columns = self.grid_columns();
-        (index / columns, index % columns)
-    }
-
     fn index_at_cell(&self, row: usize, column: usize) -> Option<usize> {
         if column >= self.grid_columns() {
             return None;
@@ -139,18 +133,5 @@ impl App {
         let columns = self.grid_columns();
         self.row_id(index - index % columns)
             .map(|id| format!("grid-row:{id}"))
-    }
-
-    pub(super) fn grid_range_to(&self, index: usize, range: &mut BTreeSet<String>) {
-        let from = self.anchor_index().unwrap_or(index);
-        let (from_row, from_column) = self.cell_of(from);
-        let (to_row, to_column) = self.cell_of(index);
-        for row in from_row.min(to_row)..=from_row.max(to_row) {
-            for column in from_column.min(to_column)..=from_column.max(to_column) {
-                if let Some(index) = self.index_at_cell(row, column) {
-                    range.insert(self.entries[self.visible[index]].id.clone());
-                }
-            }
-        }
     }
 }

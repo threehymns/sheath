@@ -99,10 +99,58 @@ fn arrow_keys_walk_the_grid_by_tile_and_by_row() {
     );
 
     key(&mut rt, Key::Up, shift());
-    assert_eq!(rt.state.selection_len(), 2, "the column between the two");
-    let ids = rt.state.selected_ids();
-    assert!(ids.contains(&"f:file02.txt".to_owned()));
-    assert!(ids.contains(&format!("f:file{below:02}.txt")));
+    let up = (below as isize - columns as isize).clamp(0, 23) as usize;
+    let expected: Vec<String> = (up.min(below)..=up.max(below))
+        .map(|i| format!("f:file{i:02}.txt"))
+        .collect();
+    assert_eq!(
+        rt.state.selected_ids(),
+        expected,
+        "Shift+Up selects the range in row order, not a box"
+    );
+}
+
+#[test]
+fn shift_clicking_tiles_selects_a_plain_range() {
+    let dir = long_folder(24);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-layout");
+    rt.frame(0.1);
+
+    let columns = rt.state.grid_columns();
+    assert!(columns > 2, "the window fits several tiles across");
+    let to = columns + 2;
+    click(&mut rt, "f:file00.txt");
+    click_with(&mut rt, &format!("f:file{to:02}.txt"), shift());
+    let expected: Vec<String> = (0..=to).map(|i| format!("f:file{i:02}.txt")).collect();
+    assert_eq!(
+        rt.state.selected_ids(),
+        expected,
+        "Shift-click selects the tiles in order, not the box around them"
+    );
+}
+
+#[test]
+fn ctrl_shift_clicking_tiles_adds_a_plain_range() {
+    let dir = long_folder(24);
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+    click(&mut rt, "toggle-layout");
+    rt.frame(0.1);
+
+    let columns = rt.state.grid_columns();
+    assert!(columns > 2, "the window fits several tiles across");
+    let to = columns + 2;
+    click(&mut rt, "f:file01.txt");
+    click_with(&mut rt, "f:file03.txt", shift());
+    click_with(&mut rt, &format!("f:file{to:02}.txt"), control_shift());
+    let expected: Vec<String> = (1..=to).map(|i| format!("f:file{i:02}.txt")).collect();
+    assert_eq!(
+        rt.state.selected_ids(),
+        expected,
+        "Ctrl+Shift+click adds the range in order and keeps what was selected"
+    );
 }
 
 #[test]

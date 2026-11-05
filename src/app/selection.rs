@@ -291,11 +291,6 @@ impl App {
     }
 
     fn range_to(&self, index: usize) -> BTreeSet<String> {
-        if self.is_grid() {
-            let mut range = BTreeSet::new();
-            self.grid_range_to(index, &mut range);
-            return range;
-        }
         let from = self.anchor_index().unwrap_or(index);
         let (a, b) = (from.min(index), from.max(index));
         (a..=b)
