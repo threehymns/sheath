@@ -62,6 +62,9 @@ impl Engine {
             Event::Bell => self.bell.set(true),
             Event::TitleChanged(title) => {
                 self.title = title;
+                // The pane's header is named by the title, so a program that renames its window
+                // renames it too.
+                return true;
             }
             // OSC 52 and the other clipboard protocols, on their way to the app's clipboard.
             Event::ClipboardWrite(write) => {

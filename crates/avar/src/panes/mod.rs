@@ -153,13 +153,21 @@ impl Panes {
         self.zoomed
     }
 
-    /// The tab's name: the folder its focused shell is in, as a block's header says it.
+    /// The tab's name, as a block's header says it.
     pub fn title(&self) -> String {
         self.name(self.focus)
     }
 
-    /// The folder a block's shell is in, as its header names it.
+    /// What a block's header calls it: the title its program set with OSC 0/2, or the folder its
+    /// shell is in when the program has set none.
     pub fn name(&self, id: u64) -> String {
+        if let Some(title) = self
+            .block(id)
+            .map(|block| block.term.frame.title.trim())
+            .filter(|title| !title.is_empty())
+        {
+            return title.to_owned();
+        }
         let dir = self
             .block(id)
             .and_then(|block| block.term.pwd())

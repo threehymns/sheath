@@ -386,6 +386,27 @@ fn a_header_drag_keeps_tracking_after_the_preview_moves_the_panes() {
 }
 
 #[test]
+fn a_block_is_named_by_the_title_its_program_sets() {
+    let mut p = tab();
+    p.blocks[0].term.show_for_test(rune_tty::grid::Frame {
+        title: "npm test".to_owned(),
+        ..Default::default()
+    });
+    assert_eq!(p.name(1), "npm test", "the header follows OSC 0/2");
+
+    // A program that sets no title, or clears the one it set, leaves the header on its folder.
+    p.blocks[0]
+        .term
+        .show_for_test(rune_tty::grid::Frame::default());
+    let folder = std::env::temp_dir();
+    let folder = folder
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| folder.display().to_string());
+    assert_eq!(p.name(1), folder);
+}
+
+#[test]
 fn a_resize_stops_at_the_smallest_share() {
     let mut p = tab();
     p.split(Side::Right);
