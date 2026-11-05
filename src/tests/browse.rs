@@ -343,6 +343,7 @@ fn clicking_a_row_takes_the_keyboard_from_the_search_field() {
 
     rt.state.search.clear();
     rt.state.apply_filter();
+    rt.invalidate();
     rt.frame(0.1);
     click(&mut rt, "f:alpha");
     assert!(
