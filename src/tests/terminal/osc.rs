@@ -140,6 +140,50 @@ fn a_program_s_default_colours_reach_the_rows_already_drawn() {
     );
 }
 
+/// A program's erase paints the pen's background into the cells themselves rather than giving
+/// them a style: that is how an editor like nvim fills its base colour, and the blank cells it
+/// leaves behind are covered by it. The pane reads a cell's background whether or not the cell
+/// carries a style, so an erased area draws the program's colour instead of the pane's own.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_program_s_erased_background_reaches_the_cells() {
+    use rune_tty::engine::Engine;
+    let dir = tempfile::tempdir().unwrap();
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    let mut engine = Engine::spawn(
+        dir.path(),
+        40,
+        10,
+        (8.0, 16.0),
+        2.0,
+        rune_tty::theme(true),
+        wake,
+    )
+    .expect("a shell on a pty");
+    // The pen sets the base colour and `EL` fills the row with it: no character is written, so
+    // the cells carry the colour alone.
+    engine.feed(b"\x1b[2J\x1b[H\x1b[48;2;26;27;38m\x1b[K");
+    let frame = engine.frame();
+    let line = &frame.lines[0];
+    let run = line
+        .runs
+        .first()
+        .expect("the erased row keeps the pen's background");
+    assert_eq!(run.cols, (0, 40), "the erase covers the whole row");
+    assert_eq!(
+        line.text.len(),
+        40,
+        "as spaces, so the strip stays the row's"
+    );
+    let byte = |value: f32| (rune::color::srgb_encode(value) * 255.0).round() as u8;
+    let bg = run.pen.bg.expect("the pen's background");
+    assert_eq!(
+        (byte(bg.r), byte(bg.g), byte(bg.b)),
+        (26, 27, 38),
+        "the colour the program erased with"
+    );
+}
+
 /// The overscan rows above and below a fractionally scrolled viewport are read with the rows, so
 /// a default-colour move has to read them again for that frame: dropped instead, they leave the
 /// strip the fractional offset shows blank until the next one.

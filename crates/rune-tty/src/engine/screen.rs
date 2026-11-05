@@ -260,10 +260,15 @@ fn read_cells(
         }
         let width = if matches!(wide, CellWide::Wide) { 2 } else { 1 };
         let styled = cell.has_styling().unwrap_or(true);
+        // A cell's background does not have to live in its style: an erase paints the pen's
+        // background straight into the cells, which is how a program like an editor fills its
+        // base colour, and those cells report no styling at all. Read for every cell, since
+        // reading it only for the styled ones left them with the pane's own colour until a
+        // character was written over them.
+        let bg = cell.bg_color().ok().flatten().map(color);
         let pen = if styled {
             let style = cell.style().unwrap_or_default();
             let fg = cell.fg_color().ok().flatten().map(color);
-            let bg = cell.bg_color().ok().flatten().map(color);
             let (fg, bg) = if style.inverse {
                 (bg.unwrap_or(default_bg), Some(fg.unwrap_or(default_fg)))
             } else {
@@ -285,6 +290,7 @@ fn read_cells(
         } else {
             Pen {
                 fg: default_fg,
+                bg: bg.filter(|paint| *paint != default_bg),
                 ..Pen::default()
             }
         };
@@ -321,7 +327,7 @@ fn read_cells(
         // A blank cell still belongs to the row when it carries a background or a style: a
         // full-width bar is spaces, and trimming them would cut the bar short. A shape is
         // visible for the same reason, so its column is kept too.
-        if scratch != " " || styled || filled {
+        if scratch != " " || styled || pen.bg.is_some() || filled {
             used = end;
             used_cols = col + width;
         }
