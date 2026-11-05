@@ -5,18 +5,24 @@
 //! This module owns the set rather than the layout — the blocks and their tree live in
 //! [`crate::panes`] — so a tab here is one row of the rail plus the panes behind it, and the
 //! window never has to keep the two in step. The rail is a rune-kit `Sidebar`, so its rows drag
-//! to reorder through the kit's `Reorder`.
+//! to reorder through the kit's `Reorder`; the bar across the top is Avar's own, with its own
+//! drag measured across, because the kit's `Reorder` only moves rows down a list. That drag and
+//! the chips it moves live in [`strip`].
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use rune::{Drag, El, Phase, TextStyle, Tx, Waker, col, row, text};
+use rune::{Drag, El, Phase, TextStyle, Tx, Waker, col};
+use rune_kit::Kit;
 use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
-use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, glyphs};
 use rune_tty::Terminal;
 
 use crate::Window;
 use crate::panes::{Dir, Panes, Side};
+
+mod strip;
+
+use strip::Strip;
 
 /// The tab rail's width, and the range its edge drags within.
 pub const RAIL: f32 = 216.0;
@@ -26,10 +32,6 @@ pub const RAIL_MAX: f32 = 320.0;
 pub const GAP: f32 = 4.0;
 /// Tab rows are a little taller than a sidebar's default: a tab is the window's subject.
 const ROW: f32 = 32.0;
-/// The bar's height when the tabs are horizontal, and the chip that sits in it.
-const STRIP: f32 = 36.0;
-const CHIP: f32 = 26.0;
-
 /// Every tab the window has, in rail order, and the one on screen. Closing the last tab leaves
 /// the set empty, which is how the window knows it has nothing left to show.
 pub struct Tabs {
@@ -38,6 +40,8 @@ pub struct Tabs {
     next: u64,
     /// The rail's drag, owned here because it is the rail's own gesture.
     drag: Reorder,
+    /// The bar's drag, which measures its chips rather than stepping rows.
+    strip: Strip,
 }
 
 /// One tab: a layout of blocks, and the folder it opened in before any shell reported one.
@@ -58,6 +62,7 @@ impl Tabs {
             active: 0,
             next: 2,
             drag: Reorder::new().gap(GAP),
+            strip: Strip::default(),
         }
     }
 
@@ -309,78 +314,6 @@ impl Tabs {
             rail = rail.child(row);
         }
         rail.build(k)
-    }
-
-    /// The tabs as a bar across the top of the tab on screen, for the horizontal layout in the
-    /// settings: one chip per tab, the active one filled, and its close button on the chip.
-    pub fn strip(&self, k: &Kit) -> El {
-        let mut bar = row()
-            .key("tab-strip")
-            .role("tablist")
-            .w_full()
-            .h(STRIP)
-            .px(6.0)
-            .gap(2.0)
-            .center_y()
-            .transition(rune::Transition::none());
-        for (index, tab) in self.rows.iter().enumerate() {
-            let id = tab.id;
-            let selected = index == self.active;
-            let blocks = tab.panes.blocks();
-            let title = tab.panes.title();
-            let mut chip = row()
-                .key(format!("tab-{id}"))
-                .role("tab")
-                .label(title.clone())
-                .h(CHIP)
-                .min_w(0.0)
-                .max_w(200.0)
-                .px(8.0)
-                .gap(6.0)
-                .center_y()
-                .radius(k.radius.sm)
-                .motion(k.motion.control)
-                .child(
-                    text(title)
-                        .key("label")
-                        .font(k.ty.small)
-                        .color(if selected {
-                            k.c.text_base
-                        } else {
-                            k.c.text_muted
-                        })
-                        .truncate()
-                        .grow(1.0)
-                        .shrink(),
-                );
-            // A split tab says how many blocks it holds, as its row in the rail does.
-            if blocks > 1 {
-                chip = chip.child(
-                    text(format!("{blocks}"))
-                        .key("count")
-                        .font(k.ty.small)
-                        .color(k.c.text_faint),
-                );
-            }
-            if selected {
-                chip = chip.fill(k.c.pressed);
-            }
-            bar = bar.child(
-                chip.child(
-                    IconButton::new(&glyphs::CLOSE)
-                        .variant(IconButtonVariant::GhostMuted)
-                        .control_size(ControlSize::Mini)
-                        .label("Close tab")
-                        .help("Close tab")
-                        .on_press(move |s: &mut Window| s.tabs.close(id))
-                        .build(k)
-                        .key(format!("tab-{id}-close")),
-                )
-                .hover(k.c.hover)
-                .on_press(move |s: &mut Window| s.tabs.select(id)),
-            );
-        }
-        bar
     }
 
     /// A tab's layout, ready to draw: the blocks of the tab on screen, split as it was left.
