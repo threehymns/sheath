@@ -13,6 +13,12 @@ use crate::icons;
 /// A tab's layout: panes divided by the gaps between them, each split nested in the last. With
 /// `zoom` set, every split on that block's path gives it the whole share and the other side is
 /// drawn empty, so a zoom is a resize of one pane rather than a swap of the whole tab.
+///
+/// A tab swap fades and slides the tab as one group, and the wrapper in [`crate::frame`] is the
+/// tab's only animated node: an element that mounts on the default fade of its own opens a
+/// compositing layer of its own, so every pane of a split would be another layer the window
+/// composites afresh on each of the animation's frames. Everything below the wrapper mounts at
+/// once and inherits its fade instead.
 pub fn tree(
     p: &Panes,
     tab: u64,
@@ -78,6 +84,7 @@ pub fn tree(
                     .min_w(0.0)
                     .motion(k.motion.disclosure)
             };
+            container = container.transition(rune::Transition::none());
             container = container.on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
                 // The split's own extent along its axis: what a drag divides points by.
                 if let Some(p) = s.tabs.panes_mut(tab) {
@@ -114,6 +121,8 @@ pub fn tree(
                     .min_h(0.0)
                     .child(second)
             };
+            let a = a.transition(rune::Transition::none());
+            let b = b.transition(rune::Transition::none());
             // A zoomed split has no divider: its whole extent goes to the pane on the path.
             container = container.child(a);
             if !zoomed {
@@ -177,6 +186,7 @@ pub fn bare(tab: u64, block: &Block, scale: f32, k: &'static Kit) -> El {
         .h_full()
         .min_h(0.0)
         .clip_rounded(0.0)
+        .transition(rune::Transition::none())
         .on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
             if let Some(p) = s.tabs.panes_mut(tab) {
                 p.set_rect(id, rect);
@@ -197,6 +207,7 @@ pub fn pane(p: &Panes, tab: u64, block: &Block, scale: f32, k: &'static Kit, hea
         .min_h(0.0)
         .motion(k.motion.disclosure)
         .clip_rounded(0.0)
+        .transition(rune::Transition::none())
         .on_layout_tx(move |s: &mut Window, rect, _: &mut Tx| {
             if let Some(p) = s.tabs.panes_mut(tab) {
                 p.set_rect(id, rect);
@@ -315,6 +326,7 @@ fn grid(block: &Block, tab: u64, scale: f32, k: &'static Kit) -> El {
         .grow(1.0)
         .min_h(0.0)
         .clip_rounded(0.0)
+        .transition(rune::Transition::none())
         // The pane's box glides; the grid inside it takes its final size at once, so a glide
         // reflows the shell once and the pane's rect reveals the new width, rather than the
         // columns chasing the animation at every frame.

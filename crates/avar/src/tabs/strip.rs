@@ -204,12 +204,18 @@ impl Tabs {
                             .control_size(ControlSize::Mini)
                             .label("Close tab")
                             .help("Close tab")
-                            .on_press(move |s: &mut Window| s.tabs.close(id))
+                            .on_press_tx(move |s: &mut Window, tx: &mut Tx| {
+                                s.tabs.close(id);
+                                s.tab_switched(tx);
+                            })
                             .build(k)
                             .key(format!("tab-{id}-close")),
                     )
                     .hover(k.c.hover)
-                    .on_press(move |s: &mut Window| s.tabs.select(id)),
+                    .on_press_tx(move |s: &mut Window, tx: &mut Tx| {
+                        s.tabs.select(id);
+                        s.tab_switched(tx);
+                    }),
                     index,
                     k,
                 ),

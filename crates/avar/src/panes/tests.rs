@@ -434,3 +434,85 @@ fn balance_evens_every_split_and_a_closed_block_leaves_its_sibling_the_space() {
         "the keyboard lands on a live block"
     );
 }
+
+/// A chip's tab is the frame it draws. A cut lands the swap and every pane in it at once, while
+/// a fade eases the tab in as one group: the panes below the tab's wrapper carry no fade of
+/// their own, or each of them would open a compositing layer of its own on every frame of the
+/// animation, which is what made a split tab drop frames where a single one did not.
+#[test]
+fn a_cut_swaps_the_whole_tab_in_one_frame() {
+    use crate::settings::TabTransition;
+    use rune::text::TextSystem;
+    use rune::{Env, Runtime};
+
+    // The tab's own wrapper, a split's box, and a pane in it: all three fade as one group.
+    let read = |rt: &Runtime<crate::Window>| {
+        let opacity = |key| rt.presented(key).map(|p| p.1);
+        (
+            opacity("panes-2"),
+            opacity("split-3"),
+            opacity("block-2"),
+            opacity("panes-1"),
+        )
+    };
+
+    for (transition, full) in [(TabTransition::Cut, true), (TabTransition::Fade, false)] {
+        let dir = std::env::temp_dir();
+        let mut window = crate::Window::start();
+        window.tabs = crate::tabs::Tabs::new(dir.clone());
+        window.horizontal = true;
+        window.headers = true;
+        window.top_bar = false;
+        window.palette = None;
+        window.settings = None;
+        window.tab_transition = transition;
+        window.tabs.open(dir);
+        // A tab of three panes, so its split and its second block have keys the first tab's
+        // one block does not share.
+        window.tabs.split(Side::Right);
+        window.tabs.split(Side::Down);
+
+        let text = TextSystem::new(rune_theme_opencode::FONTS, rune_theme_opencode::FAMILIES);
+        let mut rt = Runtime::with_text(
+            window,
+            crate::frame::view,
+            (1180.0, 760.0),
+            Env::new(true, 1.0),
+            text,
+        );
+        rt.state.tabs.select(1);
+        for _ in 0..4 {
+            rt.frame(0.0);
+        }
+        let (x, y) = rt.find("tab-2").expect("the second tab's chip");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(1.0 / 60.0);
+
+        let (wrapper, split, block, old) = read(&rt);
+        let (wrapper, split, block) = (
+            wrapper.expect("the new tab"),
+            split.expect("its split"),
+            block.expect("a pane in it"),
+        );
+        for (key, opacity) in [("split", split), ("block", block)] {
+            assert!(
+                (opacity - wrapper).abs() < 1e-3,
+                "{transition:?}: the {key} is at {opacity}, its tab at {wrapper}: the tab fades \
+                 as one group, not pane by pane"
+            );
+        }
+        if full {
+            assert!(
+                (wrapper - 1.0).abs() < 1e-3,
+                "a cut draws the tab whole: {wrapper}"
+            );
+            assert!(
+                old.is_none(),
+                "the tab left behind is gone in the same frame"
+            );
+        } else {
+            assert!(wrapper < 1.0, "a fade eases the tab in: {wrapper}");
+        }
+    }
+}

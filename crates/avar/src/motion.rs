@@ -5,7 +5,7 @@
 //! change, so the frame only has to ask for the transition a swap runs on. A cut leaves the
 //! timing with nothing to do, which is why picking one closes the timing dropdown.
 
-use rune::Transition;
+use rune::{Transition, Tx};
 
 use crate::Window;
 use crate::config;
@@ -44,6 +44,16 @@ impl Window {
             timing.name(),
             TabTiming::default().name(),
         );
+    }
+
+    /// Marks the commit a tab switch runs in. A cut has no motion to play, so the swap and the
+    /// chrome the window rebuilds around the new tab (a lone shell's tab has none, a split one
+    /// has a frame, a toolbar and dividers) land in the frame it happened. A transition leaves
+    /// that layout to the springs the appearance page picked.
+    pub(crate) fn tab_switched(&self, tx: &mut Tx) {
+        if self.tab_transition == TabTransition::Cut {
+            tx.instant();
+        }
     }
 
     /// The presence transition a tab swap runs on: the chosen effect with the chosen spring, or

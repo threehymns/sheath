@@ -300,8 +300,14 @@ impl Tabs {
                 row = row.detail(format!("{blocks} panes"));
             }
             let row = row
-                .on_select(move |s: &mut Window, _: &mut Tx| s.tabs.select(id))
-                .on_close(move |s: &mut Window, _: &mut Tx| s.tabs.close(id))
+                .on_select(move |s: &mut Window, tx: &mut Tx| {
+                    s.tabs.select(id);
+                    s.tab_switched(tx);
+                })
+                .on_close(move |s: &mut Window, tx: &mut Tx| {
+                    s.tabs.close(id);
+                    s.tab_switched(tx);
+                })
                 .reorder(
                     &self.drag,
                     index,
