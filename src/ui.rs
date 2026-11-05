@@ -61,7 +61,6 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         )
         .toolbar(toolbar(s, k))
         .titlebar_inset(cx.titlebar_inset())
-        .sidebar_header(text("Sheath").font(k.ty.ui_medium).color(k.c.text_muted))
         .build(k);
     let mut layers = Vec::new();
     if let Some(box_rect) = s.marquee_rect() {

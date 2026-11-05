@@ -3,6 +3,15 @@
 version = 4
 
 [[package]]
+name = "accesskit"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e883d1d28c5fd5568c79ed2d2bd48d9f2fd3945c8974ed0f53690ceddb051be"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
 name = "actions"
 version = "0.1.0"
 dependencies = [
@@ -3581,8 +3590,9 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=b1457ab0d1f18cd77fa49da83155b280af2830f8#b1457ab0d1f18cd77fa49da83155b280af2830f8"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
 dependencies = [
+ "accesskit",
  "arboard",
  "blake3",
  "block2 0.5.1",
@@ -3617,6 +3627,8 @@ dependencies = [
  "resvg",
  "rune-motion",
  "rune-staging",
+ "rune-taffy",
+ "rustc-demangle",
  "rustc-hash 2.1.3",
  "serde",
  "serde_json",
@@ -3648,7 +3660,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=b1457ab0d1f18cd77fa49da83155b280af2830f8#b1457ab0d1f18cd77fa49da83155b280af2830f8"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
 dependencies = [
  "rune",
  "rune-motion",
@@ -3658,20 +3670,28 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/rune?rev=b1457ab0d1f18cd77fa49da83155b280af2830f8#b1457ab0d1f18cd77fa49da83155b280af2830f8"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
 
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=b1457ab0d1f18cd77fa49da83155b280af2830f8#b1457ab0d1f18cd77fa49da83155b280af2830f8"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
 dependencies = [
  "wgpu",
 ]
 
 [[package]]
+name = "rune-taffy"
+version = "0.0.1"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+dependencies = [
+ "taffy",
+]
+
+[[package]]
 name = "rune-theme-opencode"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=b1457ab0d1f18cd77fa49da83155b280af2830f8#b1457ab0d1f18cd77fa49da83155b280af2830f8"
+source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
 dependencies = [
  "rune",
  "rune-kit",
@@ -3697,6 +3717,12 @@ name = "rust_h265"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dde60f5842f27ed06f1d84844cacd93d1a159f606365b30a5594c771e6b4eb17"
+
+[[package]]
+name = "rustc-demangle"
+version = "0.1.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb"
 
 [[package]]
 name = "rustc-hash"

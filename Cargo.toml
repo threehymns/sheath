@@ -33,9 +33,9 @@ chrome = { path = "crates/chrome", version = "0.1.0" }
 scroll = { path = "crates/scroll", version = "0.1.0" }
 # Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends. One pin
 # for the whole workspace, so the pane and the app are never built against two different Runes.
-rune = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8", default-features = false }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
-rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "b1457ab0d1f18cd77fa49da83155b280af2830f8" }
+rune = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db", default-features = false }
+rune-kit = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db" }
+rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db" }
 # The config files the app and its codecs read and write.
 kdl = { version = "6.7.1", default-features = false }
 
