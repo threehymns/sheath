@@ -218,7 +218,9 @@ fn grid_tile_body(s: &App, index: usize, k: &'static Kit) -> El {
                 })
                 .align(Align::Center)
                 .w_full()
-                .wrap()
+                // A name with no spaces in it has no soft break to wrap at, so plain
+                // `.wrap()` lets the word run past the tile and over its neighbours.
+                .wrap_anywhere()
                 .max_lines(2),
         );
     if s.is_cut(&entry.path) {
