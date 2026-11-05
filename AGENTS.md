@@ -1,5 +1,7 @@
 Use `cargo fmt`, `cargo check`, and `cargo clippy` before commit.
 
+`.githooks/pre-commit` blocks a staged file over its token limit; `docs/splitting-files.md` is the remedy.
+
 Conventional commit each logical change unless instructed otherwise. 
 
 End the commit description with the public model name and harness that made the changes, for example Created with <model> in <harness>. Include subagent models that wrote part of the change. Use the model name the harness reports. If model identity is unavailable, name the harness without guessing a model.
