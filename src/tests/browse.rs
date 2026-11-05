@@ -270,6 +270,100 @@ fn typing_a_name_jumps_to_the_row() {
 }
 
 #[test]
+fn typing_a_name_still_jumps_to_the_row_after_a_click() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    click(&mut rt, "f:alpha");
+    assert_eq!(rt.state.selected.as_deref(), Some("f:alpha"));
+    rt.state.clear_typeahead();
+
+    rt.key(KeyEvent {
+        key: Key::Text("n".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert_eq!(
+        rt.state.selected.as_deref(),
+        Some("f:notes.md"),
+        "the clicked list still takes letters as names to jump to"
+    );
+}
+
+#[test]
+fn the_search_shortcut_works_after_a_click() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    click(&mut rt, "f:alpha");
+    rt.key(KeyEvent {
+        key: Key::Text("/".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert!(rt.state.search.focused, "the chord still focuses the field");
+
+    rt.key(KeyEvent {
+        key: Key::Text("notes".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    rt.state.settle_find();
+    assert_eq!(rt.state.search.text, "notes", "the letters are the field's");
+    assert_eq!(names(&rt.state), ["notes.md"], "the field filters the list");
+
+    rt.key(KeyEvent {
+        key: Key::Escape,
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert!(
+        rt.state.search.text.is_empty(),
+        "Escape clears the field it focused"
+    );
+    assert_eq!(rt.state.visible.len(), 4, "the folder's rows are back");
+}
+
+#[test]
+fn clicking_a_row_takes_the_keyboard_from_the_search_field() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    click(&mut rt, "search");
+    assert!(rt.state.search.focused);
+    rt.key(KeyEvent {
+        key: Key::Text("n".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert_eq!(rt.state.search.text, "n");
+
+    rt.state.search.clear();
+    rt.state.apply_filter();
+    rt.frame(0.1);
+    click(&mut rt, "f:alpha");
+    assert!(
+        !rt.state.search.focused,
+        "the list takes the keyboard when it is clicked"
+    );
+
+    rt.state.clear_typeahead();
+    rt.key(KeyEvent {
+        key: Key::Text("n".into()),
+        mods: Mods::default(),
+    });
+    rt.frame(0.1);
+    assert_eq!(
+        rt.state.search.text, "",
+        "the letter no longer reaches the field"
+    );
+    assert_eq!(rt.state.selected.as_deref(), Some("f:notes.md"));
+}
+
+#[test]
 fn sorting_by_kind_groups_the_same_kinds_together() {
     let dir = fixture();
     let mut app = app(&dir);

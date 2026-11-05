@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, FILES};
 use crate::keybinds::Action;
 use actions_ui::PaletteHost;
 use rune::{Key, KeyEvent, Tx};
@@ -77,7 +77,11 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         }
     }
     let mods = event.mods;
-    let typing = tx.focused().is_some_and(|key| key.ends_with("input"));
+    // Clicking the file list focuses its viewport, and that viewport has no keys of its own: a
+    // letter typed after a click is still a name to jump to, not another control's input.
+    let focus = tx.focused();
+    let listing = focus == Some(FILES);
+    let typing = focus.is_some_and(|key| key.ends_with("input"));
     let guarded = [
         Action::FocusSearch,
         Action::Rename,
@@ -117,7 +121,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
             return true;
         }
     }
-    if tx.focused().is_some() {
+    if focus.is_some() && !listing {
         return false;
     }
     if matches!(event.key, Key::Delete) && !mods.cmd && !mods.ctrl && !mods.alt {

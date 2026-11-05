@@ -202,6 +202,16 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .leading_icon(k.glyph.search)
         .width(Some(248.0))
         .on_edit(|s: &mut App| &mut s.search)
+        // The focused field sees Escape before the app does, so clearing the query it holds is
+        // this handler's job; with the field already empty, Escape falls through and blurs it.
+        .on_key(|s: &mut App, event: &rune::KeyEvent, _: &mut rune::Tx| {
+            if event.key == rune::Key::Escape && !s.search.text.is_empty() {
+                s.search.clear();
+                s.apply_filter();
+                return true;
+            }
+            false
+        })
         .on_change(|s: &mut App, _| s.apply_filter());
     if s.search.text.is_empty() {
         let caps = s.keybinds.keycaps(Action::FocusSearch);
