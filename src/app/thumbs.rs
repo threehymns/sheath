@@ -6,6 +6,11 @@
 //! thumbnails already on their way — and finished ones are kept, with the pictures on screen
 //! protected from eviction, so coming back to a picture is instant. A picture that will not
 //! decode is remembered as failed, so the row keeps its file icon instead of asking again every frame.
+//!
+//! The pool runs at most four jobs at once; `MAX_PENDING` keeps a dozen offered so those four
+//! stay fed without queuing decodes for pictures a fast scroll has already left behind, and
+//! the request pass only reruns when the window changes, so an idle scroll does no
+//! per-frame work here at all.
 
 use rune::{Image, ImageCache, Latest, Waker};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -22,6 +27,9 @@ const THUMB_PIXELS: u32 = 96;
 /// Kept offscreen renders and failures, beyond the pictures currently on screen. An edited
 /// file's stale entry is evicted by a new one, and the earliest offscreen pictures go first.
 const CACHE_LIMIT: usize = 256;
+/// Jobs offered to the pool at once. The pool runs at most four; a dozen keeps it busy
+/// while bounding the work queued for pictures that scroll out of the window.
+const MAX_PENDING: usize = 12;
 /// Rows around the viewport that decode ahead of the scroll.
 const OVERSCAN: usize = 5;
 /// Rows asked for before the first layout has sized the viewport.
@@ -38,6 +46,12 @@ pub(super) struct Thumbs {
     // The window from the last request pass. These pictures are never evicted while they are
     // on screen, even if there are more of them than the offscreen cache keeps.
     pinned: HashSet<Key>,
+    // The window the queue was built for, so an unchanged window costs nothing per frame.
+    window: Option<(usize, usize, u64)>,
+    // Missing pictures in window order, waiting for a free slot.
+    wanted: VecDeque<Key>,
+    // An answer arrived before the image cache was attached and must be asked for again.
+    retry: bool,
     cache: Option<Arc<ImageCache>>,
     wake: Option<Waker>,
 }
@@ -51,27 +65,52 @@ impl Thumbs {
         self.cache = Some(cache);
     }
 
-    /// Asks for one picture's thumbnail, unless it is already kept, failed, or in flight.
-    pub(super) fn request(&mut self, path: &Path, modified: Option<SystemTime>) {
-        let key = Key {
-            path: path.to_path_buf(),
-            modified,
-            pixels: THUMB_PIXELS,
-        };
-        self.pinned.insert(key.clone());
-        if self.done.contains_key(&key)
-            || self.failed.contains(&key)
-            || self.pending.contains_key(&key)
-            || self.waiting.contains(&key)
-        {
-            return;
+    /// Starts a request pass for one window's pictures: pins them against eviction, drops
+    /// pending jobs for pictures that left the window, and queues the missing ones in order.
+    pub(super) fn queue(&mut self, pictures: &[Key], sig: (usize, usize, u64)) {
+        self.window = Some(sig);
+        self.retry = false;
+        self.pinned = pictures.iter().cloned().collect();
+        self.pending.retain(|key, _| self.pinned.contains(key));
+        self.waiting.retain(|key| self.pinned.contains(key));
+        self.wanted = pictures
+            .iter()
+            .filter(|key| {
+                !self.done.contains_key(key)
+                    && !self.failed.contains(key)
+                    && !self.pending.contains_key(key)
+                    && !self.waiting.contains(key)
+            })
+            .cloned()
+            .collect();
+        self.promote();
+    }
+
+    /// Fills the pool from the queue, up to `MAX_PENDING` in flight.
+    fn promote(&mut self) {
+        while self.pending.len() + self.waiting.len() < MAX_PENDING {
+            let Some(key) = self.wanted.pop_front() else {
+                break;
+            };
+            if self.done.contains_key(&key)
+                || self.failed.contains(&key)
+                || self.pending.contains_key(&key)
+                || self.waiting.contains(&key)
+            {
+                continue;
+            }
+            self.start(&key);
         }
+    }
+
+    /// Decodes one picture on the pool, unless it is already kept, failed, or in flight.
+    fn start(&mut self, key: &Key) {
         // A shared folder's bytes only reach the page through the browser, which decodes the
         // picture itself; `take` lands its pixels once they arrive. Its answer waits on its
         // own queue, so it cannot steal the inspector's.
         #[cfg(target_arch = "wasm32")]
-        if crate::vfs::request_thumbnail(path, modified, THUMB_PIXELS) {
-            self.waiting.insert(key);
+        if crate::vfs::request_thumbnail(&key.path, key.modified, THUMB_PIXELS) {
+            self.waiting.insert(key.clone());
             return;
         }
         let cache = self.cache.clone();
@@ -79,6 +118,7 @@ impl Thumbs {
             Some(wake) => Latest::new(wake.clone()),
             None => Latest::default(),
         };
+        let key = key.clone();
         job.request(key.clone(), move |key| {
             let (image, error) =
                 decode_at(&key.path, THUMB_PIXELS).into_image(cache.as_deref(), THUMB_PIXELS);
@@ -91,17 +131,24 @@ impl Thumbs {
     /// `true` when anything landed, which asks for a frame to draw it.
     pub(super) fn take(&mut self) -> bool {
         let mut landed = false;
-        for key in self.pending.keys().cloned().collect::<Vec<_>>() {
-            let Some(finished) = self.pending.get(&key).and_then(Latest::take) else {
-                continue;
-            };
-            self.pending.remove(&key);
-            // Before `setup` there is nowhere to put the pixels; the next frame asks again.
-            if finished.image.is_none() && finished.error.is_none() {
-                continue;
+        for (key, job) in std::mem::take(&mut self.pending) {
+            match job.take() {
+                Some(finished) => {
+                    // Before `setup` there is nowhere to put the pixels; ask again next pass.
+                    if finished.image.is_none() && finished.error.is_none() {
+                        self.retry = true;
+                        continue;
+                    }
+                    self.store(finished.key, finished.image);
+                    landed = true;
+                }
+                // Still running: put the job back for a later frame.
+                None if job.is_pending() => {
+                    self.pending.insert(key, job);
+                }
+                // Settled without an answer. Dropping a `Latest` cancels it, so it stays gone.
+                None => {}
             }
-            self.store(finished.key, finished.image);
-            landed = true;
         }
         #[cfg(target_arch = "wasm32")]
         while let Some(decoded) = crate::vfs::take_thumbnail() {
@@ -121,6 +168,7 @@ impl Thumbs {
             self.store(key, image);
             landed = true;
         }
+        self.promote();
         landed
     }
 
@@ -129,17 +177,15 @@ impl Thumbs {
         self.pending.values().any(Latest::is_pending) || !self.waiting.is_empty()
     }
 
-    /// Marks the next request pass's window as the pictures to protect from eviction.
-    pub(super) fn clear_pinned(&mut self) {
-        self.pinned.clear();
-    }
-
     /// Drops the in-flight jobs, keeping the kept pictures. The browser's own answers are
     /// left where they are; if one lands later it is kept, and the cache stays bounded.
     pub(super) fn clear_waiting(&mut self) {
         self.pending.clear();
         self.waiting.clear();
         self.pinned.clear();
+        self.window = None;
+        self.wanted.clear();
+        self.retry = false;
     }
 
     /// The kept thumbnail for a picture, ready to draw now.
@@ -219,22 +265,28 @@ impl App {
         }
     }
 
-    /// Queues the thumbnails the window shows and the rows it is scrolling into.
+    /// Queues the thumbnails the window shows and the rows it is scrolling into, once per
+    /// window. An unchanged window is skipped entirely, so an idle scroll does no work here.
     pub(super) fn request_thumbs(&mut self) {
         if !self.config.show_thumbnails {
             return;
         }
-        self.thumbs.clear_pinned();
         let (first, last) = self.thumb_window();
-        let pictures: Vec<(std::path::PathBuf, Option<SystemTime>)> = (first..last)
+        let sig = (first, last, self.keys_version());
+        if self.thumbs.window == Some(sig) && !self.thumbs.retry {
+            return;
+        }
+        let pictures: Vec<Key> = (first..last)
             .filter_map(|i| self.visible.get(i))
             .map(|&i| &self.entries[i])
             .filter(|entry| entry.is_image)
-            .map(|entry| (entry.path.clone(), entry.modified))
+            .map(|entry| Key {
+                path: entry.path.clone(),
+                modified: entry.modified,
+                pixels: THUMB_PIXELS,
+            })
             .collect();
-        for (path, modified) in &pictures {
-            self.thumbs.request(path, *modified);
-        }
+        self.thumbs.queue(&pictures, sig);
     }
 
     /// A finished thumbnail, ready for a frame to draw. The window never wakes for a handle
@@ -279,15 +331,24 @@ impl App {
     pub(crate) fn settle_thumbs(&mut self) -> bool {
         let mut landed = false;
         let until = std::time::Instant::now() + std::time::Duration::from_millis(2000);
-        for _ in 0..16 {
+        let mut retries = 0;
+        for _ in 0..128 {
             self.request_thumbs();
             while self.thumbs.is_pending() && std::time::Instant::now() < until {
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
-            if !self.land_thumbs() {
+            let took = self.land_thumbs();
+            landed |= took;
+            if took {
+                retries = 0;
+            } else if self.thumbs.retry {
+                retries += 1;
+                if retries > 8 {
+                    break;
+                }
+            } else {
                 break;
             }
-            landed = true;
         }
         landed
     }

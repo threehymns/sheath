@@ -2,7 +2,8 @@ use crate::app::{
     App, FILES, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
 use rune::{
-    Align, Cursor, El, GrowthSpec, Spring, SurfaceFit, Transition, Tx, col, el, icon, row, text,
+    Align, Cursor, El, GrowthSpec, Spring, SurfaceFit, Transition, Tx, col, el, icon, memo, row,
+    text,
 };
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
@@ -138,6 +139,40 @@ fn grid_row(s: &App, row_index: usize, columns: usize, k: &'static Kit) -> El {
 }
 
 fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
+    let Some(&entry_index) = s.visible.get(index) else {
+        return row().key(format!("grid-tile-{index}"));
+    };
+    let entry = &s.entries[entry_index];
+    // A thumbnail landing only rebuilds its own tile, not the whole grid it shares a row
+    // with: the version names everything the tile paints.
+    let version = TileVersion {
+        name: &entry.name,
+        is_dir: entry.is_dir,
+        is_symlink: entry.is_symlink,
+        thumb: s.config.show_thumbnails && s.has_thumbnail(entry),
+        selected: s.is_selected(&entry.id),
+        drop: s.drop_row() == Some(index),
+        cut: s.is_cut(&entry.path),
+        dark: s.dark.get(),
+    };
+    memo(entry.id.clone(), version, || grid_tile_body(s, index, k))
+}
+
+// What a tile paints: the name, its kind, its selection and drag states, the theme and
+// whether its thumbnail has decoded. A landed picture flips `thumb` for one tile only.
+#[derive(Hash)]
+struct TileVersion<'a> {
+    name: &'a str,
+    is_dir: bool,
+    is_symlink: bool,
+    thumb: bool,
+    selected: bool,
+    drop: bool,
+    cut: bool,
+    dark: bool,
+}
+
+fn grid_tile_body(s: &App, index: usize, k: &'static Kit) -> El {
     let Some(&entry_index) = s.visible.get(index) else {
         return row().key(format!("grid-tile-{index}"));
     };
