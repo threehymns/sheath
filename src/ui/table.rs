@@ -4,7 +4,8 @@ use crate::icons;
 use crate::keybinds::Action;
 use chrono::{DateTime, Local};
 use rune::{
-    Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, row, text,
+    Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, memo, row,
+    text,
 };
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
@@ -246,6 +247,84 @@ fn file_rows(s: &App, k: &'static Kit, style: TableStyle) -> El {
 }
 
 fn file_row(s: &App, i: usize, k: &'static Kit, style: TableStyle, now: DateTime<Local>) -> El {
+    let Some(&index) = s.visible.get(i) else {
+        return row().key(format!("row-{i}"));
+    };
+    let entry = &s.entries[index];
+    let version = row_version(s, entry, i, &style, now);
+    memo(entry.id.clone(), version, || {
+        file_row_body(s, i, k, style, now)
+    })
+}
+
+// What a row paints: the entry's own content, its two row positions (the parity of the stripe,
+// the drag's drop target), the theme and the clock's day. A commit that changed none of these
+// reuses the built row, which is what keeps a re-windowing commit off the visible rows.
+#[derive(Hash)]
+struct RowVersion<'a> {
+    day: (i32, u32),
+    dark: bool,
+    scale: u32,
+    columns: (bool, bool, bool),
+    widths: (u32, u32, u32),
+    stripe: bool,
+    drop: bool,
+    selected: bool,
+    cut: bool,
+    name: &'a str,
+    is_dir: bool,
+    is_symlink: bool,
+    kind: &'a str,
+    size: u64,
+    modified: Option<std::time::SystemTime>,
+    relative: Option<&'a str>,
+    row_height: u32,
+}
+
+fn row_version<'a>(
+    s: &App,
+    entry: &'a crate::app::Entry,
+    i: usize,
+    style: &TableStyle,
+    now: DateTime<Local>,
+) -> RowVersion<'a> {
+    use chrono::Datelike;
+    RowVersion {
+        day: (now.year(), now.ordinal()),
+        dark: s.dark.get(),
+        scale: s.scale.get().to_bits(),
+        columns: (
+            s.config.show_kind,
+            s.config.show_size,
+            s.config.show_modified,
+        ),
+        widths: (
+            s.kind_width.to_bits(),
+            s.size_width.to_bits(),
+            s.date_width.to_bits(),
+        ),
+        stripe: i % 2 == 1,
+        drop: s.drop_row() == Some(i),
+        selected: s.is_selected(&entry.id),
+        cut: s.is_cut(&entry.path),
+        name: &entry.name,
+        is_dir: entry.is_dir,
+        is_symlink: entry.is_symlink,
+        kind: entry.kind(),
+        size: entry.size,
+        modified: entry.modified,
+        relative: entry.relative.as_deref(),
+        row_height: style.row_height.to_bits(),
+    }
+}
+
+fn file_row_body(
+    s: &App,
+    i: usize,
+    k: &'static Kit,
+    style: TableStyle,
+    now: DateTime<Local>,
+) -> El {
     let Some(&index) = s.visible.get(i) else {
         return row().key(format!("row-{i}"));
     };
