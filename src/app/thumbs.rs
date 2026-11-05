@@ -7,10 +7,13 @@
 //! protected from eviction, so coming back to a picture is instant. A picture that will not
 //! decode is remembered as failed, so the row keeps its file icon instead of asking again every frame.
 //!
-//! The pool runs at most four jobs at once; `MAX_PENDING` keeps a dozen offered so those four
-//! stay fed without queuing decodes for pictures a fast scroll has already left behind, and
-//! the request pass only reruns when the window changes, so an idle scroll does no
-//! per-frame work here at all.
+//! Every picture in the window is offered at once, so the pool's four workers always have the
+//! next decode ready instead of waiting for the next frame to hand them one. Offering only a
+//! few made a folder load at the frame rate rather than at the decoders' rate: each landing
+//! had to wake the window just to start more work. The window is already small, and a scroll
+//! that leaves it drops the jobs it no longer wants, so the queue cannot grow into stale work.
+//! The request pass only reruns when the window changes, so an idle scroll does no per-frame
+//! work here at all.
 
 use rune::{Image, ImageCache, Latest, Waker};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -27,9 +30,6 @@ const THUMB_PIXELS: u32 = 96;
 /// Kept offscreen renders and failures, beyond the pictures currently on screen. An edited
 /// file's stale entry is evicted by a new one, and the earliest offscreen pictures go first.
 const CACHE_LIMIT: usize = 256;
-/// Jobs offered to the pool at once. The pool runs at most four; a dozen keeps it busy
-/// while bounding the work queued for pictures that scroll out of the window.
-const MAX_PENDING: usize = 12;
 /// Rows around the viewport that decode ahead of the scroll.
 const OVERSCAN: usize = 5;
 /// Rows asked for before the first layout has sized the viewport.
@@ -48,8 +48,6 @@ pub(super) struct Thumbs {
     pinned: HashSet<Key>,
     // The window the queue was built for, so an unchanged window costs nothing per frame.
     window: Option<(usize, usize, u64)>,
-    // Missing pictures in window order, waiting for a free slot.
-    wanted: VecDeque<Key>,
     // An answer arrived before the image cache was attached and must be asked for again.
     retry: bool,
     cache: Option<Arc<ImageCache>>,
@@ -66,40 +64,25 @@ impl Thumbs {
     }
 
     /// Starts a request pass for one window's pictures: pins them against eviction, drops
-    /// pending jobs for pictures that left the window, and queues the missing ones in order.
+    /// pending jobs for pictures that left the window, and starts the missing ones in order.
     pub(super) fn queue(&mut self, pictures: &[Key], sig: (usize, usize, u64)) {
         self.window = Some(sig);
         self.retry = false;
         self.pinned = pictures.iter().cloned().collect();
         self.pending.retain(|key, _| self.pinned.contains(key));
         self.waiting.retain(|key| self.pinned.contains(key));
-        self.wanted = pictures
-            .iter()
-            .filter(|key| {
-                !self.done.contains_key(key)
-                    && !self.failed.contains(key)
-                    && !self.pending.contains_key(key)
-                    && !self.waiting.contains(key)
-            })
-            .cloned()
-            .collect();
-        self.promote();
-    }
-
-    /// Fills the pool from the queue, up to `MAX_PENDING` in flight.
-    fn promote(&mut self) {
-        while self.pending.len() + self.waiting.len() < MAX_PENDING {
-            let Some(key) = self.wanted.pop_front() else {
-                break;
-            };
-            if self.done.contains_key(&key)
-                || self.failed.contains(&key)
-                || self.pending.contains_key(&key)
-                || self.waiting.contains(&key)
+        // Every picture in the window is offered, not a batch to be topped up by later
+        // frames: with the pool's queue kept full, decoding no longer waits on the window's
+        // frame rate. A picture that scrolls away is dropped from `pending` by the next pass.
+        for key in pictures {
+            if self.done.contains_key(key)
+                || self.failed.contains(key)
+                || self.pending.contains_key(key)
+                || self.waiting.contains(key)
             {
                 continue;
             }
-            self.start(&key);
+            self.start(key);
         }
     }
 
@@ -168,7 +151,6 @@ impl Thumbs {
             self.store(key, image);
             landed = true;
         }
-        self.promote();
         landed
     }
 
@@ -184,7 +166,6 @@ impl Thumbs {
         self.waiting.clear();
         self.pinned.clear();
         self.window = None;
-        self.wanted.clear();
         self.retry = false;
     }
 
@@ -269,6 +250,9 @@ impl App {
     /// window. An unchanged window is skipped entirely, so an idle scroll does no work here.
     pub(super) fn request_thumbs(&mut self) {
         if !self.config.show_thumbnails {
+            // Turning them off drops the work in flight, and forgetting the window makes
+            // turning them back on queue it again even when the visible rows never moved.
+            self.thumbs.clear_waiting();
             return;
         }
         let (first, last) = self.thumb_window();
@@ -292,17 +276,7 @@ impl App {
     /// A finished thumbnail, ready for a frame to draw. The window never wakes for a handle
     /// that still paints nothing: the worker waits for Rune's mips, like a preview.
     pub(super) fn land_thumbs(&mut self) -> bool {
-        if self.thumbs.take() {
-            self.thumbs_version = self.thumbs_version.wrapping_add(1);
-            true
-        } else {
-            false
-        }
-    }
-
-    /// The version the grid keys its rows by, bumped whenever a thumbnail lands.
-    pub fn thumbs_version(&self) -> u64 {
-        self.thumbs_version
+        self.thumbs.take()
     }
 
     /// The row's thumbnail, if one has decoded and is kept.
@@ -351,5 +325,31 @@ impl App {
             }
         }
         landed
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The pool is offered the whole window in one pass. Offering a dozen at a time made each
+    // batch wait for its slowest decode before the next could start, so a folder loaded at the
+    // batch rate rather than at the decoders' rate.
+    #[test]
+    fn the_whole_window_is_offered_at_once() {
+        let pictures: Vec<Key> = (0..40)
+            .map(|i| Key {
+                path: std::env::temp_dir().join(format!("sheath-missing-{i}.png")),
+                modified: None,
+                pixels: THUMB_PIXELS,
+            })
+            .collect();
+        let mut thumbs = Thumbs::default();
+        thumbs.queue(&pictures, (0, pictures.len(), 0));
+        assert_eq!(
+            thumbs.pending.len() + thumbs.waiting.len(),
+            pictures.len(),
+            "every picture in the window is in flight before the first frame"
+        );
     }
 }

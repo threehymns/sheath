@@ -60,7 +60,11 @@ pub(super) fn file_grid(s: &App, k: &'static Kit, cut: bool) -> El {
                     },
                     move |s: &App, r| grid_row(s, r, columns, k),
                 )
-                .virtual_rows_version((s.keys_version(), columns, s.thumbs_version())),
+                // A fetched thumbnail changes one tile, not the row keys: the tile's own
+                // memo version carries it. Bumping this version for every landing would
+                // make Rune compare every row's key to find that none moved, which on a
+                // large folder costs more than drawing the tile that changed.
+                .virtual_rows_version((s.keys_version(), columns)),
         ))
 }
 

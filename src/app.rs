@@ -97,8 +97,6 @@ pub struct App {
     previews: preview::Previewer,
     // The rows' pictures, decoded at thumbnail size and kept per file.
     thumbs: thumbs::Thumbs,
-    // Bumped whenever a thumbnail lands, so the grid keys its rows by it.
-    thumbs_version: u64,
     // Only a folder on demand: walking a tree costs too much to do for every row. The walk runs
     // on a worker, so the frame that asks for it never waits.
     pub folder_size: Option<(u64, usize)>,
@@ -253,7 +251,6 @@ impl App {
             preview_error: None,
             previews: preview::Previewer::default(),
             thumbs: thumbs::Thumbs::default(),
-            thumbs_version: 0,
             folder_size: None,
             sizer: size::Sizer::default(),
             finder: find::Finder::default(),
@@ -401,7 +398,6 @@ impl App {
         self.keybinds = actions_kdl::keybinds::read(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();
         self.inspector.set_open(self.config.inspector);
-        self.thumbs_version = self.thumbs_version.wrapping_add(1);
         self.reload_rules();
         self.reload();
     }

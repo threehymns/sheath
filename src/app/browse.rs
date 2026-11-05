@@ -435,10 +435,6 @@ impl App {
     pub fn toggle_show_thumbnails(&mut self) {
         self.config.show_thumbnails = !self.config.show_thumbnails;
         self.remember(Setting::ShowThumbnails, self.config.show_thumbnails);
-        self.thumbs_version = self.thumbs_version.wrapping_add(1);
-        if !self.config.show_thumbnails {
-            self.thumbs.clear_waiting();
-        }
     }
 
     fn remember(&mut self, changed: Setting, on: bool) {
@@ -448,9 +444,6 @@ impl App {
 
     pub fn reset_setting(&mut self, setting: Setting) {
         self.config.reset(setting);
-        if setting == Setting::ShowThumbnails {
-            self.thumbs_version = self.thumbs_version.wrapping_add(1);
-        }
         let _ = self.store.edit(crate::config::CONFIG, |doc| {
             crate::settings::Settings::clear(doc, setting)
         });
