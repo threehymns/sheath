@@ -4,12 +4,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use kdl::KdlDocument;
+use kdl::{KdlDocument, KdlNode};
 
 /// The file the editor writes, under the platform's config folder for this app.
 pub const KEYBINDS: &str = "keybinds.kdl";
 /// The file the settings window writes, beside it.
 pub const SETTINGS: &str = "settings.kdl";
+/// How a tab gives way to the next one: `cut`, `fade`, `slide-horizontal` or
+/// `slide-vertical`.
+pub const TAB_TRANSITION: &str = "tab-transition";
+/// The spring that tab transition runs on, by its Rune motion token name.
+pub const TAB_TIMING: &str = "tab-transition-timing";
 
 /// What the settings file can name. A setting the file does not name keeps its default, and
 /// saving the default takes the line out instead of writing it down.
@@ -136,6 +141,23 @@ impl Store {
         });
     }
 
+    /// A choice the file names, such as `tab-transition "fade"`, or `None` when it leaves the
+    /// setting at its default.
+    pub fn choice(&self, name: &str) -> Option<String> {
+        choice_in(self.doc()?, name)
+    }
+
+    /// Writes one choice, taking the line out when it is back at its default.
+    pub fn set_choice(&mut self, name: &str, value: &str, default: &str) {
+        self.edit(|doc| {
+            if value == default {
+                remove_setting(doc, name);
+            } else {
+                write_setting(doc, name, value);
+            }
+        });
+    }
+
     /// Changes the document and writes it back through a temporary file, keeping the last
     /// failure for the editor's footer.
     pub fn edit(&mut self, change: impl FnOnce(&mut KdlDocument)) {
@@ -162,5 +184,107 @@ impl Store {
         let temporary = self.path.with_extension("kdl.tmp");
         fs::write(&temporary, text).map_err(|error| error.to_string())?;
         fs::rename(&temporary, &self.path).map_err(|error| error.to_string())
+    }
+}
+
+/// The value of one string setting in a parsed document.
+fn choice_in(doc: &KdlDocument, name: &str) -> Option<String> {
+    doc.nodes()
+        .iter()
+        .find(|node| node.name().value() == "settings")?
+        .children()?
+        .nodes()
+        .iter()
+        .find(|node| node.name().value() == name)?
+        .get(0)?
+        .as_string()
+        .map(str::to_owned)
+}
+
+/// Rewrites one child of the `settings` block, leaving the rest of the document as it was.
+fn write_setting(doc: &mut KdlDocument, name: &str, value: &str) {
+    let body = format!("{name} {value:?}");
+    let Some(index) = doc
+        .nodes()
+        .iter()
+        .position(|node| node.name().value() == "settings")
+    else {
+        let text = format!("\nsettings {{\n    {body}\n}}\n");
+        if let Ok(parsed) = text.parse::<KdlDocument>()
+            && let Some(node) = parsed.nodes().first()
+        {
+            doc.nodes_mut().push(node.clone());
+        }
+        return;
+    };
+    if doc.nodes()[index].children().is_none() {
+        let text = format!("settings {{\n    {body}\n}}\n");
+        if let Ok(parsed) = text.parse::<KdlDocument>() {
+            doc.nodes_mut()[index] = parsed.nodes()[0].clone();
+        }
+        return;
+    }
+    let Ok(node) = body.parse::<KdlNode>() else {
+        return;
+    };
+    let Some(children) = doc.nodes_mut()[index].children_mut().as_mut() else {
+        return;
+    };
+    if let Some(slot) = children
+        .nodes_mut()
+        .iter_mut()
+        .find(|child| child.name().value() == name)
+    {
+        *slot = node;
+    } else {
+        children.nodes_mut().push(node);
+    }
+}
+
+fn remove_setting(doc: &mut KdlDocument, name: &str) {
+    let Some(settings) = doc
+        .nodes_mut()
+        .iter_mut()
+        .find(|node| node.name().value() == "settings")
+    else {
+        return;
+    };
+    if let Some(children) = settings.children_mut().as_mut() {
+        children
+            .nodes_mut()
+            .retain(|child| child.name().value() != name);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_choice_writes_reads_and_removes_beside_the_switches() {
+        let mut doc: KdlDocument = "settings {\n    // keep me\n    pane-headers #true\n}\n"
+            .parse()
+            .unwrap();
+        write_setting(&mut doc, TAB_TRANSITION, "fade");
+        write_setting(&mut doc, TAB_TIMING, "spring");
+        assert_eq!(choice_in(&doc, TAB_TRANSITION).as_deref(), Some("fade"));
+        assert_eq!(choice_in(&doc, TAB_TIMING).as_deref(), Some("spring"));
+        assert_eq!(choice_in(&doc, "pane-headers"), None);
+
+        remove_setting(&mut doc, TAB_TRANSITION);
+        assert_eq!(choice_in(&doc, TAB_TRANSITION), None);
+        assert_eq!(choice_in(&doc, TAB_TIMING).as_deref(), Some("spring"));
+        assert!(doc.to_string().contains("pane-headers #true"));
+    }
+
+    #[test]
+    fn a_choice_makes_the_settings_block_when_the_file_has_none() {
+        let mut doc: KdlDocument = "keybinds {\n    new-tab \"ctrl+t\"\n}\n".parse().unwrap();
+        write_setting(&mut doc, TAB_TRANSITION, "slide-vertical");
+        assert_eq!(
+            choice_in(&doc, TAB_TRANSITION).as_deref(),
+            Some("slide-vertical")
+        );
+        assert!(doc.to_string().contains("keybinds"));
     }
 }

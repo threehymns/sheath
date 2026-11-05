@@ -32,10 +32,16 @@ pub fn view(s: &Window, cx: &mut Cx<Window>) -> El {
     // The tab on screen is one layout of blocks: its own tree, its own shells. A tab with no
     // blocks left (the frame between the last shell ending and the window closing) draws
     // nothing rather than reading a layout that is gone.
+    // The tab on screen is keyed by its id, so swapping to another one is an insertion and a
+    // removal: the frame gives that change the transition the settings ask for.
     let main = s
         .tabs
         .active_id()
-        .map(|id| s.tabs.layout(id, s.scale.get(), k, s.pane_headers()))
+        .map(|id| {
+            s.tabs
+                .layout(id, s.scale.get(), k, s.pane_headers())
+                .transition(s.tab_swap())
+        })
         .unwrap_or_else(rune::el);
     // A window showing a single shell is the terminal and nothing else: no title bar band, no
     // header or card around the grid, no rail, no toolbar. The chrome arrives with the second

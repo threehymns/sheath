@@ -16,6 +16,7 @@ mod action;
 mod config;
 mod frame;
 mod icons;
+mod motion;
 mod panes;
 mod settings;
 mod tabs;
@@ -33,7 +34,7 @@ use rune::{El, Key, KeyEvent, PhysicalInput, Shortcut, ShortcutError, Tx, Waker,
 use rune_kit::shell::PaneState;
 use rune_theme_opencode as theme;
 use scroll::Host;
-use settings::SettingsTab;
+use settings::{Pick, SettingsTab, TabTiming, TabTransition};
 use tabs::Tabs;
 
 /// The chords that reach the window while a shell has the keyboard. Everything else is typed:
@@ -100,8 +101,13 @@ pub struct Window {
     headers: bool,
     /// Whether the window draws its own slim top bar above the panes.
     top_bar: bool,
+    /// How a tab gives way to the next one, and the spring that transition runs on.
+    tab_transition: TabTransition,
+    tab_timing: TabTiming,
     /// The settings window, with the tab it was left on, while it is up.
     settings: Option<SettingsTab>,
+    /// The appearance page's open dropdown, if one is.
+    pick: Option<Pick>,
     /// The scroll areas the palette and the editor build, and the physics for them.
     areas: scroll::Areas,
     /// Frames drawn since the last report, the bytes parsed by then, and when that report was
@@ -137,6 +143,14 @@ impl Window {
         let top_bar = prefs
             .setting(config::Setting::TopBar)
             .unwrap_or_else(|| config::Setting::TopBar.default_on());
+        let tab_transition = prefs
+            .choice(config::TAB_TRANSITION)
+            .and_then(|name| TabTransition::from_name(&name))
+            .unwrap_or_default();
+        let tab_timing = prefs
+            .choice(config::TAB_TIMING)
+            .and_then(|name| TabTiming::from_name(&name))
+            .unwrap_or_default();
         Window {
             tabs: Tabs::new(start_dir()),
             rail: PaneState::new(tabs::RAIL).range(tabs::RAIL_MIN, tabs::RAIL_MAX),
@@ -151,7 +165,10 @@ impl Window {
             horizontal,
             headers,
             top_bar,
+            tab_transition,
+            tab_timing,
             settings: None,
+            pick: None,
             areas: scroll::Areas::default(),
             frames: 0,
             parsed: 0,
@@ -263,14 +280,17 @@ impl Window {
         if self.settings.is_none() {
             self.settings = Some(SettingsTab::Appearance);
         }
+        self.pick = None;
     }
 
     fn open_tab(&mut self, tab: SettingsTab) {
         self.settings = Some(tab);
+        self.pick = None;
     }
 
     fn close_settings(&mut self) {
         self.settings = None;
+        self.pick = None;
     }
 
     fn set_binding(
