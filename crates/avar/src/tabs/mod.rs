@@ -419,3 +419,28 @@ impl Tabs {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The side a slide comes in from is the side the tab sits on: opening one puts it after
+    /// the tab on screen, picking the first moves back up the rail, and cycling follows the
+    /// direction of the key.
+    #[test]
+    fn a_switch_says_which_way_along_the_rail_it_went() {
+        let dir = std::env::temp_dir();
+        let mut tabs = Tabs::new(dir.clone());
+        tabs.open(dir);
+        assert!(
+            tabs.switched_forward(),
+            "a new tab opens at the end of the rail"
+        );
+        tabs.select(tabs.rows[0].id);
+        assert!(!tabs.switched_forward(), "the first tab sits before it");
+        tabs.cycle(1);
+        assert!(tabs.switched_forward(), "the next tab is further along");
+        tabs.cycle(-1);
+        assert!(!tabs.switched_forward(), "the previous one is back up");
+    }
+}
