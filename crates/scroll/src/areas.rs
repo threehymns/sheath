@@ -16,6 +16,15 @@ pub struct Areas {
     shown: RefCell<BTreeSet<&'static str>>,
 }
 
+/// What one area's frame did. `redraw`: the view must rebuild (the overshoot a pull past an
+/// end draws). `moved`: the viewport's offset changed, for the host to weigh against state the
+/// view reads at its position (a drag or marquee tracking the rows).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Progress {
+    pub redraw: bool,
+    pub moved: bool,
+}
+
 impl Areas {
     fn told(&self, key: &'static str) -> Rc<Cell<ScrollPos>> {
         if let Some(cell) = self.told.borrow().get(key) {
@@ -92,15 +101,25 @@ impl Areas {
         state.frame(t)
     }
 
-    /// The drag push and the physics for this frame, applied by the crate. Returns whether the
-    /// frame must be redrawn.
-    pub fn step_key(&mut self, key: &'static str, limits: Limits, push: f32, tx: &mut Tx) -> bool {
+    /// The drag push and the physics for this frame, applied by the crate. [`Progress::redraw`]
+    /// is the only part that rebuilds the view; the rest paints itself shifted.
+    pub fn step_key(
+        &mut self,
+        key: &'static str,
+        limits: Limits,
+        push: f32,
+        tx: &mut Tx,
+    ) -> Progress {
         let state = self.state(key);
         let nudged = state.nudge(push, limits.max);
         let stepped = state.step(limits);
+        let progress = Progress {
+            redraw: nudged.redraw || stepped.redraw,
+            moved: nudged.scroll_to.is_some() || stepped.scroll_to.is_some(),
+        };
         crate::area::apply(key, nudged, tx);
         crate::area::apply(key, stepped, tx);
-        nudged.redraw || stepped.redraw
+        progress
     }
 
     pub fn stop(&mut self) {

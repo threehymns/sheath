@@ -114,8 +114,9 @@ impl App {
             redraw = true;
         }
         if !self.notices.is_empty() {
+            let before = self.notices.len();
             self.notices.retain(|notice| !notice.expired());
-            redraw = true;
+            redraw |= self.notices.len() != before;
         }
         if let Some(edit) = self.rule_edit.as_mut() {
             let dirty = edit.dirty();
@@ -135,6 +136,11 @@ impl App {
                 redraw = true;
             }
         }
+        // A file drag or a marquee in flight tracks the rows it sits over, and its badge, its
+        // insert line and the box all read the list's position, so a frame that slid the rows
+        // must rebuild. Everything else paints the moved viewport itself and skips the view.
+        let tracking =
+            self.file_drag.is_some() || self.marquee.as_ref().is_some_and(|m| m.dragging);
         for key in self.areas.known() {
             let dt = self.areas.begin_frame(key, t);
             let limits = self.scroll_limits(key);
@@ -143,7 +149,8 @@ impl App {
                 .drag_push(dt)
                 .filter(|(target, _)| *target == key)
                 .map_or(0.0, |(_, points)| points);
-            redraw |= self.areas.step_key(key, limits, push, tx);
+            let out = self.areas.step_key(key, limits, push, tx);
+            redraw |= out.redraw || (tracking && out.moved);
         }
         self.follow_drag();
         redraw |= self.poll_terminal(tx);

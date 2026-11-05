@@ -58,6 +58,10 @@ pub struct Limits {
     pub bounce: bool,
 }
 
+/// What a step asks of the host. `scroll_to` moves the viewport; `redraw` means the view must
+/// rebuild because what it paints changed — only the overshoot a pull past an end draws (a
+/// viewport's offset paints itself shifted, so a plain move never asks for the view); `again`
+/// asks for the wake that keeps the physics ticking.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Step {
     pub scroll_to: Option<f32>,
@@ -155,6 +159,7 @@ impl Scroll {
         self.step = 0.0;
         let max = limits.max;
         let bounce = limits.bounce && max > 0.0;
+        let overshoot_before = self.overshoot;
         let past = self.worst(max);
         let target = current - wheel.dy;
         let (offset, overshoot) = if target < 0.0 && bounce {
@@ -174,8 +179,8 @@ impl Scroll {
         self.request = Some(offset);
         if offset != current {
             out.scroll_to = Some(offset);
-            out.redraw = true;
         }
+        out.redraw = overshoot != overshoot_before;
         if limits.inertia && !wheel.momentum {
             if wheel.precise {
                 // Precise deltas are the fingers' own speed, which `push` turns into a coast on
@@ -202,7 +207,6 @@ impl Scroll {
         let mut out = Step::NONE;
         if (next - current).abs() > 0.01 {
             out.scroll_to = Some(next);
-            out.redraw = true;
             out.again = true;
         }
         out
@@ -273,7 +277,6 @@ impl Scroll {
                 out.scroll_to = Some(next);
                 self.request = Some(next);
                 self.step = next - current;
-                out.redraw = true;
             }
             let at_end =
                 (next <= 0.0 && self.velocity < 0.0) || (next >= max && self.velocity > 0.0);

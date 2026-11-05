@@ -285,7 +285,7 @@ pub fn poll(s: &mut Window, t: f64, tx: &mut Tx) -> bool {
     for key in s.areas.known() {
         s.areas.begin_frame(key, t);
         let limits = s.scroll_limits(key);
-        redraw |= s.areas.step_key(key, limits, 0.0, tx);
+        redraw |= s.areas.step_key(key, limits, 0.0, tx).redraw;
     }
     s.frames += 1;
     let elapsed = s.logged.elapsed();

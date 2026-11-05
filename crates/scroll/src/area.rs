@@ -29,6 +29,11 @@ pub fn area<H: Host + 'static>(s: &H, key: &'static str, view: El, content: El) 
             let limits = s.scroll_limits(key);
             match s.areas_mut().wheel(key, &wheel, limits) {
                 Some(step) => {
+                    // The handler keeps bookkeeping only; a moved viewport paints itself shifted,
+                    // so only a step that changed the overshoot rebuilds the view.
+                    if !step.redraw {
+                        tx.live_only();
+                    }
                     apply(key, step, tx);
                     true
                 }
