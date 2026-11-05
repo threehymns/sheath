@@ -10,6 +10,7 @@ mod recorder;
 mod rules;
 mod session;
 mod settings;
+mod system_icons;
 mod ui;
 mod vfs;
 mod views;

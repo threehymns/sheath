@@ -12,7 +12,7 @@ pub(crate) mod terminal;
 
 use std::path::Component;
 
-use rune::{Cx, El, Icon, col, el, icon, row, text};
+use rune::{Cx, El, Icon, SurfaceFit, col, el, icon, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, SplitView, Toolbar};
 use rune_theme_opencode as theme;
 
@@ -23,6 +23,24 @@ use crate::keybinds::Action;
 use dialogs::{empty_menu, header_menu, place_menu, row_menu, sheet_layer};
 use settings::settings_layer;
 use table::{empty_state, file_table};
+
+/// A row's or tile's picture: the desktop's own icon when the setting is on and its theme has
+/// one, otherwise the built-in glyph.
+pub(super) fn entry_icon(
+    s: &App,
+    entry: &crate::app::Entry,
+    glyph: &'static Icon,
+    size: f32,
+    color: rune::Color,
+) -> El {
+    match s.system_icon(entry) {
+        Some(image) => el()
+            .w(size)
+            .h(size)
+            .pixels_fit(image.pixels(), SurfaceFit::Fill),
+        None => icon(glyph, size).color(color),
+    }
+}
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
     let k = theme::kit(cx.system_dark());

@@ -437,6 +437,12 @@ impl App {
         self.remember(Setting::ShowThumbnails, self.config.show_thumbnails);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn toggle_system_icons(&mut self) {
+        self.config.system_icons = !self.config.system_icons;
+        self.remember(Setting::SystemIcons, self.config.system_icons);
+    }
+
     fn remember(&mut self, changed: Setting, on: bool) {
         self.config.remember(changed, on);
         self.save_setting(changed);

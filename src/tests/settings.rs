@@ -1,7 +1,7 @@
 use super::helpers::*;
 use crate::app::{App, SettingsTab};
 use crate::keybinds::{Action, Keybinds};
-use crate::settings::Settings;
+use crate::settings::{Setting, Settings};
 use rune::{Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode};
 use std::fs;
 
@@ -500,4 +500,31 @@ fn the_column_switches_take_a_column_out_of_the_list() {
 
     let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(config.contains("show-size #false"), "{config}");
+}
+
+#[test]
+fn the_system_icon_setting_is_off_by_default_and_saves_its_switch() {
+    assert!(
+        !Settings::defaults().system_icons,
+        "the built-in glyphs start"
+    );
+    assert!(!Setting::SystemIcons.default_on());
+    assert_eq!(Setting::SystemIcons.name(), "system-icons");
+    assert_eq!(Setting::SystemIcons.id(), "system-icons");
+
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "setting-system-icons");
+    assert!(
+        rt.state.config.system_icons,
+        "the switch asks for the theme"
+    );
+
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("system-icons #true"), "{config}");
+    assert!(saved_settings(&dir).system_icons);
 }

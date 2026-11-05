@@ -10,6 +10,8 @@ use rune::{
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, SortDir, TableStyle, file_icon, glyphs};
 use std::borrow::Cow;
 
+use super::entry_icon;
+
 // Header height, shared by the grid's sort toolbar so both layouts start items at the same y.
 pub(super) const HEADER_HEIGHT: f32 = 32.0;
 
@@ -269,7 +271,7 @@ struct RowVersion<'a> {
     day: (i32, u32),
     dark: bool,
     scale: u32,
-    columns: (bool, bool, bool, bool),
+    columns: (bool, bool, bool, bool, bool),
     widths: (u32, u32, u32),
     stripe: bool,
     drop: bool,
@@ -303,6 +305,7 @@ fn row_version<'a>(
             s.config.show_size,
             s.config.show_modified,
             s.config.show_thumbnails,
+            s.config.system_icons,
         ),
         widths: (
             s.kind_width.to_bits(),
@@ -460,7 +463,7 @@ fn leading(
             .w(THUMB_BOX)
             .h(THUMB_BOX)
             .center()
-            .child(icon(glyph, 16.0).color(icon_color))
+            .child(entry_icon(s, entry, glyph, 16.0, icon_color))
     }
 }
 

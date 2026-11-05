@@ -2,12 +2,12 @@ use crate::app::{
     App, FILES, GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
 use rune::{
-    Align, Cursor, El, GrowthSpec, Spring, SurfaceFit, Transition, Tx, col, el, icon, memo, row,
-    text,
+    Align, Cursor, El, GrowthSpec, Spring, SurfaceFit, Transition, Tx, col, el, memo, row, text,
 };
 use rune_kit::{Kit, SortDir, file_icon, glyphs};
 use std::borrow::Cow;
 
+use super::entry_icon;
 use super::table::{HEADER_HEIGHT, browser_style, mount, sort_label};
 
 const SORT_BUTTON_HEIGHT: f32 = 20.0;
@@ -154,6 +154,7 @@ fn grid_tile(s: &App, index: usize, k: &'static Kit) -> El {
         is_dir: entry.is_dir,
         is_symlink: entry.is_symlink,
         thumb: s.config.show_thumbnails && s.has_thumbnail(entry),
+        icons: s.config.system_icons,
         selected: s.is_selected(&entry.id),
         drop: s.drop_row() == Some(index),
         cut: s.is_cut(&entry.path),
@@ -170,6 +171,7 @@ struct TileVersion<'a> {
     is_dir: bool,
     is_symlink: bool,
     thumb: bool,
+    icons: bool,
     selected: bool,
     drop: bool,
     cut: bool,
@@ -261,6 +263,6 @@ fn tile_picture(
             .w(THUMB_BOX)
             .h(THUMB_BOX)
             .center()
-            .child(icon(glyph, 34.0).color(icon_color))
+            .child(entry_icon(s, entry, glyph, 34.0, icon_color))
     }
 }

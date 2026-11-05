@@ -16,10 +16,11 @@ pub enum Setting {
     ScrollInertia,
     Overscroll,
     ShowThumbnails,
+    SystemIcons,
 }
 
 impl Setting {
-    pub const ALL: [Setting; 12] = [
+    pub const ALL: [Setting; 13] = [
         Setting::ShowHidden,
         Setting::Inspector,
         Setting::GridLayout,
@@ -32,6 +33,7 @@ impl Setting {
         Setting::ScrollInertia,
         Setting::Overscroll,
         Setting::ShowThumbnails,
+        Setting::SystemIcons,
     ];
 
     pub fn name(self) -> &'static str {
@@ -48,6 +50,7 @@ impl Setting {
             Setting::ScrollInertia => "scroll-inertia",
             Setting::Overscroll => "overscroll",
             Setting::ShowThumbnails => "show-thumbnails",
+            Setting::SystemIcons => "system-icons",
         }
     }
 
@@ -65,12 +68,13 @@ impl Setting {
             Setting::ScrollInertia => "inertia",
             Setting::Overscroll => "overscroll",
             Setting::ShowThumbnails => "thumbnails",
+            Setting::SystemIcons => "system-icons",
         }
     }
 
     pub fn default_on(self) -> bool {
         match self {
-            Setting::ShowHidden | Setting::GridLayout => false,
+            Setting::ShowHidden | Setting::GridLayout | Setting::SystemIcons => false,
             Setting::Inspector
             | Setting::FoldersFirst
             | Setting::ConfirmTrash
@@ -98,6 +102,7 @@ impl Setting {
             Setting::ScrollInertia => 9,
             Setting::Overscroll => 10,
             Setting::ShowThumbnails => 11,
+            Setting::SystemIcons => 12,
         }
     }
 
@@ -115,6 +120,7 @@ impl Setting {
             Setting::ScrollInertia => settings.scroll_inertia,
             Setting::Overscroll => settings.overscroll,
             Setting::ShowThumbnails => settings.show_thumbnails,
+            Setting::SystemIcons => settings.system_icons,
         }
     }
 
@@ -132,6 +138,7 @@ impl Setting {
             Setting::ScrollInertia => settings.scroll_inertia = on,
             Setting::Overscroll => settings.overscroll = on,
             Setting::ShowThumbnails => settings.show_thumbnails = on,
+            Setting::SystemIcons => settings.system_icons = on,
         }
     }
 }
@@ -150,7 +157,8 @@ pub struct Settings {
     pub scroll_inertia: bool,
     pub overscroll: bool,
     pub show_thumbnails: bool,
-    present: [bool; 12],
+    pub system_icons: bool,
+    present: [bool; 13],
 }
 
 impl Default for Settings {
@@ -168,7 +176,8 @@ impl Default for Settings {
             scroll_inertia: true,
             overscroll: true,
             show_thumbnails: true,
-            present: [false; 12],
+            system_icons: false,
+            present: [false; 13],
         }
     }
 }

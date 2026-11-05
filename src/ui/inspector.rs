@@ -4,6 +4,8 @@ use crate::keybinds::Action;
 use rune::{Align, El, SurfaceFit, Tx, col, el, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, file_icon, glyphs};
 
+use super::entry_icon;
+
 pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
     if s.selection_len() > 1 {
         return selection_inspector(s, k);
@@ -59,7 +61,7 @@ pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
                 .w_full()
                 .gap(3.0)
                 .center()
-                .child(icon(glyph, 52.0).color(icon_color))
+                .child(entry_icon(s, entry, glyph, 52.0, icon_color))
                 .child(
                     text(entry.name.clone())
                         .font(k.ty.ui_medium)

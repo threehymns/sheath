@@ -57,6 +57,7 @@ use crate::recorder::Recorder;
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::session::Session;
 use crate::settings::Settings;
+use crate::system_icons::SystemIcons;
 use crate::views::Views;
 
 use paths::{default_location, start_location};
@@ -97,6 +98,8 @@ pub struct App {
     previews: preview::Previewer,
     // The rows' pictures, decoded at thumbnail size and kept per file.
     thumbs: thumbs::Thumbs,
+    // The desktop icon theme, read the first time a row asks for a picture from it.
+    system_icons: SystemIcons,
     // Only a folder on demand: walking a tree costs too much to do for every row. The walk runs
     // on a worker, so the frame that asks for it never waits.
     pub folder_size: Option<(u64, usize)>,
@@ -251,6 +254,7 @@ impl App {
             preview_error: None,
             previews: preview::Previewer::default(),
             thumbs: thumbs::Thumbs::default(),
+            system_icons: SystemIcons::default(),
             folder_size: None,
             sizer: size::Sizer::default(),
             finder: find::Finder::default(),
@@ -456,12 +460,21 @@ impl App {
         self.watch.watchers()
     }
 
+    /// The desktop icon theme's picture for a row, when the setting asks for one.
+    pub fn system_icon(&self, entry: &Entry) -> Option<rune::Image> {
+        if !self.config.system_icons {
+            return None;
+        }
+        self.system_icons.image(entry)
+    }
+
     /// The image cache a window gets in `setup`, for tests that run without one.
     #[cfg(test)]
     pub(crate) fn use_images(&mut self, cache: rune::ImageCache) {
         let cache = std::sync::Arc::new(cache);
         self.previews.attach(cache.clone());
-        self.thumbs.attach(cache);
+        self.thumbs.attach(cache.clone());
+        self.system_icons.attach(cache);
     }
 }
 
@@ -473,7 +486,8 @@ pub fn setup(s: &mut App, wake: Waker) {
     let cache = std::sync::Arc::new(rune::ImageCache::new(wake.clone()));
     s.previews.attach(cache.clone());
     s.thumbs.set_waker(wake.clone());
-    s.thumbs.attach(cache);
+    s.thumbs.attach(cache.clone());
+    s.system_icons.attach(cache);
     s.scan.set_waker(wake.clone());
     s.finder.set_waker(wake.clone());
     s.store.watch(wake.clone());

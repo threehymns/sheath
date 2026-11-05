@@ -231,6 +231,7 @@ settings {
     show-size #true
     show-modified #true
     show-thumbnails #true
+    system-icons #false
     scroll-inertia #true
     overscroll #true
 }
@@ -238,12 +239,14 @@ settings {
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
 bar of the header's height, and is also the toolbar's layout button. `show-thumbnails` draws a
-picture for each image, falling back to the file icon. `folders-first` keeps folders
-above files in either layout, `confirm-trash` asks before trashing, and `confirm-delete` asks
+picture for each image, falling back to the file icon. `system-icons` draws folders and files
+with the desktop's own icons.
+`folders-first` keeps folders
+above files, `confirm-trash` asks before trashing, and `confirm-delete` asks
 before deleting something for good. `show-kind`, `show-size` and `show-modified` keep or drop
 those columns. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
-spring back. `grid` is the fallback for a folder no rule and no remembered visit speaks for.
+spring back.
 
 `config.kdl` also holds folder and entry rules, as top-level nodes beside `settings`, in file
 order:

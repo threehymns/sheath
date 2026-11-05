@@ -4371,6 +4371,9 @@ dependencies = [
  "js-sys",
  "kdl",
  "notify 8.2.1",
+ "objc2 0.6.5",
+ "objc2-app-kit 0.3.2",
+ "objc2-foundation 0.3.2",
  "rune",
  "rune-kit",
  "rune-theme-opencode",
@@ -4380,6 +4383,7 @@ dependencies = [
  "trash",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

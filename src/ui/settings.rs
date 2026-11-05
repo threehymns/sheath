@@ -215,6 +215,14 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_show_thumbnails())
         .build(k)
         .key("setting-thumbnails");
+    // A browser tab has no desktop icon theme, so this switch stays out of the web build.
+    #[cfg(not(target_arch = "wasm32"))]
+    let system_icons = Switch::new(s.config.system_icons)
+        .label("System icons")
+        .hide_label()
+        .on_toggle(|s: &mut App| s.toggle_system_icons())
+        .build(k)
+        .key("setting-system-icons");
     let inertia = Switch::new(s.config.scroll_inertia)
         .label("Scroll inertia")
         .hide_label()
@@ -227,41 +235,46 @@ fn general_settings(s: &App, k: &Kit) -> El {
         .on_toggle(|s: &mut App| s.toggle_overscroll())
         .build(k)
         .key("setting-overscroll");
-    let browser = settings_section(
+    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
+    let mut browser_rows = vec![
+        settings_row(
+            k,
+            k.glyph.eye,
+            "Show hidden files",
+            Some("Also list names that start with a dot."),
+            setting_control(s, k, Setting::ShowHidden, hidden),
+        ),
+        settings_row(
+            k,
+            &icons::INSPECTOR,
+            "Show inspector",
+            Some("The details and preview pane beside the table."),
+            setting_control(s, k, Setting::Inspector, inspector),
+        ),
+        settings_row(
+            k,
+            &icons::GRID,
+            "Grid layout",
+            Some("Show the folder as tiles instead of a table of rows."),
+            setting_control(s, k, Setting::GridLayout, grid),
+        ),
+        settings_row(
+            k,
+            &icons::PICTURES,
+            "Show thumbnails",
+            Some("Show a small picture for each image, in the list and the grid."),
+            setting_control(s, k, Setting::ShowThumbnails, thumbnails),
+        ),
+    ];
+    #[cfg(not(target_arch = "wasm32"))]
+    browser_rows.push(settings_row(
         k,
-        "settings-browser",
-        "Browser",
-        vec![
-            settings_row(
-                k,
-                k.glyph.eye,
-                "Show hidden files",
-                Some("Also list names that start with a dot."),
-                setting_control(s, k, Setting::ShowHidden, hidden),
-            ),
-            settings_row(
-                k,
-                &icons::INSPECTOR,
-                "Show inspector",
-                Some("The details and preview pane beside the table."),
-                setting_control(s, k, Setting::Inspector, inspector),
-            ),
-            settings_row(
-                k,
-                &icons::GRID,
-                "Grid layout",
-                Some("Show the folder as tiles instead of a table of rows."),
-                setting_control(s, k, Setting::GridLayout, grid),
-            ),
-            settings_row(
-                k,
-                &icons::PICTURES,
-                "Show thumbnails",
-                Some("Show a small picture for each image, in the list and the grid."),
-                setting_control(s, k, Setting::ShowThumbnails, thumbnails),
-            ),
-        ],
-    );
+        &glyphs::FOLDER,
+        "System icons",
+        Some("Use your desktop’s icons for folders and files."),
+        setting_control(s, k, Setting::SystemIcons, system_icons),
+    ));
+    let browser = settings_section(k, "settings-browser", "Browser", browser_rows);
     let folders_first = Switch::new(s.config.folders_first)
         .label("Folders first")
         .hide_label()
