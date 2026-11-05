@@ -1,6 +1,7 @@
 use crate::app::{App, FILES, ROW_HEIGHT};
 use crate::format;
 use crate::icons;
+use crate::keybinds::Action;
 use chrono::{DateTime, Local};
 use rune::{
     Align, Cursor, Drag, El, GrowthSpec, Phase, Spring, Transition, Tx, col, el, icon, row, text,
@@ -435,6 +436,7 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
             Button::new("New Folder")
                 .variant(ButtonVariant::Outline)
                 .control_size(ControlSize::Regular)
+                .shortcut(s.keybinds.accelerator(Action::NewFolder))
                 .on_press_tx(|s: &mut App, tx: &mut Tx| s.new_folder(tx))
                 .build(k)
                 .key("empty-new-folder"),

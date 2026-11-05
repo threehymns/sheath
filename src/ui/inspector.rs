@@ -1,5 +1,6 @@
 use crate::app::{App, Preview};
 use crate::format;
+use crate::keybinds::Action;
 use rune::{Align, El, SurfaceFit, Tx, col, el, icon, row, text};
 use rune_kit::{Button, ButtonVariant, ControlSize, Kit, file_icon, glyphs};
 
@@ -77,7 +78,7 @@ pub(super) fn inspector(s: &App, k: &'static Kit) -> El {
         )
         .child(rule(k))
         .child(info_section(s, k, entry, &parent))
-        .child(actions(k, entry))
+        .child(actions(s, k, entry))
         .child(rule(k))
         .child(preview_section(s, k));
     if entry.readonly {
@@ -259,7 +260,7 @@ fn size_label(s: &App, entry: &crate::app::Entry) -> String {
     }
 }
 
-fn actions(k: &Kit, entry: &crate::app::Entry) -> El {
+fn actions(s: &App, k: &Kit, entry: &crate::app::Entry) -> El {
     let path = entry.path.to_string_lossy().into_owned();
     row()
         .key("actions")
@@ -277,6 +278,7 @@ fn actions(k: &Kit, entry: &crate::app::Entry) -> El {
             Button::new("Copy Path")
                 .variant(ButtonVariant::Outline)
                 .control_size(ControlSize::Regular)
+                .shortcut(s.keybinds.accelerator(Action::CopyPath))
                 .on_press_tx(move |_: &mut App, tx: &mut Tx| tx.copy(path.clone()))
                 .build(k),
         )
