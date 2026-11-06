@@ -5,7 +5,7 @@
 //! in the crates this app uses, so they decode whole and shrink before Rune builds its mips.
 //! SVG, and anything Rune's cache reads better, is handed to Rune instead.
 
-use super::{Decoded, Key};
+use super::{Decoded, Key, apk};
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
 use std::io::Cursor;
@@ -26,6 +26,10 @@ pub(super) fn decode(key: &Key) -> Decoded {
         Ok(bytes) => bytes,
         Err(err) => return Decoded::Failed(err.to_string()),
     };
+    // An APK is a ZIP archive whose face is its launcher icon, not a raster to sniff.
+    if extension == "apk" {
+        return apk::icon(&bytes, key.pixels);
+    }
     // AVIF and HEIC are ISOBMFF rasters whose codecs the image crate does not carry.
     match extension.as_str() {
         "avif" => return avif(&bytes, key),
@@ -269,7 +273,7 @@ fn scaled_raster(
 }
 
 /// Shrink a decoded picture to the preview box, box-filtered, and hand back its RGBA.
-fn shrink(
+pub(super) fn shrink(
     width: u32,
     height: u32,
     pixels: Vec<u8>,

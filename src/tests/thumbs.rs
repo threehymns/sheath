@@ -7,13 +7,18 @@ use crate::settings::{Setting, Settings};
 use std::fs;
 
 fn write_png(path: &std::path::Path, width: u32, height: u32) {
+    fs::write(path, png_bytes(width, height, [30, 160, 200, 255])).unwrap();
+}
+
+fn png_bytes(width: u32, height: u32, color: [u8; 4]) -> Vec<u8> {
     use image::codecs::png::PngEncoder;
     use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage};
-    let image = RgbaImage::from_pixel(width, height, Rgba([30, 160, 200, 255]));
-    let mut file = std::fs::File::create(path).unwrap();
-    PngEncoder::new(&mut file)
+    let image = RgbaImage::from_pixel(width, height, Rgba(color));
+    let mut bytes = Vec::new();
+    PngEncoder::new(&mut bytes)
         .write_image(image.as_raw(), width, height, ExtendedColorType::Rgba8)
         .unwrap();
+    bytes
 }
 
 fn app_with_image() -> (tempfile::TempDir, crate::app::App) {
@@ -124,6 +129,47 @@ fn a_picture_that_will_not_decode_keeps_no_thumbnail() {
     assert!(
         app.thumbnail(entry).is_none(),
         "and it has no thumbnail to show"
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn an_apk_uses_its_launcher_icon_as_a_thumbnail() {
+    use std::io::Write;
+    let dir = fixture();
+    let small = png_bytes(16, 16, [200, 40, 40, 255]);
+    let large = png_bytes(96, 96, [40, 90, 200, 255]);
+    {
+        let mut package =
+            zip::ZipWriter::new(fs::File::create(dir.path().join("app.apk")).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        for (name, picture) in [
+            ("res/mipmap-mdpi/ic_launcher.png", &small),
+            ("res/mipmap-xxxhdpi/ic_launcher.png", &large),
+            ("res/mipmap-xxxhdpi/ic_launcher_background.png", &small),
+        ] {
+            package.start_file(name, options).unwrap();
+            package.write_all(picture).unwrap();
+        }
+        package.finish().unwrap();
+    }
+    let mut app = app(&dir);
+    app.use_images(rune::ImageCache::new(std::sync::Arc::new(|| {})));
+    assert!(app.settle_thumbs(), "the icon lands as a thumbnail");
+    let entry = app
+        .entries
+        .iter()
+        .find(|entry| entry.name == "app.apk")
+        .expect("the package is in the folder");
+    assert!(entry.is_apk, "the entry knows the file is an APK");
+    assert!(!entry.is_image, "an APK is not a picture");
+    let thumb = app
+        .thumbnail(entry)
+        .unwrap_or_else(|| panic!("the launcher icon landed"));
+    assert_eq!(
+        thumb.size(),
+        Some([96, 96]),
+        "the densest launcher icon is the thumbnail"
     );
 }
 

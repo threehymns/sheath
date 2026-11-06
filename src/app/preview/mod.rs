@@ -19,6 +19,8 @@
 //! are decoded by the browser at preview size, and the demo tree's by the browser's own codecs.
 
 #[cfg(not(target_arch = "wasm32"))]
+mod apk;
+#[cfg(not(target_arch = "wasm32"))]
 mod decode;
 #[cfg(not(target_arch = "wasm32"))]
 use decode::decode;
@@ -62,6 +64,8 @@ pub(super) enum Decoded {
     },
     // SVG, or a format only Rune knows: let its image cache read and decode it.
     ViaRune(PathBuf),
+    // SVG drawn from a package's vector icon, rasterized at the size it is asked for.
+    Svg(Vec<u8>),
     Failed(String),
 }
 
@@ -88,6 +92,17 @@ impl Decoded {
                 Some(cache) => (
                     Some(settle(cache.file(
                         &path,
+                        pixels as f32 / PREVIEW_SCALE,
+                        PREVIEW_SCALE,
+                    ))),
+                    None,
+                ),
+                None => (None, None),
+            },
+            Decoded::Svg(svg) => match cache {
+                Some(cache) => (
+                    Some(settle(cache.svg(
+                        svg,
                         pixels as f32 / PREVIEW_SCALE,
                         PREVIEW_SCALE,
                     ))),
@@ -231,7 +246,7 @@ pub(crate) fn bench_decode(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>),
             pixels,
         } => Ok((width, height, pixels)),
         Decoded::Failed(error) => Err(error),
-        Decoded::ViaRune(_) => Err("not a raster preview".into()),
+        Decoded::ViaRune(_) | Decoded::Svg(_) => Err("not a raster preview".into()),
     }
 }
 

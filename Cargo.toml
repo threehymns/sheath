@@ -110,6 +110,9 @@ image = { version = "0.25", default-features = false, features = [
     "ico",
 ] }
 jpeg-decoder = { version = "0.3", default-features = false }
+# An APK is a ZIP archive: its launcher icon is read straight out of the package for a
+# thumbnail, so the reader only needs the deflate decoder Android's packages use.
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

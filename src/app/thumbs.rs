@@ -263,7 +263,7 @@ impl App {
         let pictures: Vec<Key> = (first..last)
             .filter_map(|i| self.visible.get(i))
             .map(|&i| &self.entries[i])
-            .filter(|entry| entry.is_image)
+            .filter(|entry| entry.is_image || entry.is_apk)
             .map(|entry| Key {
                 path: entry.path.clone(),
                 modified: entry.modified,

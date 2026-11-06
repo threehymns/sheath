@@ -18,6 +18,8 @@ pub struct Entry {
     // Whether the name says the file is a picture, so the rows can ask for a thumbnail while
     // the kind and size already came from the target's metadata.
     pub is_image: bool,
+    // Whether the name says the file is an APK, whose launcher icon stands in as its thumbnail.
+    pub is_apk: bool,
     // The folder this row was found in, below the one on screen, when a search reached it.
     pub relative: Option<String>,
     pub size: u64,
@@ -69,6 +71,11 @@ impl Entry {
         let id = format!("f:{name}");
         let kind = crate::format::kind(&name, is_dir, is_symlink);
         let is_image = !is_dir && is_image(&path);
+        // A shared folder's APK is not unzipped by the browser that decodes its pictures.
+        #[cfg(not(target_arch = "wasm32"))]
+        let is_apk = !is_dir && is_apk(&path);
+        #[cfg(target_arch = "wasm32")]
+        let is_apk = false;
         Some(Entry {
             name_key: format!("name-{id}"),
             id,
@@ -78,6 +85,7 @@ impl Entry {
             is_dir,
             is_symlink,
             is_image,
+            is_apk,
             relative: None,
             size: if is_dir { 0 } else { meta.len() },
             modified: meta.modified().or_else(|_| link_meta.modified()).ok(),
@@ -102,6 +110,12 @@ pub enum Preview {
     Folder(usize),
     TooLarge,
     Binary,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn is_apk(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("apk"))
 }
 
 fn is_image(path: &Path) -> bool {
