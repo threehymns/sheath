@@ -6,7 +6,9 @@
 //! cross that boundary without knowing which side they are on.
 
 use super::App;
+#[cfg(not(target_arch = "wasm32"))]
 use super::scan::{Scan, sort_rows};
+#[cfg(not(target_arch = "wasm32"))]
 use rune_kit::SortDir;
 use std::path::{Component, PathBuf};
 
