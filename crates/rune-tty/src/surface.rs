@@ -151,6 +151,18 @@ pub fn screen_of(t: &Terminal, scale: f32, k: &'static Kit) -> El {
                 .wrap()
                 .transition(Transition::none()),
         );
+    } else if let Some(error) = &t.error {
+        // The shell did not start, so no rows will ever arrive: the reason the pane stays empty
+        // belongs in the pane itself, where a window that draws no headers still shows it,
+        // instead of "Starting the shell…" forever.
+        view = view.child(
+            text(error.clone())
+                .key("terminal-start-error")
+                .font(k.ty.caption())
+                .color(k.c.danger.fg)
+                .wrap()
+                .transition(Transition::none()),
+        );
     } else if t.frame.lines.is_empty() {
         view = view.child(
             text("Starting the shell…")
