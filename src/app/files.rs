@@ -64,7 +64,21 @@ fn copy_entry(from: &Path, to: &Path) -> io::Result<()> {
 }
 
 impl App {
+    /// Archives are read-only: their rows carry paths no write follows, so a command that
+    /// changes files stops with a sentence instead of a failed system call.
+    pub(super) fn archive_read_only(&mut self) -> bool {
+        if self.in_archive() {
+            self.error = Some("An archive is read-only. Extract a copy to change it.".into());
+            true
+        } else {
+            false
+        }
+    }
+
     pub fn new_file(&mut self, _tx: &mut Tx) {
+        if self.archive_read_only() {
+            return;
+        }
         let mut name = "New File.txt".to_owned();
         let mut n = 2;
         while fs::exists(&self.cwd.join(&name)) {
@@ -109,6 +123,9 @@ impl App {
     }
 
     pub fn new_folder(&mut self, _tx: &mut Tx) {
+        if self.archive_read_only() {
+            return;
+        }
         let mut name = "New Folder".to_owned();
         let mut n = 2;
         while fs::exists(&self.cwd.join(&name)) {
@@ -127,6 +144,9 @@ impl App {
     }
 
     pub fn copy_selection(&mut self, cut: bool) {
+        if self.archive_read_only() {
+            return;
+        }
         let paths: Vec<PathBuf> = self
             .selected_ids()
             .iter()
@@ -158,6 +178,9 @@ impl App {
     }
 
     pub fn paste(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let Some(clipboard) = self.clipboard.clone() else {
             return;
         };
@@ -209,6 +232,9 @@ impl App {
 
     /// Points new names beside the chosen rows at the rows themselves.
     pub fn make_aliases(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let mut made = Vec::new();
         let mut error = None;
         for id in self.selected_ids() {
@@ -226,6 +252,9 @@ impl App {
     }
 
     pub fn duplicate_selection(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let mut made = Vec::new();
         let mut error = None;
         for id in self.selected_ids() {

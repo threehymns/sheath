@@ -1,4 +1,4 @@
-use crate::app::App;
+use crate::app::{App, Location};
 use crate::rules::SortKey;
 use crate::settings::Setting;
 use rune_kit::SortDir;
@@ -10,42 +10,27 @@ use super::scan::{SEARCH_LIMIT, SYNC_SCAN_LIMIT, Scan, contains_folded, sort_row
 use super::*;
 
 impl App {
+    /// Opens a folder, leaving an archive if one was showing. A place, a history step and a row
+    /// that names a real folder all take this path.
     pub(super) fn enter(&mut self, path: PathBuf) {
-        self.watch.retarget(&path);
-        self.save_session(|session| session.remember(&path));
-        self.cwd = path;
-        self.visit = Default::default();
-        self.stop_scrolling();
-        self.menu = None;
-        self.empty_menu = None;
-        self.header_menu = None;
-        self.place_menu = None;
-        self.marquee = None;
-        self.file_drag = None;
-        self.clear_typeahead();
-        self.search.clear();
-        self.clear_selection();
-        self.entries.clear();
-        self.visible.clear();
-        self.unhidden = 0;
-        self.name_at.clear();
-        self.pending_select = None;
-        self.parked = None;
-        self.search_truncated = false;
-        self.layout_cut = true;
-        self.apply_rules();
-        self.reload();
+        self.show(Location::Folder(path), None);
+    }
+
+    /// Shows a location and remembers the step, so Back returns to it.
+    pub(super) fn push(&mut self, location: Location) {
+        self.history.truncate(self.at + 1);
+        self.history.push(location);
+        self.at = self.history.len() - 1;
     }
 
     pub fn navigate(&mut self, path: PathBuf) {
-        if self.cwd == path {
+        let location = Location::Folder(path);
+        if self.location() == location {
             self.reload();
             return;
         }
-        self.history.truncate(self.at + 1);
-        self.history.push(path.clone());
-        self.at = self.history.len() - 1;
-        self.enter(path);
+        self.push(location.clone());
+        self.show(location, None);
     }
 
     pub fn back(&mut self) {
@@ -53,8 +38,8 @@ impl App {
             return;
         }
         self.at -= 1;
-        let path = self.history[self.at].clone();
-        self.enter(path);
+        let location = self.history[self.at].clone();
+        self.show(location, None);
     }
 
     pub fn forward(&mut self) {
@@ -62,11 +47,38 @@ impl App {
             return;
         }
         self.at += 1;
-        let path = self.history[self.at].clone();
-        self.enter(path);
+        let location = self.history[self.at].clone();
+        self.show(location, None);
     }
 
+    /// Up leaves an archive at its root, with the archive's own row chosen in the folder around
+    /// it; inside an archive it climbs one folder.
     pub fn up(&mut self) {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let archived = self
+                .archive
+                .as_ref()
+                .map(|archive| (archive.file.clone(), archive.parent()));
+            if let Some((file, parent)) = archived {
+                match parent {
+                    Some(inner) => self.navigate_archive(file, inner),
+                    None => {
+                        let name = file
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned());
+                        let folder = file
+                            .parent()
+                            .map(Path::to_path_buf)
+                            .unwrap_or_else(root_dir);
+                        let location = Location::Folder(folder);
+                        self.push(location.clone());
+                        self.show(location, name);
+                    }
+                }
+                return;
+            }
+        }
         let Some(parent) = self.cwd.parent().map(Path::to_path_buf) else {
             return;
         };
@@ -93,10 +105,20 @@ impl App {
             self.apply_filter();
             return;
         }
-        let path = self.cwd.clone();
         let keep = self.selected.clone();
         let sort = self.sort.clone();
         let folders_first = self.config.folders_first;
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.archive.is_some() {
+            // An archive's central directory is a file on disk; reading it again is what makes
+            // Refresh show an archive that changed under the window.
+            self.scan.cancel();
+            if let Some(scan) = self.read_archive(keep, sort, folders_first) {
+                self.apply_scan(scan);
+            }
+            return;
+        }
+        let path = self.cwd.clone();
         if let Some(scan) = Scan::try_read(
             path.clone(),
             keep.clone(),
@@ -142,7 +164,9 @@ impl App {
     }
 
     fn apply_scan(&mut self, scan: Scan) -> bool {
-        if scan.path != self.cwd {
+        // A read still in flight for the folder around an archive must not land over the
+        // archive's own listing, and the other way round.
+        if scan.path != self.cwd || scan.archived != self.in_archive() {
             return false;
         }
         self.entries = scan.entries;
@@ -244,6 +268,13 @@ impl App {
             if let Some(parked) = self.parked.take() {
                 self.entries = parked;
             }
+            self.search_truncated = false;
+            return;
+        }
+        // An archive's rows are already in memory, so its search only filters the folder on
+        // screen: there is no package index to walk.
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.archive.is_some() {
             self.search_truncated = false;
             return;
         }

@@ -143,6 +143,27 @@ impl App {
     }
 
     pub fn action_enabled(&self, action: Action) -> bool {
+        // An archive is read-only: its rows name entries inside a file, not paths a write can
+        // follow, so the commands that would change something are not offered.
+        if self.in_archive()
+            && matches!(
+                action,
+                Action::Rename
+                    | Action::Move
+                    | Action::Trash
+                    | Action::Delete
+                    | Action::Copy
+                    | Action::Cut
+                    | Action::Paste
+                    | Action::Duplicate
+                    | Action::MakeAlias
+                    | Action::NewFolder
+                    | Action::NewFile
+                    | Action::Reveal
+            )
+        {
+            return false;
+        }
         match action {
             Action::Back => self.can_back(),
             Action::Forward => self.can_forward(),

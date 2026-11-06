@@ -526,6 +526,12 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
             "No matches",
             "Try a different search or show hidden files.",
         )
+    } else if s.in_archive() {
+        (
+            &glyphs::FOLDER_OPEN,
+            "This archive is empty",
+            "It holds no files or folders.",
+        )
     } else {
         (
             &glyphs::FOLDER_OPEN,
@@ -549,7 +555,7 @@ pub(super) fn empty_state(s: &App, k: &'static Kit) -> El {
                 .align(Align::Center),
         );
     // An empty folder's one obvious next step is the button for it.
-    if s.error.is_none() && !searching {
+    if s.error.is_none() && !searching && !s.in_archive() {
         state = state.child(
             Button::new("New Folder")
                 .variant(ButtonVariant::Outline)

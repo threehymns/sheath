@@ -95,6 +95,38 @@ impl Entry {
         })
     }
 
+    /// The row for an item inside an archive. The path runs through the archive file, so it
+    /// names the entry to a person but no filesystem call can follow it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(super) fn archived(
+        path: PathBuf,
+        name: String,
+        is_dir: bool,
+        size: u64,
+        modified: Option<SystemTime>,
+    ) -> Entry {
+        let kind = crate::format::kind(&name, is_dir, false);
+        let is_image = !is_dir && is_image(&path);
+        let id = format!("f:{name}");
+        Entry {
+            name_key: format!("name-{id}"),
+            id,
+            name,
+            path,
+            kind,
+            is_dir,
+            is_symlink: false,
+            is_image,
+            is_apk: false,
+            relative: None,
+            size: if is_dir { 0 } else { size },
+            modified,
+            created: None,
+            readonly: true,
+            permissions: "Read-only".into(),
+        }
+    }
+
     pub fn hidden(&self) -> bool {
         self.name.starts_with('.')
     }
@@ -118,7 +150,7 @@ fn is_apk(path: &Path) -> bool {
         .is_some_and(|extension| extension.eq_ignore_ascii_case("apk"))
 }
 
-fn is_image(path: &Path) -> bool {
+pub(super) fn is_image(path: &Path) -> bool {
     let extension = path
         .extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
@@ -166,11 +198,16 @@ pub(super) fn read_preview(path: &Path, is_dir: bool) -> Option<Preview> {
         return Some(Preview::TooLarge);
     }
     let bytes = fs::read(path).ok()?;
+    Some(preview_bytes(&bytes))
+}
+
+/// The preview a file's bytes make: text when they decode, otherwise a binary note.
+pub(super) fn preview_bytes(bytes: &[u8]) -> Preview {
     if bytes.contains(&0) {
-        return Some(Preview::Binary);
+        return Preview::Binary;
     }
-    match String::from_utf8(bytes) {
-        Ok(text) => Some(Preview::Text(text)),
-        Err(_) => Some(Preview::Binary),
+    match String::from_utf8(bytes.to_vec()) {
+        Ok(text) => Preview::Text(text),
+        Err(_) => Preview::Binary,
     }
 }

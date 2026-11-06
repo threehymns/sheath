@@ -26,6 +26,7 @@ mod decode;
 use decode::decode;
 use rune::{Image, ImageCache, Latest, Waker};
 use std::collections::VecDeque;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -39,12 +40,58 @@ const RECENT: usize = 6;
 // A held arrow key selects faster than this; waiting it out decodes only the row it stops on.
 const DEBOUNCE: Duration = Duration::from_millis(25);
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone)]
 pub(super) struct Key {
     pub(super) path: PathBuf,
     // An edited file has a new key, so an old preview is never shown for it.
     pub(super) modified: Option<SystemTime>,
     pub(super) pixels: u32,
+    // An entry inside an archive carries its bytes, since there is no path to read. A key is
+    // the same file when its path, time and size match; the bytes follow from those.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(super) bytes: Option<Arc<[u8]>>,
+}
+
+impl Key {
+    pub(super) fn file(path: &Path, modified: Option<SystemTime>, pixels: u32) -> Key {
+        Key {
+            path: path.to_path_buf(),
+            modified,
+            pixels,
+            bytes: None,
+        }
+    }
+
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(super) fn bytes(
+        path: &Path,
+        modified: Option<SystemTime>,
+        pixels: u32,
+        bytes: Arc<[u8]>,
+    ) -> Key {
+        Key {
+            path: path.to_path_buf(),
+            modified,
+            pixels,
+            bytes: Some(bytes),
+        }
+    }
+}
+
+impl PartialEq for Key {
+    fn eq(&self, other: &Key) -> bool {
+        self.path == other.path && self.modified == other.modified && self.pixels == other.pixels
+    }
+}
+
+impl Eq for Key {}
+
+impl Hash for Key {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.path.hash(state);
+        self.modified.hash(state);
+        self.pixels.hash(state);
+    }
 }
 
 /// A decoded preview, ready for a frame to draw. `image` is None when this app could not make
@@ -118,11 +165,7 @@ impl Decoded {
 /// Decode a file at a chosen longest side, for the thumbnails, which share the preview's
 /// decoders but not its size.
 pub(super) fn decode_at(path: &Path, pixels: u32) -> Decoded {
-    decode(&Key {
-        path: path.to_path_buf(),
-        modified: None,
-        pixels,
-    })
+    decode(&Key::file(path, None, pixels))
 }
 
 pub(super) struct Previewer {
@@ -153,11 +196,7 @@ impl Previewer {
 
     /// A kept render for this file, ready to draw now. Otherwise asks for a new one.
     pub(super) fn request(&mut self, path: &Path, modified: Option<SystemTime>) -> Option<Image> {
-        let key = Key {
-            path: path.to_path_buf(),
-            modified,
-            pixels: MAX_PIXELS,
-        };
+        let key = Key::file(path, modified, MAX_PIXELS);
         if let Some(image) = self.recall(&key) {
             // The kept handle is newer than anything still decoding.
             self.jobs.cancel();
@@ -169,6 +208,25 @@ impl Previewer {
         if crate::vfs::request_preview(path, modified, MAX_PIXELS) {
             self.jobs.cancel();
             return None;
+        }
+        let cache = self.cache.clone();
+        self.jobs
+            .request(key, move |key| render(&key, cache.as_deref()));
+        None
+    }
+
+    /// A preview of bytes that came out of an archive, which has no path on disk to read.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub(super) fn request_bytes(
+        &mut self,
+        path: &Path,
+        modified: Option<SystemTime>,
+        bytes: Arc<[u8]>,
+    ) -> Option<Image> {
+        let key = Key::bytes(path, modified, MAX_PIXELS, bytes);
+        if let Some(image) = self.recall(&key) {
+            self.jobs.cancel();
+            return Some(image);
         }
         let cache = self.cache.clone();
         self.jobs
@@ -190,11 +248,7 @@ impl Previewer {
                 pixels,
                 error,
             } = decoded;
-            let key = Key {
-                path,
-                modified,
-                pixels: MAX_PIXELS,
-            };
+            let key = Key::file(&path, modified, MAX_PIXELS);
             let image = match (&error, self.cache.as_ref()) {
                 (None, Some(cache)) => Some(settle(cache.rgba(width, height, pixels))),
                 _ => None,
@@ -235,11 +289,7 @@ impl Previewer {
 /// would be handed to Rune's cache.
 #[cfg(test)]
 pub(crate) fn bench_decode(path: &Path, max: u32) -> Result<(u32, u32, Vec<u8>), String> {
-    match decode(&Key {
-        path: path.to_path_buf(),
-        modified: None,
-        pixels: max,
-    }) {
+    match decode(&Key::file(path, None, max)) {
         Decoded::Rgba {
             width,
             height,

@@ -39,6 +39,9 @@ pub(super) struct Scan {
     pub(super) path: PathBuf,
     pub(super) entries: Vec<Entry>,
     pub(super) error: Option<String>,
+    // Whether the rows came from an archive, so a read still in flight for the folder around it
+    // cannot land over the archive's listing.
+    pub(super) archived: bool,
     pub(super) keep: Option<String>,
     pub(super) sort: (String, SortDir),
     pub(super) folders_first: bool,
@@ -169,6 +172,7 @@ impl Scan {
             path,
             entries,
             error,
+            archived: false,
             keep,
             sort,
             folders_first,
@@ -204,6 +208,7 @@ impl Scan {
             path,
             entries,
             error: None,
+            archived: false,
             keep,
             sort,
             folders_first,

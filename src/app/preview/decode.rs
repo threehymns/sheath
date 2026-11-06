@@ -8,6 +8,7 @@
 use super::{Decoded, Key, apk};
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbaImage};
+use std::borrow::Cow;
 use std::io::Cursor;
 
 const MAX_SIDE: u32 = 8_192;
@@ -19,32 +20,62 @@ pub(super) fn decode(key: &Key) -> Decoded {
         .extension()
         .map(|e| e.to_string_lossy().to_ascii_lowercase())
         .unwrap_or_default();
-    if matches!(extension.as_str(), "svg" | "svgz") {
+    // A file inside an archive has no path Rune's cache could read, so even an SVG is decoded
+    // from the bytes that came with the key.
+    if matches!(extension.as_str(), "svg" | "svgz") && key.bytes.is_none() {
         return Decoded::ViaRune(key.path.clone());
     }
-    let bytes = match crate::vfs::read(&key.path) {
-        Ok(bytes) => bytes,
-        Err(err) => return Decoded::Failed(err.to_string()),
+    let bytes: Cow<'_, [u8]> = match &key.bytes {
+        Some(bytes) => Cow::Borrowed(&bytes[..]),
+        None => match crate::vfs::read(&key.path) {
+            Ok(bytes) => Cow::Owned(bytes),
+            Err(err) => return Decoded::Failed(err.to_string()),
+        },
     };
+    if key.bytes.is_some() {
+        return embedded(&bytes, &extension, key);
+    }
+    let bytes = bytes.as_ref();
     // An APK is a ZIP archive whose face is its launcher icon, not a raster to sniff.
     if extension == "apk" {
-        return apk::icon(&bytes, key.pixels);
+        return apk::icon(bytes, key.pixels);
     }
     // AVIF and HEIC are ISOBMFF rasters whose codecs the image crate does not carry.
     match extension.as_str() {
-        "avif" => return avif(&bytes, key),
-        "heic" | "heif" => return heic(&bytes, key),
+        "avif" => return avif(bytes, key),
+        "heic" | "heif" => return heic(bytes, key),
         _ => {}
     }
-    match image::guess_format(&bytes) {
-        Ok(ImageFormat::Jpeg) => jpeg(&bytes, key),
+    match image::guess_format(bytes) {
+        Ok(ImageFormat::Jpeg) => jpeg(bytes, key),
         // Rune decodes PNG itself, so a small one is still handed over; the formats below it
         // cannot read, so those are decoded here whatever their size.
-        Ok(ImageFormat::Png) => raster(&bytes, key, true),
-        Ok(format) if extra_raster(format) => raster(&bytes, key, false),
+        Ok(ImageFormat::Png) => raster(bytes, key, true),
+        Ok(format) if extra_raster(format) => raster(bytes, key, false),
         // SVG (sniffed by Rune) and anything else Rune's cache either decodes or reports in
         // the inspector as before.
         _ => Decoded::ViaRune(key.path.clone()),
+    }
+}
+
+/// A file whose bytes came with the key, as an archive's do: there is no path on disk to hand
+/// to Rune, so every raster is decoded here and an SVG goes to Rune as bytes.
+fn embedded(bytes: &[u8], extension: &str, key: &Key) -> Decoded {
+    if extension == "svg" {
+        return Decoded::Svg(bytes.to_vec());
+    }
+    if extension == "apk" {
+        return apk::icon(bytes, key.pixels);
+    }
+    match extension {
+        "avif" => return avif(bytes, key),
+        "heic" | "heif" => return heic(bytes, key),
+        _ => {}
+    }
+    match image::guess_format(bytes) {
+        Ok(ImageFormat::Jpeg | ImageFormat::Png) => raster(bytes, key, false),
+        Ok(format) if extra_raster(format) => raster(bytes, key, false),
+        _ => Decoded::Failed("This file has no preview.".into()),
     }
 }
 

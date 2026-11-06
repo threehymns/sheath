@@ -26,6 +26,15 @@ fn inside(rect: [f32; 4], x: f32, y: f32) -> bool {
 
 impl App {
     pub(super) fn aim_drag(&self, drag: &mut FileDrag) {
+        // An archive is read-only, and its folders are not drop targets: nothing can be written
+        // into a package.
+        if self.in_archive() {
+            drag.row = None;
+            drag.place = None;
+            drag.place_id = None;
+            drag.insert = None;
+            return;
+        }
         let scroll = self.list_scroll();
         drag.row = None;
         drag.place = None;
@@ -185,6 +194,9 @@ impl App {
     }
 
     pub fn move_selection_into(&mut self, destination: &Path) -> bool {
+        if self.archive_read_only() {
+            return false;
+        }
         let targets = self.selected_ids();
         if targets.is_empty() || destination == self.cwd {
             return false;

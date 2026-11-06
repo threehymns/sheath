@@ -10,8 +10,6 @@ mod sidebar;
 mod table;
 pub(crate) mod terminal;
 
-use std::path::Component;
-
 use rune::{Cx, El, Icon, SurfaceFit, col, el, icon, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit, SplitView, Toolbar};
 use rune_theme_opencode as theme;
@@ -256,6 +254,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .label("New Folder")
         .help("New Folder")
         .shortcut(s.keybinds.accelerator(Action::NewFolder))
+        .disabled(!s.action_enabled(Action::NewFolder))
         .on_press_tx(|s: &mut App, tx| s.new_folder(tx))
         .build(k)
         .key("new-folder");

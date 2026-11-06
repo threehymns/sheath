@@ -1,3 +1,5 @@
+#[cfg(not(target_arch = "wasm32"))]
+mod archive;
 mod browse;
 mod commands;
 mod drag;
@@ -7,6 +9,7 @@ mod files;
 mod find;
 mod grid;
 mod input;
+mod location;
 mod marquee;
 pub(crate) mod paths;
 mod places;
@@ -35,6 +38,7 @@ pub use grid::{
     GRID_PAD, GRID_ROW_HEIGHT, GRID_TOP_MARGIN, Layout, TILE_GAP, TILE_HEIGHT, TILE_WIDTH,
 };
 pub use input::{list_key, on_key};
+pub use location::Location;
 pub use marquee::Marquee;
 pub use paths::{home_dir, root_dir};
 pub use places::{PlaceMenu, PlaceRename, place_rename_edit};
@@ -75,6 +79,10 @@ pub const PLACE_ROW_HEIGHT: f32 = rune_kit::shell::ROW_HEIGHT;
 
 pub struct App {
     pub cwd: PathBuf,
+    // The open archive, when the rows come from one instead of a folder. Only the desktop build
+    // has an archive reader.
+    #[cfg(not(target_arch = "wasm32"))]
+    archive: Option<archive::Archive>,
     pub entries: Vec<Entry>,
     pub visible: Vec<usize>,
     // Entries no rule or setting hides, whatever the search shows; the path bar's count.
@@ -114,7 +122,7 @@ pub struct App {
     pub inspector: PaneState,
     pub search: TextEdit,
     pub show_hidden: bool,
-    pub history: Vec<PathBuf>,
+    pub history: Vec<Location>,
     pub at: usize,
     pub error: Option<String>,
     pub sheet: Option<Sheet>,
@@ -209,7 +217,7 @@ impl App {
         app.views = Views::load();
         app.places = Places::load();
         app.reload_rules();
-        app.history.push(path.clone());
+        app.history.push(Location::Folder(path.clone()));
         app.at = 0;
         app.enter(path);
         for (file, error) in [
@@ -225,7 +233,7 @@ impl App {
     #[cfg(test)]
     pub fn open_with(path: PathBuf, config: Settings) -> App {
         let mut app = App::blank(config, Store::none(), Keybinds::defaults());
-        app.history.push(path.clone());
+        app.history.push(Location::Folder(path.clone()));
         app.at = 0;
         app.enter(path);
         app
@@ -242,6 +250,8 @@ impl App {
         };
         App {
             cwd: PathBuf::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            archive: None,
             entries: Vec::new(),
             visible: Vec::new(),
             unhidden: 0,

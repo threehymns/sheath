@@ -40,6 +40,12 @@ impl App {
             return;
         }
         let path = entry.path.clone();
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(inner) = self.archive_inner(&path) {
+            self.folder_size = self.archive_size(&inner);
+            self.sizer.cancel();
+            return;
+        }
         self.sizer.request(&path);
     }
 
@@ -77,13 +83,42 @@ impl App {
             .find(|e| e.id == id)
             .map(|e| (e.path.clone(), e.modified, e.is_dir));
         self.preview = match &found {
-            Some((path, _, is_dir)) => read_preview(path, *is_dir),
+            Some((path, _, is_dir)) => {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    match self.archive_inner(path) {
+                        Some(inner) => self.archived_preview(&inner, *is_dir),
+                        None => read_preview(path, *is_dir),
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    read_preview(path, *is_dir)
+                }
+            }
             None => None,
         };
         self.preview_error = None;
         self.preview_image = match (&self.preview, &found) {
             (Some(Preview::Image), Some((path, modified, _))) => {
-                self.previews.request(path, *modified)
+                let (path, modified) = (path.clone(), *modified);
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    match self.archive_inner(&path) {
+                        Some(inner) => match self.archived_picture(&path, &inner, modified) {
+                            Ok(image) => image,
+                            Err(error) => {
+                                self.preview_error = Some(error);
+                                None
+                            }
+                        },
+                        None => self.previews.request(&path, modified),
+                    }
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    self.previews.request(&path, modified)
+                }
             }
             _ => {
                 self.previews.cancel();
@@ -397,6 +432,10 @@ impl App {
             return;
         };
         let (path, is_dir) = (entry.path.clone(), entry.is_dir);
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.open_archived_entry(&path, is_dir) {
+            return;
+        }
         if is_dir {
             self.navigate(path);
         } else if let Err(err) = open_external(&path) {

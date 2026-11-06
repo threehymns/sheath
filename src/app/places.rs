@@ -1,5 +1,5 @@
 use super::sheets::validate_name;
-use super::{App, Sheet, SheetKind};
+use super::{App, Location, Sheet, SheetKind};
 use crate::places::Section;
 use rune::{PointerPress, TextEdit};
 use std::path::{Path, PathBuf};
@@ -179,8 +179,11 @@ impl App {
             Err(_) => {}
         }
         for step in &mut self.history {
-            if let Ok(rest) = step.strip_prefix(&old_path) {
-                *step = new_path.join(rest);
+            let Location::Folder(path) = step else {
+                continue;
+            };
+            if let Ok(rest) = path.strip_prefix(&old_path) {
+                *path = new_path.join(rest);
             }
         }
         self.error = None;

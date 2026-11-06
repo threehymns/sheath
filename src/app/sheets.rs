@@ -68,6 +68,9 @@ fn destination_path(raw: &str, cwd: &Path) -> Result<PathBuf, String> {
 
 impl App {
     pub fn begin_rename(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let ids = self.selected_ids();
         if ids.len() > 1 {
             // Several rows rename together: one name, numbered in the order they read.
@@ -109,6 +112,9 @@ impl App {
     }
 
     pub fn begin_move(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let targets = self.selected_ids();
         let Some(name) = self.sheet_name(&targets) else {
             return;
@@ -126,6 +132,9 @@ impl App {
     }
 
     pub fn begin_trash(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let targets = self.selected_ids();
         let Some(name) = self.sheet_name(&targets) else {
             return;
@@ -146,6 +155,9 @@ impl App {
     }
 
     pub fn begin_delete(&mut self) {
+        if self.archive_read_only() {
+            return;
+        }
         let targets = self.selected_ids();
         let Some(name) = self.sheet_name(&targets) else {
             return;

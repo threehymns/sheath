@@ -135,11 +135,7 @@ impl Thumbs {
         }
         #[cfg(target_arch = "wasm32")]
         while let Some(decoded) = crate::vfs::take_thumbnail() {
-            let key = Key {
-                path: decoded.path,
-                modified: decoded.modified,
-                pixels: THUMB_PIXELS,
-            };
+            let key = Key::file(&decoded.path, decoded.modified, THUMB_PIXELS);
             let image = match (&decoded.error, self.cache.as_ref()) {
                 (None, Some(cache)) => Some(super::preview::settle(cache.rgba(
                     decoded.width,
@@ -172,20 +168,13 @@ impl Thumbs {
     /// The kept thumbnail for a picture, ready to draw now.
     pub(super) fn image(&self, path: &Path, modified: Option<SystemTime>) -> Option<Image> {
         self.done
-            .get(&Key {
-                path: path.to_path_buf(),
-                modified,
-                pixels: THUMB_PIXELS,
-            })
+            .get(&Key::file(path, modified, THUMB_PIXELS))
             .cloned()
     }
 
     pub(super) fn has(&self, path: &Path, modified: Option<SystemTime>) -> bool {
-        self.done.contains_key(&Key {
-            path: path.to_path_buf(),
-            modified,
-            pixels: THUMB_PIXELS,
-        })
+        self.done
+            .contains_key(&Key::file(path, modified, THUMB_PIXELS))
     }
 
     fn store(&mut self, key: Key, image: Option<Image>) {
@@ -249,7 +238,9 @@ impl App {
     /// Queues the thumbnails the window shows and the rows it is scrolling into, once per
     /// window. An unchanged window is skipped entirely, so an idle scroll does no work here.
     pub(super) fn request_thumbs(&mut self) {
-        if !self.config.show_thumbnails {
+        // An archive's pictures have no path a decoder could read; the inspector previews one
+        // from its bytes, and rows inside a package keep their file icon.
+        if !self.config.show_thumbnails || self.in_archive() {
             // Turning them off drops the work in flight, and forgetting the window makes
             // turning them back on queue it again even when the visible rows never moved.
             self.thumbs.clear_waiting();
@@ -264,11 +255,7 @@ impl App {
             .filter_map(|i| self.visible.get(i))
             .map(|&i| &self.entries[i])
             .filter(|entry| entry.is_image || entry.is_apk)
-            .map(|entry| Key {
-                path: entry.path.clone(),
-                modified: entry.modified,
-                pixels: THUMB_PIXELS,
-            })
+            .map(|entry| Key::file(&entry.path, entry.modified, THUMB_PIXELS))
             .collect();
         self.thumbs.queue(&pictures, sig);
     }
@@ -338,10 +325,12 @@ mod tests {
     #[test]
     fn the_whole_window_is_offered_at_once() {
         let pictures: Vec<Key> = (0..40)
-            .map(|i| Key {
-                path: std::env::temp_dir().join(format!("sheath-missing-{i}.png")),
-                modified: None,
-                pixels: THUMB_PIXELS,
+            .map(|i| {
+                Key::file(
+                    &std::env::temp_dir().join(format!("sheath-missing-{i}.png")),
+                    None,
+                    THUMB_PIXELS,
+                )
             })
             .collect();
         let mut thumbs = Thumbs::default();

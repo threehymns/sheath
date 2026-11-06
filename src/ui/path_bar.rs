@@ -3,16 +3,13 @@ use crate::icons;
 use crate::keybinds::Action;
 use rune::{Cursor, El, col, el, icon, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
-use std::path::PathBuf;
-
-use super::*;
 
 pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
-    let crumbs = crumbs(&s.cwd);
+    let crumbs = s.crumbs();
     let mut bar = row()
         .key("path-bar")
         .role("navigation")
-        .label(format!("Current folder: {}", s.cwd.display()))
+        .label(format!("Current folder: {}", s.location_label()))
         .w_full()
         .h(40.0)
         .px(12.0)
@@ -35,7 +32,7 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
             bar = bar.child(text("…").font(k.ty.ui).color(k.c.text_faint).px(4.0));
             bar = bar.child(icon(&icons::CHEVRON_RIGHT, 11.0).color(k.c.icon_faint));
         }
-        let (name, path) = &crumbs[index];
+        let (name, target) = &crumbs[index];
         let label = shorten(name, 24);
         if index == last {
             bar = bar.child(
@@ -46,7 +43,8 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
                     .truncate(),
             );
         } else {
-            let target = path.clone();
+            let help = target.label();
+            let target = target.clone();
             bar = bar.child(
                 text(label)
                     .font(k.ty.ui)
@@ -57,8 +55,8 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
                     .truncate()
                     .hover(k.c.hover)
                     .cursor(Cursor::Pointer)
-                    .help(path.display().to_string())
-                    .on_press(move |s: &mut App| s.navigate(target.clone())),
+                    .help(help)
+                    .on_press(move |s: &mut App| s.go_location(target.clone())),
             );
         }
         previous = Some(index);
@@ -100,23 +98,6 @@ pub(super) fn path_bar(s: &App, k: &'static Kit) -> El {
         .w_full()
         .child(bar)
         .child(el().key("path-rule").h(1.0).w_full().fill(k.c.border_muted))
-}
-
-fn crumbs(path: &std::path::Path) -> Vec<(String, PathBuf)> {
-    let mut out = Vec::new();
-    let mut acc = PathBuf::new();
-    for part in path.components() {
-        acc.push(part.as_os_str());
-        let name = match part {
-            Component::RootDir => std::path::MAIN_SEPARATOR.to_string(),
-            other => other.as_os_str().to_string_lossy().into_owned(),
-        };
-        out.push((name, acc.clone()));
-    }
-    if out.is_empty() {
-        out.push((path.display().to_string(), path.to_path_buf()));
-    }
-    out
 }
 
 fn shorten(text: &str, max: usize) -> String {
