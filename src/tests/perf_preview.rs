@@ -326,7 +326,7 @@ fn preview_folder_open() {
         let at = Instant::now();
         let mut app = App::open_with(
             dir.path().to_path_buf(),
-            crate::settings::Settings::defaults(),
+            crate::settings::Settings::default(),
         );
         let open = at.elapsed().as_secs_f64() * 1e3;
 

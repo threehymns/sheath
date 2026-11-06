@@ -122,10 +122,7 @@ pub(super) fn form_problem(draft: &Rule, fields: &BTreeMap<String, TextEdit>) ->
             && matcher.min_items.is_none()
             && matcher.max_items.is_none()
     };
-    let target = match draft.kind {
-        Kind::Folder => "folder",
-        Kind::Entry => "entry",
-    };
+    let target = draft.kind.noun();
     if draft.matches.iter().any(names_nothing) {
         return Some(format!(
             "A match with no fields matches every {target}. Fill in a path or remove the match."

@@ -8,43 +8,45 @@ use kdl::{KdlDocument, KdlEntry, KdlNode};
 use rune_kit::SortDir;
 use std::path::{Path, PathBuf};
 
-const FILE: &str = "views.kdl";
+pub const FILE: &str = "views.kdl";
 
 const LIMIT: usize = 200;
 
 #[derive(Default)]
 pub struct Views {
-    path: Option<PathBuf>,
+    state: config::State,
     entries: Vec<(PathBuf, Resolved)>,
-    pub error: Option<String>,
 }
 
 impl Views {
     pub fn load() -> Views {
-        let Some(dir) = config::state_dir() else {
-            return Views::default();
-        };
-        Views::at(dir.join(FILE))
+        Views::open(config::State::load(FILE))
     }
 
+    #[cfg(test)]
     pub fn at(path: PathBuf) -> Views {
+        Views::open(config::State::at(path))
+    }
+
+    fn open(state: config::State) -> Views {
         let mut views = Views {
-            path: Some(path.clone()),
+            state,
             ..Views::default()
         };
-        let Ok(text) = crate::vfs::read_to_string(&path) else {
+        let Some(text) = views.state.read() else {
             return views;
         };
         match parse(&text) {
             Ok(entries) => views.entries = entries,
-            Err(err) => {
-                views.error = Some(format!(
-                    "Couldn’t read {}: {err}. Folders open with their defaults.",
-                    path.display()
-                ));
-            }
+            Err(err) => views
+                .state
+                .fail(&format!("{err}. Folders open with their defaults.")),
         }
         views
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.state.error()
     }
 
     pub fn get(&self, path: &Path) -> Resolved {
@@ -53,6 +55,21 @@ impl Views {
             .find(|(remembered, _)| remembered == path)
             .map(|(_, state)| *state)
             .unwrap_or_default()
+    }
+
+    /// Follows a folder that moved, so the next visit still opens the way it was left.
+    pub fn move_path(&mut self, old: &Path, new: &Path) {
+        let mut moved = false;
+        for (path, _) in &mut self.entries {
+            let Ok(rest) = path.strip_prefix(old).map(Path::to_path_buf) else {
+                continue;
+            };
+            *path = new.join(rest);
+            moved = true;
+        }
+        if moved {
+            self.save();
+        }
     }
 
     pub fn set(&mut self, path: &Path, state: Resolved) {
@@ -65,13 +82,7 @@ impl Views {
     }
 
     fn save(&mut self) {
-        let Some(path) = self.path.clone() else {
-            return;
-        };
-        match config::write_atomic(&path, &render(&self.entries)) {
-            Ok(()) => self.error = None,
-            Err(err) => self.error = Some(err),
-        }
+        self.state.write(&render(&self.entries));
     }
 }
 
@@ -83,11 +94,7 @@ fn render(entries: &[(PathBuf, Resolved)]) -> String {
         let mut children = KdlDocument::new();
         if let Some(layout) = state.layout {
             let mut child = KdlNode::new("layout");
-            child.push(KdlEntry::new(if layout.is_grid() {
-                "grid"
-            } else {
-                "list"
-            }));
+            child.push(KdlEntry::new(layout.as_str()));
             children.nodes_mut().push(child);
         }
         if let Some(sort) = state.sort {
@@ -129,8 +136,7 @@ fn parse(text: &str) -> Result<Vec<(PathBuf, Resolved)>, String> {
         for child in node.children().into_iter().flat_map(|kids| kids.nodes()) {
             let value = child.get(0).and_then(|entry| entry.as_string());
             match (child.name().value(), value) {
-                ("layout", Some("grid")) => state.layout = Some(Layout::Grid),
-                ("layout", Some("list")) => state.layout = Some(Layout::List),
+                ("layout", Some(value)) => state.layout = Layout::from_str(value).or(state.layout),
                 ("sort", Some(value)) => state.sort = SortKey::from_column(value).or(state.sort),
                 ("direction", Some("ascending")) => state.direction = Some(SortDir::Ascending),
                 ("direction", Some("descending")) => state.direction = Some(SortDir::Descending),

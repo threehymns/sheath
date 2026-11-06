@@ -271,12 +271,13 @@ fn appearance_page(s: &Window, k: &Kit, menus: &mut Vec<El>) -> El {
         .on_toggle(|s: &mut Window| s.set_pane_headers(!s.pane_headers()))
         .build(k)
         .key("pane-headers");
+    #[cfg(target_os = "macos")]
     let top_bar = Switch::new(s.top_bar())
         .hide_label()
         .on_toggle(|s: &mut Window| s.set_top_bar(!s.top_bar()))
         .build(k)
         .key("top-bar");
-    col()
+    let page = col()
         .w_full()
         .gap(24.0)
         .child(settings_section(
@@ -335,23 +336,22 @@ fn appearance_page(s: &Window, k: &Kit, menus: &mut Vec<El>) -> El {
                 ),
                 headers,
             )],
-        ))
-        .child(settings_section(
+        ));
+    // Only macOS leaves the titlebar to the app, so the bar has nowhere to apply elsewhere.
+    #[cfg(target_os = "macos")]
+    let page = page.child(settings_section(
+        k,
+        "appearance-window",
+        "Window",
+        vec![settings_row(
             k,
-            "appearance-window",
-            "Window",
-            vec![settings_row(
-                k,
-                &rune_kit::glyphs::DASH,
-                "Top bar",
-                Some(
-                    "Show a slim bar with the tab's name above the panes. It stays hidden \
-                     where the window already has a titlebar: the compositor's or Rune's own \
-                     on Wayland, the window manager's on X11, the system's on Windows.",
-                ),
-                top_bar,
-            )],
-        ))
+            &rune_kit::glyphs::DASH,
+            "Top bar",
+            Some("Show a slim bar with the tab's name above the panes."),
+            top_bar,
+        )],
+    ));
+    page
 }
 
 fn header(k: &Kit, tab: SettingsTab) -> El {

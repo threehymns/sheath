@@ -1,6 +1,7 @@
 //! The keymap kernel: what an action is, which chord runs it, and how a shortcut is recorded.
 //! No files, no widgets, no app types. See `README.md`.
 mod action;
+mod declare;
 mod keybinds;
 mod recorder;
 mod search;

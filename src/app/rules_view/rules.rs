@@ -1,8 +1,7 @@
 use crate::app::{App, SettingsTab};
 use crate::config;
-use crate::rules::{EntryRef, Kind, SortKey};
+use crate::rules::{EntryRef, Kind, Matcher, Prop, Props, Rule, SortKey};
 use kdl::KdlNode;
-use rune_kit::SortDir;
 use std::path::Path;
 
 use super::{rule_insertion, rule_key, rule_positions};
@@ -22,25 +21,23 @@ impl App {
     }
 
     pub fn save_layout_rule(&mut self) {
-        let pattern = App::short_path(&self.cwd);
-        let layout = if self.layout.is_grid() {
-            "grid"
-        } else {
-            "list"
+        let rule = Rule {
+            name: None,
+            kind: Kind::Folder,
+            matches: vec![Matcher {
+                path: Some(App::short_path(&self.cwd)),
+                ..Matcher::default()
+            }],
+            excludes: Vec::new(),
+            props: Props {
+                layout: Prop::Set(self.layout),
+                sort: Prop::Set(SortKey::from_column(&self.sort.0).unwrap_or(SortKey::Name)),
+                direction: Prop::Set(self.sort.1),
+                show_hidden: Prop::Set(self.show_hidden),
+                hidden: Prop::Unset,
+            },
         };
-        let direction = match self.sort.1 {
-            SortDir::Ascending => "ascending",
-            SortDir::Descending => "descending",
-        };
-        let hidden = if self.show_hidden { "true" } else { "false" };
-        let text = format!(
-            "folder-rule {{\n    match path={}\n    layout {layout}\n    sort {}\n    direction {direction}\n    show-hidden #{hidden}\n}}\n",
-            crate::rules::quote(&pattern),
-            SortKey::from_column(&self.sort.0)
-                .unwrap_or(SortKey::Name)
-                .as_str(),
-        );
-        self.append_rule(Kind::Folder, &text);
+        self.append_rule(&rule);
     }
 
     pub fn pin_entry(&mut self, hidden: bool) {
@@ -50,23 +47,31 @@ impl App {
         let Some(entry) = self.entries.iter().find(|entry| entry.id == id) else {
             return;
         };
-        let pattern = App::short_path(&entry.path);
-        let hidden = if hidden { "true" } else { "false" };
-        let text = format!(
-            "entry-rule {{\n    match path={}\n    hidden #{hidden}\n}}\n",
-            crate::rules::quote(&pattern),
-        );
-        self.append_rule(Kind::Entry, &text);
+        let rule = Rule {
+            name: None,
+            kind: Kind::Entry,
+            matches: vec![Matcher {
+                path: Some(App::short_path(&entry.path)),
+                ..Matcher::default()
+            }],
+            excludes: Vec::new(),
+            props: Props {
+                hidden: Prop::Set(hidden),
+                ..Props::default()
+            },
+        };
+        self.append_rule(&rule);
     }
 
-    pub(super) fn append_rule(&mut self, kind: Kind, text: &str) -> bool {
+    pub(super) fn append_rule(&mut self, rule: &Rule) -> bool {
+        let kind = rule.kind;
         let index = self
             .rules
             .rules
             .iter()
-            .rposition(|rule| rule.kind == kind)
+            .rposition(|existing| existing.kind == kind)
             .map_or(self.rules.rules.len(), |at| at + 1);
-        let written = match text.parse::<KdlNode>() {
+        let written = match rule.to_kdl().parse::<KdlNode>() {
             Ok(node) => self.store.edit(config::CONFIG, |doc| {
                 let at = rule_insertion(doc, kind);
                 // Break the line first: a last node with no terminator or trailing newline would

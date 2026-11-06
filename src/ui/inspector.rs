@@ -1,4 +1,4 @@
-use crate::app::{App, Preview};
+use crate::app::{App, PREVIEW_LIMIT, Preview};
 use crate::format;
 use crate::keybinds::Action;
 use rune::{Align, El, SurfaceFit, Tx, col, el, icon, row, text};
@@ -358,7 +358,13 @@ fn preview_section(s: &App, k: &'static Kit) -> El {
             panel = panel.child(note(k, label));
         }
         Some(Preview::TooLarge) => {
-            panel = panel.child(note(k, "Too large to preview · 24 KB limit"))
+            panel = panel.child(note(
+                k,
+                format!(
+                    "Too large to preview · {} limit",
+                    crate::format::size(PREVIEW_LIMIT)
+                ),
+            ))
         }
         Some(Preview::Binary) => panel = panel.child(note(k, "No text preview")),
         None => panel = panel.child(note(k, "No preview")),

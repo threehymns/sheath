@@ -59,7 +59,11 @@ impl Engine {
         }
         self.cols = cols;
         self.rows = rows;
-        self.cell = (metrics.cell as u32, metrics.line as u32);
+        // The VT and the PTY count whole device pixels: the same unit the mouse encoder places
+        // the pointer in and the raster composes in. A logical cell is not that at scale != 1.
+        let cell_px = (metrics.cell * metrics.scale).round().max(1.0) as u32;
+        let line_px = (metrics.line * metrics.scale).round().max(1.0) as u32;
+        self.cell = (cell_px, line_px);
         // A cell that moved by less than a point, or a display at another scale, changes the
         // shapes even though the grid's size is the same, so every row is read again.
         self.metrics = metrics;
@@ -68,8 +72,8 @@ impl Engine {
             let _ = master.resize(PtySize {
                 rows,
                 cols,
-                pixel_width: (cols as f32 * cell.0) as u16,
-                pixel_height: (rows as f32 * cell.1) as u16,
+                pixel_width: (u32::from(cols) * cell_px).min(u32::from(u16::MAX)) as u16,
+                pixel_height: (u32::from(rows) * line_px).min(u32::from(u16::MAX)) as u16,
             });
         }
         self.applied = 0;

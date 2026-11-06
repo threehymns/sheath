@@ -16,7 +16,7 @@ use actions::Keybinds;
 use rune::{Drag, El, Phase, TextStyle, Tx, Waker, col};
 use rune_kit::Kit;
 use rune_kit::shell::{Reorder, Sidebar, SidebarRow};
-use rune_tty::Terminal;
+use rune_tty::{Drain, Terminal};
 
 use crate::Window;
 use crate::action::Action;
@@ -397,16 +397,11 @@ impl Tabs {
         dark: bool,
         tx: &mut Tx,
     ) -> (bool, Option<Duration>) {
-        let mut redraw = false;
-        let mut blink: Option<Duration> = None;
+        let mut drain = Drain::default();
         let mut ended: Vec<(u64, u64)> = Vec::new();
         for tab in &mut self.rows {
-            let (redrew, wait, closed) = tab.panes.poll(mono, scale, wake, dark, tx);
-            redraw |= redrew;
-            blink = match (blink, wait) {
-                (Some(soonest), Some(wait)) => Some(soonest.min(wait)),
-                (soonest, wait) => soonest.or(wait),
-            };
+            let (tab_drain, closed) = tab.panes.poll(mono, scale, wake, dark, tx);
+            drain.merge(tab_drain);
             for block in closed {
                 ended.push((tab.id, block));
             }
@@ -417,7 +412,7 @@ impl Tabs {
             self.close_block(tab, block);
         }
         self.sync_focus();
-        (redraw, blink)
+        (drain.redraw, drain.blink)
     }
 
     /// The keyboard goes to the active tab's focused block and nowhere else: a shell in another

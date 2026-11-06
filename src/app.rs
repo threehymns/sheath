@@ -28,6 +28,7 @@ pub use actions_ui::Palette;
 pub use commands::SettingsTab;
 pub use drag::{FileDrag, list_drag};
 pub use drop::PlaceAt;
+pub(crate) use entry::PREVIEW_LIMIT;
 pub use entry::{Entry, Preview};
 pub use files::Clipboard;
 pub use grid::{
@@ -53,12 +54,12 @@ use crate::config::{self, Store};
 use crate::keybinds::{Action, Keybinds};
 use crate::notice::Notice;
 use crate::places::{Places, Section};
-use crate::recorder::Recorder;
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::session::Session;
 use crate::settings::Settings;
 use crate::system_icons::SystemIcons;
 use crate::views::Views;
+use actions::Recorder;
 
 use paths::{default_location, start_location};
 #[cfg(test)]
@@ -211,6 +212,13 @@ impl App {
         app.history.push(path.clone());
         app.at = 0;
         app.enter(path);
+        for (file, error) in [
+            (crate::session::FILE, app.session.error().map(str::to_owned)),
+            (crate::views::FILE, app.views.error().map(str::to_owned)),
+            (crate::places::FILE, app.places.error().map(str::to_owned)),
+        ] {
+            app.report_state(file, error);
+        }
         app
     }
 
@@ -388,6 +396,33 @@ impl App {
         }
     }
 
+    /// Surfaces a state file's last problem and clears it once the file is written again. A
+    /// repeated error is not raised twice, so a dismissed toast stays dismissed.
+    pub(super) fn report_state(&mut self, file: &'static str, error: Option<String>) {
+        let Some(detail) = error else {
+            self.notices.retain(|notice| notice.file != file);
+            return;
+        };
+        if let Some(notice) = self.notices.iter_mut().find(|notice| notice.file == file) {
+            if notice.detail != detail {
+                *notice = Notice::new(file, format!("Couldn’t use {file}"), detail.clone(), detail);
+            }
+            return;
+        }
+        self.notices.push(Notice::new(
+            file,
+            format!("Couldn’t use {file}"),
+            detail.clone(),
+            detail,
+        ));
+    }
+
+    pub(super) fn save_session(&mut self, save: impl FnOnce(&mut Session)) {
+        save(&mut self.session);
+        let error = self.session.error().map(str::to_owned);
+        self.report_state(crate::session::FILE, error);
+    }
+
     pub fn apply_config(&mut self) {
         if self.rule_edit.is_some() {
             self.rule_edit = None;
@@ -438,6 +473,8 @@ impl App {
                 show_hidden: None,
             },
         );
+        let error = self.views.error().map(str::to_owned);
+        self.report_state(crate::views::FILE, error);
     }
 
     fn save_setting(&mut self, changed: crate::settings::Setting) {

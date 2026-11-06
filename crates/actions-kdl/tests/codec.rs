@@ -41,17 +41,11 @@ enum Flag {
 }
 
 impl Setting for Flag {
-    const ALL: &'static [Self] = &[Flag::Grid];
-
     fn from_name(name: &str) -> Option<Flag> {
         (name == "grid").then_some(Flag::Grid)
     }
 
     fn name(self) -> &'static str {
-        "grid"
-    }
-
-    fn id(self) -> &'static str {
         "grid"
     }
 }

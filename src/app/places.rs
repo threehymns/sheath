@@ -24,20 +24,28 @@ pub fn place_rename_edit(s: &mut App) -> &mut TextEdit {
 }
 
 impl App {
+    /// Writes the sidebar and reports a failed write, so a reorder the next launch will not see
+    /// is not lost silently.
+    fn save_places(&mut self) {
+        self.places.save();
+        let error = self.places.error().map(str::to_owned);
+        self.report_state(crate::places::FILE, error);
+    }
+
     /// Opens a folder the browser let the user share, adding it to the sidebar.
     pub fn accept_granted_folder(&mut self, path: PathBuf) {
         if self
             .places
             .insert(Section::Favourites, 0, std::slice::from_ref(&path))
         {
-            self.places.save();
+            self.save_places();
         }
         self.navigate(path);
     }
 
     pub fn move_place(&mut self, section: Section, from: usize, to: usize) {
         if self.places.reorder(section, from, to) {
-            self.places.save();
+            self.save_places();
         }
     }
 
@@ -48,7 +56,7 @@ impl App {
             .map(|entry| entry.path.clone())
             .collect();
         if self.places.insert(section, index, &paths) {
-            self.places.save();
+            self.save_places();
         }
     }
 
@@ -56,7 +64,7 @@ impl App {
     pub fn add_current_place(&mut self) {
         let path = self.cwd.clone();
         if self.places.insert(Section::Favourites, 0, &[path]) {
-            self.places.save();
+            self.save_places();
         }
     }
 
@@ -154,7 +162,10 @@ impl App {
             .map_err(|err| format!("Couldn’t rename “{old_name}”: {err}"))?;
         let old_id = id.clone();
         self.places.move_path(&old_path, &new_path);
-        self.places.save();
+        self.save_places();
+        self.views.move_path(&old_path, &new_path);
+        let error = self.views.error().map(str::to_owned);
+        self.report_state(crate::views::FILE, error);
         self.places_at.remove(&old_id);
         let under_old = self.cwd.strip_prefix(&old_path).map(Path::to_path_buf);
         match under_old {
@@ -182,7 +193,7 @@ impl App {
         };
         let name = rename.edit.text.trim();
         if !name.is_empty() && self.places.rename(&rename.id, name) {
-            self.places.save();
+            self.save_places();
         }
     }
 
@@ -219,7 +230,7 @@ impl App {
             return;
         };
         if self.places.remove(&menu.id) {
-            self.places.save();
+            self.save_places();
             self.places_at.remove(&menu.id);
         }
     }

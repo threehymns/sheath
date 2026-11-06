@@ -249,7 +249,7 @@ fn folders_first_can_be_turned_off() {
         "folders sort above files"
     );
 
-    app.toggle_folders_first();
+    app.toggle_setting(crate::settings::Setting::FoldersFirst);
     assert!(!app.config.folders_first);
     assert_eq!(
         names(&app).last(),

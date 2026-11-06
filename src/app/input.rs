@@ -96,7 +96,7 @@ pub fn on_key(s: &mut App, event: &KeyEvent, tx: &mut Tx) -> bool {
         Action::DeselectAll,
         Action::InvertSelection,
     ];
-    for action in Action::ALL {
+    for action in Action::ALL.iter().copied() {
         if typing && guarded.contains(&action) {
             continue;
         }

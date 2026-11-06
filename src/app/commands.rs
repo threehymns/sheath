@@ -1,7 +1,8 @@
 use crate::app::App;
 use crate::config;
 use crate::keybinds::{Action, Keybinds};
-use crate::recorder::{Outcome, Recorder};
+use crate::settings::Setting;
+use actions::{Outcome, Recorder};
 use actions_ui::{KeybindHost, Palette, PaletteHost};
 use rune::{El, PhysicalInput, Shortcut, ShortcutError, Tx, col};
 
@@ -102,6 +103,8 @@ impl App {
         shortcut: Option<&Shortcut>,
     ) -> Result<(), ShortcutError> {
         self.keybinds.set(action, shortcut)?;
+        // The chord is set in memory; a failed write surfaces through `keybinds_error`, so the
+        // editor does not show a chord the next launch will not have.
         let _ = self.store.edit(crate::config::KEYBINDS, |doc| {
             actions_kdl::keybinds::set(doc, &self.keybinds, action)
         });
@@ -195,8 +198,8 @@ impl App {
             Action::AddPlace => self.add_current_place(),
             Action::MakeAlias => self.make_aliases(),
             Action::ToggleLayout => self.toggle_layout(),
-            Action::ToggleInspector => self.toggle_inspector(),
-            Action::ToggleFoldersFirst => self.toggle_folders_first(),
+            Action::ToggleInspector => self.toggle_setting(Setting::Inspector),
+            Action::ToggleFoldersFirst => self.toggle_setting(Setting::FoldersFirst),
             Action::Cut => self.copy_selection(true),
             Action::Paste => self.paste(),
             Action::Duplicate => self.duplicate_selection(),
@@ -293,6 +296,9 @@ impl KeybindHost<Action> for App {
     }
 
     fn keybinds_error(&self) -> Option<String> {
-        self.store.error(config::KEYBINDS).map(str::to_owned)
+        self.store
+            .write_error
+            .clone()
+            .or_else(|| self.store.error(config::KEYBINDS).map(str::to_owned))
     }
 }

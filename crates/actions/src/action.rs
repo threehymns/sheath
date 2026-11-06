@@ -10,11 +10,6 @@ pub trait Action: Copy + Ord + 'static {
 
     fn label(self) -> &'static str;
 
-    /// The palette section this action sits in.
-    fn group(self) -> &'static str {
-        "Commands"
-    }
-
     /// The chord that runs it first, or `None` for an action that starts unbound.
     fn default_chord(self) -> Option<&'static str>;
 

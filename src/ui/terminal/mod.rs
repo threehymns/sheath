@@ -1,48 +1,18 @@
-pub(crate) use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
-
 use crate::app::App;
 use crate::icons;
 use rune::{Cursor, Drag, El, Key, Phase, Transition, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
-use rune_tty::{ProgressKind, Terminal};
+use rune_tty::{ProgressKind, Terminal, screen_of, wire};
 
 pub(super) const GRIP_HEIGHT: f32 = 7.0;
 
 /// The grid surface with the app's handlers on it: the wheel, the hover, the drag and the
 /// layout. The standalone `avar` window wires its own handlers to the same `screen_of`.
 fn screen(s: &App, k: &'static Kit) -> El {
-    screen_of(&s.term, s.scale.get(), k)
-        .on_wheel(|s: &mut App, wheel, tx: &mut Tx| {
-            // A program that captured the mouse gets the notch and scrolls its own view, the way
-            // `less` and `vim` do. Shift is the modifier that takes the mouse back, as Ghostty's
-            // default `mouse-shift-capture` does, and scrolls the pane's history instead.
-            let shift = tx.mods().shift;
-            if !shift
-                && let Some(at) = s.term.hovered_cell()
-                && s.term.mouse_wheel(wheel.dy > 0.0, at, false)
-            {
-                return true;
-            }
-            s.term.wheel(wheel.dy)
-        })
-        // The link under the pointer gets an underline, the way Ghostty shows which link a click
-        // would open. A move inside the same cell is answered from the pane's last cell, so this
-        // runs the terminal only when the pointer crosses into a new one.
-        .on_pointer_move_local(|s: &mut App, p, tx: &mut Tx| {
-            let at = terminal_cell(&s.term, (p.x, p.y));
-            s.term.hover(at, tx.mods().shift);
-        })
-        .on_hover_change(|s: &mut App, inside: bool, _: &mut Tx| {
-            if !inside {
-                s.term.hover(None, false);
-            }
-        })
-        .on_drag(|s: &mut App, drag: &mut Drag, tx: &mut Tx| terminal_drag(&mut s.term, drag, tx))
-        .on_press(|s: &mut App| s.term.set_focus(true))
-        .on_layout_tx(|s: &mut App, rect, tx: &mut Tx| {
-            layout_screen(&mut s.term, rect);
-            tx.live_only();
-        })
+    wire(screen_of(&s.term, s.scale.get(), k), |s: &mut App| {
+        Some(&mut s.term)
+    })
+    .on_press(|s: &mut App| s.term.set_focus(true))
 }
 
 /// The search field's type, small enough to sit inside the header's 26-point bar instead of

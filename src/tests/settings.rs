@@ -71,7 +71,7 @@ fn the_settings_panel_has_a_sidebar_of_categories() {
 
     click(&mut rt, "settings-tab-keybinds");
     assert_eq!(rt.state.settings, Some(SettingsTab::Keybinds));
-    for action in Action::ALL {
+    for action in Action::ALL.iter().copied() {
         assert!(
             rt.find(&format!("record-{}-field", action.id())).is_some(),
             "{} has a recorder",
@@ -226,7 +226,7 @@ fn settings_and_keybinds_save_to_separate_files() {
     let dir = fixture();
     let (mut app, keybinds_path) = app_in_config_dir(&dir);
     app.toggle_hidden();
-    app.toggle_inspector();
+    app.toggle_setting(crate::settings::Setting::Inspector);
 
     let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
     assert!(config.contains("show-hidden #true"), "{config}");
@@ -505,7 +505,7 @@ fn the_column_switches_take_a_column_out_of_the_list() {
 #[test]
 fn the_system_icon_setting_is_off_by_default_and_saves_its_switch() {
     assert!(
-        !Settings::defaults().system_icons,
+        !Settings::default().system_icons,
         "the built-in glyphs start"
     );
     assert!(!Setting::SystemIcons.default_on());

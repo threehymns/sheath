@@ -38,31 +38,6 @@ use scroll::Host;
 use settings::{Pick, SettingsTab};
 use tabs::Tabs;
 
-/// The chords that reach the window while a shell has the keyboard. Everything else is typed:
-/// these are the commands that are the window's rather than a program's, and a shell reads the
-/// unshifted forms as its own control keys.
-const WINDOW_CHORDS: [Action; 19] = [
-    Action::CommandBar,
-    Action::OpenSettings,
-    Action::NewTab,
-    Action::CloseTab,
-    Action::NextTab,
-    Action::PrevTab,
-    Action::SplitRight,
-    Action::SplitDown,
-    Action::ZoomPane,
-    Action::ClosePane,
-    Action::FocusLeft,
-    Action::FocusRight,
-    Action::FocusUp,
-    Action::FocusDown,
-    Action::ResizeLeft,
-    Action::ResizeRight,
-    Action::ResizeUp,
-    Action::ResizeDown,
-    Action::BalancePanes,
-];
-
 /// Where the shell starts: the first path on the command line that is a folder, else the folder
 /// the window was started in.
 fn start_dir() -> PathBuf {
@@ -214,6 +189,7 @@ impl Window {
 
     /// Shows the top bar, or takes it away, and writes the choice down so the next window opens
     /// the same way.
+    #[cfg(target_os = "macos")]
     pub(crate) fn set_top_bar(&mut self, on: bool) {
         self.top_bar = on;
         self.prefs.set_setting(config::Setting::TopBar, on);
@@ -333,8 +309,11 @@ pub fn on_key(s: &mut Window, event: &KeyEvent, tx: &mut Tx) -> bool {
     // A shell with the keyboard keeps every key it can use, Ctrl-C and Escape included. Only the
     // window's own chords reach it while the shell has focus; everything else is typed.
     let typing = s.tabs.focused().is_some_and(|term| term.focus);
-    let chords: &[Action] = if typing { &WINDOW_CHORDS } else { &Action::ALL };
-    for action in chords.iter().copied() {
+    for action in Action::ALL
+        .iter()
+        .copied()
+        .filter(|action| !typing || action.window_chord())
+    {
         if s.keybinds.matches(action, event) {
             s.run(action, tx);
             return true;

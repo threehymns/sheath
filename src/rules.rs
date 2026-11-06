@@ -4,13 +4,47 @@ use rune_kit::SortDir;
 use std::path::Path;
 
 mod pattern;
+mod prop;
 
 pub use pattern::{glob, path_match, quote};
+pub use prop::{Prop, PropId, Props};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     Folder,
     Entry,
+}
+
+impl Kind {
+    pub fn node(self) -> &'static str {
+        match self {
+            Kind::Folder => "folder-rule",
+            Kind::Entry => "entry-rule",
+        }
+    }
+
+    pub fn from_node(name: &str) -> Option<Kind> {
+        match name {
+            "folder-rule" => Some(Kind::Folder),
+            "entry-rule" => Some(Kind::Entry),
+            _ => None,
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Kind::Folder => "Folder",
+            Kind::Entry => "Entry",
+        }
+    }
+
+    /// The word a sentence uses about the kind.
+    pub fn noun(self) -> &'static str {
+        match self {
+            Kind::Folder => "folder",
+            Kind::Entry => "entry",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,23 +163,6 @@ impl Matcher {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum Prop<T> {
-    #[default]
-    Unset,
-    Inherit,
-    Set(T),
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Props {
-    pub layout: Prop<Layout>,
-    pub sort: Prop<SortKey>,
-    pub direction: Prop<SortDir>,
-    pub show_hidden: Prop<bool>,
-    pub hidden: Prop<bool>,
-}
-
 #[derive(Clone, Debug)]
 pub struct Rule {
     pub name: Option<String>,
@@ -191,10 +208,7 @@ impl Rule {
     }
 
     pub fn kind_label(&self) -> &'static str {
-        match self.kind {
-            Kind::Folder => "Folder",
-            Kind::Entry => "Entry",
-        }
+        self.kind.label()
     }
 
     pub fn details(&self) -> String {
@@ -205,36 +219,11 @@ impl Rule {
         for matcher in &self.excludes {
             parts.push(format!("exclude {}", matcher.summary()));
         }
-        match self.props.layout {
-            Prop::Unset => {}
-            Prop::Inherit => parts.push("layout inherit".to_owned()),
-            Prop::Set(layout) => parts.push(format!(
-                "layout {}",
-                if layout.is_grid() { "grid" } else { "list" }
-            )),
-        }
-        match self.props.sort {
-            Prop::Unset => {}
-            Prop::Inherit => parts.push("sort inherit".to_owned()),
-            Prop::Set(sort) => parts.push(format!("sort {}", sort.as_str())),
-        }
-        match self.props.direction {
-            Prop::Unset => {}
-            Prop::Inherit => parts.push("direction inherit".to_owned()),
-            Prop::Set(SortDir::Ascending) => parts.push("direction ascending".to_owned()),
-            Prop::Set(SortDir::Descending) => parts.push("direction descending".to_owned()),
-        }
-        for (name, prop) in [
-            ("show-hidden", self.props.show_hidden),
-            ("hidden", self.props.hidden),
-        ] {
-            match prop {
-                Prop::Unset => {}
-                Prop::Inherit => parts.push(format!("{name} inherit")),
-                Prop::Set(true) => parts.push(format!("{name} #true")),
-                Prop::Set(false) => parts.push(format!("{name} #false")),
-            }
-        }
+        parts.extend(
+            PropId::ALL
+                .iter()
+                .filter_map(|prop| prop.kdl_line(&self.props)),
+        );
         if parts.is_empty() {
             "everything".to_owned()
         } else {
@@ -244,13 +233,9 @@ impl Rule {
 
     // The node as the parser reads it back. The editor writes this over the rule's old node.
     pub fn to_kdl(&self) -> String {
-        let head = match self.kind {
-            Kind::Folder => "folder-rule",
-            Kind::Entry => "entry-rule",
-        };
         let mut text = match &self.name {
-            Some(name) => format!("{head} {} {{\n", quote(name)),
-            None => format!("{head} {{\n"),
+            Some(name) => format!("{} {} {{\n", self.kind.node(), quote(name)),
+            None => format!("{} {{\n", self.kind.node()),
         };
         for matcher in &self.matches {
             text.push_str(&directive("match", matcher));
@@ -258,35 +243,11 @@ impl Rule {
         for matcher in &self.excludes {
             text.push_str(&directive("exclude", matcher));
         }
-        match self.props.layout {
-            Prop::Unset => {}
-            Prop::Inherit => text.push_str("    layout inherit\n"),
-            Prop::Set(layout) => text.push_str(&format!(
-                "    layout {}\n",
-                if layout.is_grid() { "grid" } else { "list" }
-            )),
-        }
-        match self.props.sort {
-            Prop::Unset => {}
-            Prop::Inherit => text.push_str("    sort inherit\n"),
-            Prop::Set(sort) => text.push_str(&format!("    sort {}\n", sort.as_str())),
-        }
-        match self.props.direction {
-            Prop::Unset => {}
-            Prop::Inherit => text.push_str("    direction inherit\n"),
-            Prop::Set(SortDir::Ascending) => text.push_str("    direction ascending\n"),
-            Prop::Set(SortDir::Descending) => text.push_str("    direction descending\n"),
-        }
-        for (name, prop) in [
-            ("show-hidden", self.props.show_hidden),
-            ("hidden", self.props.hidden),
-        ] {
-            match prop {
-                Prop::Unset => {}
-                Prop::Inherit => text.push_str(&format!("    {name} inherit\n")),
-                Prop::Set(on) => {
-                    text.push_str(&format!("    {name} #{on}\n"));
-                }
+        for prop in PropId::ALL {
+            if let Some(line) = prop.kdl_line(&self.props) {
+                text.push_str("    ");
+                text.push_str(&line);
+                text.push('\n');
             }
         }
         text.push_str("}\n");
@@ -359,10 +320,8 @@ impl Rules {
     pub fn parse(doc: &KdlDocument) -> Result<Rules, String> {
         let mut rules = Vec::new();
         for node in doc.nodes() {
-            let kind = match node.name().value() {
-                "folder-rule" => Kind::Folder,
-                "entry-rule" => Kind::Entry,
-                _ => continue,
+            let Some(kind) = Kind::from_node(node.name().value()) else {
+                continue;
             };
             rules.push(parse_rule(node, kind)?);
         }
@@ -433,92 +392,38 @@ fn parse_rule(node: &KdlNode, kind: Kind) -> Result<Rule, String> {
         match child.name().value() {
             "match" => rule.matches.push(parse_matcher(child, kind)?),
             "exclude" => rule.excludes.push(parse_matcher(child, kind)?),
-            "layout" => {
-                rule.props.layout = parse_prop(child, "layout", Kind::Folder, kind, parse_layout)?
-            }
-            "sort" => {
-                rule.props.sort =
-                    parse_prop(child, "sort", Kind::Folder, kind, SortKey::from_column)?
-            }
-            "direction" => {
-                rule.props.direction =
-                    parse_prop(child, "direction", Kind::Folder, kind, parse_direction)?
-            }
-            "show-hidden" => {
-                rule.props.show_hidden =
-                    parse_prop(child, "show-hidden", Kind::Folder, kind, parse_bool)?
-            }
-            "hidden" => {
-                rule.props.hidden = parse_prop(child, "hidden", Kind::Entry, kind, parse_bool)?
-            }
             other => {
-                return Err(format!(
-                    "unknown property `{other}`; folder rules and entry rules support layout, \
-                     sort, direction, show-hidden, and hidden"
-                ));
+                let Some(prop) = PropId::from_name(other) else {
+                    let names = PropId::ALL
+                        .iter()
+                        .map(|prop| prop.name())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(format!("unknown property `{other}`; rules support {names}"));
+                };
+                if prop.kind() != kind {
+                    return Err(format!(
+                        "`{other}` is only for {} rules",
+                        prop.kind().noun()
+                    ));
+                }
+                let Some(entry) = child.get(0) else {
+                    return Err(format!("`{other}` needs a value"));
+                };
+                let value = if let Some(text) = entry.as_string() {
+                    text.to_owned()
+                } else if let Some(flag) = entry.as_bool() {
+                    flag.to_string()
+                } else {
+                    return Err(format!("`{other}` needs a value"));
+                };
+                if !prop.set(&mut rule.props, &value) {
+                    return Err(format!("`{other}` does not accept `{value}`"));
+                }
             }
         }
     }
     Ok(rule)
-}
-
-fn parse_prop<T: Copy>(
-    node: &KdlNode,
-    name: &str,
-    allowed: Kind,
-    on: Kind,
-    parse: fn(&str) -> Option<T>,
-) -> Result<Prop<T>, String> {
-    if allowed != on {
-        return Err(format!(
-            "`{name}` is only for {} rules",
-            match allowed {
-                Kind::Folder => "folder",
-                Kind::Entry => "entry",
-            }
-        ));
-    }
-    let Some(entry) = node.get(0) else {
-        return Err(format!("`{name}` needs a value"));
-    };
-    let value = if let Some(text) = entry.as_string() {
-        text.to_owned()
-    } else if let Some(flag) = entry.as_bool() {
-        flag.to_string()
-    } else {
-        return Err(format!("`{name}` needs a value"));
-    };
-    if value == "inherit" {
-        return Ok(Prop::Inherit);
-    }
-    match parse(&value) {
-        Some(value) => Ok(Prop::Set(value)),
-        None => Err(format!("`{name}` does not accept `{value}`")),
-    }
-}
-
-fn parse_layout(value: &str) -> Option<Layout> {
-    match value {
-        "list" => Some(Layout::List),
-        "grid" => Some(Layout::Grid),
-        _ => None,
-    }
-}
-
-fn parse_direction(value: &str) -> Option<SortDir> {
-    match value {
-        "ascending" => Some(SortDir::Ascending),
-        "descending" => Some(SortDir::Descending),
-        _ => None,
-    }
-}
-
-fn parse_bool(value: &str) -> Option<bool> {
-    match value {
-        "true" => Some(true),
-        "false" => Some(false),
-        _ => None,
-    }
 }
 
 fn parse_matcher(node: &KdlNode, kind: Kind) -> Result<Matcher, String> {

@@ -46,10 +46,6 @@ impl Setting {
         }
     }
 
-    pub fn id(self) -> &'static str {
-        self.name()
-    }
-
     pub fn default_on(self) -> bool {
         match self {
             Setting::HorizontalTabs => false,
@@ -60,8 +56,6 @@ impl Setting {
 }
 
 impl actions::Setting for Setting {
-    const ALL: &'static [Self] = &Setting::ALL;
-
     fn from_name(name: &str) -> Option<Setting> {
         Setting::ALL
             .into_iter()
@@ -70,10 +64,6 @@ impl actions::Setting for Setting {
 
     fn name(self) -> &'static str {
         Setting::name(self)
-    }
-
-    fn id(self) -> &'static str {
-        Setting::id(self)
     }
 }
 

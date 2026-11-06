@@ -89,21 +89,15 @@ impl Finder {
     /// Every entry under `root` that matches `query`, best matches first. The first search in a
     /// folder comes back empty and starts the walk instead; the caller searches again when
     /// [`land`](Finder::land) says the index is ready.
-    pub(super) fn find(
-        &mut self,
-        root: &Path,
-        query: &str,
-        show_hidden: bool,
-        limit: usize,
-    ) -> Found {
+    pub(super) fn find(&mut self, root: &Path, query: &str, limit: usize) -> Found {
         #[cfg(target_arch = "wasm32")]
         {
-            super::scan::search_below(root, query, show_hidden, limit)
+            // The walk sees hidden names too; `apply_filter` decides whether a row is shown, so
+            // a search and a plain folder listing hide the same rows.
+            super::scan::search_below(root, query, limit)
         }
         #[cfg(not(target_arch = "wasm32"))]
         {
-            // fff decides what it indexes; hidden and ignored matches are handled with the rows.
-            let _ = show_hidden;
             if self.index.as_ref().is_none_or(|index| index.root != root) {
                 self.index = None;
                 self.build(root);

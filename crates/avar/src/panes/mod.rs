@@ -7,12 +7,11 @@
 //! sibling the space, so the tree only ever holds the blocks that are still running.
 
 use std::path::PathBuf;
-use std::time::Duration;
 
 use actions::Keybinds;
 use rune::{El, TextStyle, Tx, Waker};
 use rune_kit::Kit;
-use rune_tty::Terminal;
+use rune_tty::{Drain, Terminal};
 
 use crate::action::Action;
 
@@ -436,28 +435,24 @@ impl Panes {
         wake: Option<&Waker>,
         dark: bool,
         tx: &mut Tx,
-    ) -> (bool, Option<Duration>, Vec<u64>) {
+    ) -> (Drain, Vec<u64>) {
         let theme = rune_tty::theme(dark);
-        let mut redraw = false;
-        let mut blink: Option<Duration> = None;
+        let mut drain = Drain::default();
         let mut ended = Vec::new();
         for block in &mut self.blocks {
             block.term.measure(mono, scale);
-            redraw |= block.term.poll(wake, theme);
-            for text in block.term.take_copies() {
+            let mut pane = block.term.drain(wake, theme);
+            for text in std::mem::take(&mut pane.copies) {
                 tx.copy(text);
             }
-            // The window has no toasts to put a program's OSC 9 or 777 notification in: drained
-            // so they do not pile up behind it, and otherwise dropped.
-            block.term.take_notifications();
-            if block.term.shell_exited() {
+            // The window has no toasts to put a program's OSC 9 or 777 notification in: the
+            // drain hands them over so they are not left behind, and the window drops them.
+            if pane.exited {
                 ended.push(block.id);
             }
-            if let Some(wait) = block.term.blink_wait() {
-                blink = Some(blink.map_or(wait, |soonest| soonest.min(wait)));
-            }
+            drain.merge(pane);
         }
-        (redraw, blink, ended)
+        (drain, ended)
     }
 
     /// The tab's layout: the blocks as panes, split by the gaps that resize them. A tab holding

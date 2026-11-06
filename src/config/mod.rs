@@ -114,6 +114,65 @@ pub fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     })
 }
 
+/// A machine-owned file in the state directory: where it is, and the last problem reading or
+/// writing it. Losing a state file is never fatal, so a missing one reads as `None` and the
+/// caller's default stands in.
+#[derive(Default)]
+pub struct State {
+    path: Option<PathBuf>,
+    error: Option<String>,
+}
+
+impl State {
+    pub fn load(name: &str) -> State {
+        State {
+            path: state_dir().map(|dir| dir.join(name)),
+            error: None,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn at(path: PathBuf) -> State {
+        State {
+            path: Some(path),
+            error: None,
+        }
+    }
+
+    /// The file's text. A missing file is not a problem; a read that fails for another reason is
+    /// kept for the caller to report.
+    pub fn read(&mut self) -> Option<String> {
+        let path = self.path.as_ref()?;
+        match crate::vfs::read_to_string(path) {
+            Ok(text) => Some(text),
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => None,
+            Err(err) => {
+                self.error = Some(format!("Couldn’t read {}: {err}", path.display()));
+                None
+            }
+        }
+    }
+
+    pub fn write(&mut self, text: &str) {
+        let Some(path) = self.path.clone() else {
+            return;
+        };
+        self.error = write_atomic(&path, text).err();
+    }
+
+    /// Records a problem the caller found in the file's text, naming the file.
+    pub fn fail(&mut self, problem: &str) {
+        self.error = Some(match &self.path {
+            Some(path) => format!("Couldn’t read {}: {problem}", path.display()),
+            None => problem.to_owned(),
+        });
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Problem {
     pub detail: String,

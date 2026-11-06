@@ -92,12 +92,15 @@ impl Builtin {
         }
     }
 
-    pub(super) fn exists(&self) -> bool {
+    fn exists(&self) -> bool {
         self.path().is_some_and(|path| crate::vfs::is_dir(&path))
             && !(self.id == "temp" && self.path() == Some(root_dir()))
     }
 
     pub(super) fn place(&self) -> Option<Place> {
+        if !self.exists() {
+            return None;
+        }
         Some(Place {
             id: self.id.to_owned(),
             name: self.name.to_owned(),

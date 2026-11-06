@@ -96,16 +96,13 @@ pub(super) fn rule_positions(doc: &KdlDocument) -> Vec<usize> {
     doc.nodes()
         .iter()
         .enumerate()
-        .filter(|(_, node)| matches!(node.name().value(), "folder-rule" | "entry-rule"))
+        .filter(|(_, node)| Kind::from_node(node.name().value()).is_some())
         .map(|(at, _)| at)
         .collect()
 }
 
 pub(super) fn rule_insertion(doc: &KdlDocument, kind: Kind) -> usize {
-    let head = match kind {
-        Kind::Folder => "folder-rule",
-        Kind::Entry => "entry-rule",
-    };
+    let head = kind.node();
     let positions = rule_positions(doc);
     let after = positions
         .iter()

@@ -12,7 +12,7 @@ use super::*;
 impl App {
     pub(super) fn enter(&mut self, path: PathBuf) {
         self.watch.retarget(&path);
-        self.session.remember(&path);
+        self.save_session(|session| session.remember(&path));
         self.cwd = path;
         self.visit = Default::default();
         self.stop_scrolling();
@@ -247,9 +247,7 @@ impl App {
             self.search_truncated = false;
             return;
         }
-        let found = self
-            .finder
-            .find(&self.cwd, query, self.show_hidden, SEARCH_LIMIT);
+        let found = self.finder.find(&self.cwd, query, SEARCH_LIMIT);
         if self.parked.is_none() {
             self.parked = Some(std::mem::take(&mut self.entries));
         }
@@ -338,11 +336,48 @@ impl App {
         self.apply_filter();
     }
 
-    pub fn toggle_hidden_setting(&mut self) {
-        self.config.show_hidden = !self.config.show_hidden;
-        self.remember(Setting::ShowHidden, self.config.show_hidden);
-        self.apply_rules();
-        self.apply_filter();
+    /// Flips one setting and applies what depends on it. The exhaustive match is where a
+    /// setting's side effects live; a new setting must be given one here.
+    pub fn toggle_setting(&mut self, setting: Setting) {
+        let on = !setting.value(&self.config);
+        self.config.remember(setting, on);
+        match setting {
+            Setting::ShowHidden => {
+                self.apply_rules();
+                self.apply_filter();
+            }
+            Setting::Inspector => self.inspector.set_open(on),
+            Setting::GridLayout => {
+                let before = self.layout;
+                self.layout_cut = false;
+                self.apply_rules();
+                if self.layout != before {
+                    self.stop_scrolling();
+                }
+            }
+            Setting::FoldersFirst => {
+                self.sort_entries();
+                self.apply_filter();
+            }
+            Setting::ScrollInertia => {
+                if !on {
+                    self.stop_coasting();
+                }
+            }
+            Setting::Overscroll => {
+                if !on {
+                    self.stop_bouncing();
+                }
+            }
+            Setting::ConfirmTrash
+            | Setting::ConfirmDelete
+            | Setting::ShowKind
+            | Setting::ShowSize
+            | Setting::ShowModified
+            | Setting::ShowThumbnails
+            | Setting::SystemIcons => {}
+        }
+        self.save_setting(setting);
     }
 
     pub fn toggle_layout(&mut self) {
@@ -360,87 +395,12 @@ impl App {
         }
     }
 
-    pub fn toggle_grid_setting(&mut self) {
-        let before = self.layout;
-        self.layout_cut = false;
-        self.config.grid = !self.config.grid;
-        self.remember(Setting::GridLayout, self.config.grid);
-        self.apply_rules();
-        if self.layout != before {
-            self.stop_scrolling();
-        }
-    }
-
-    pub fn toggle_folders_first(&mut self) {
-        self.config.folders_first = !self.config.folders_first;
-        self.remember(Setting::FoldersFirst, self.config.folders_first);
-        self.sort_entries();
-        self.apply_filter();
-    }
-
-    pub fn toggle_confirm_trash(&mut self) {
-        self.config.confirm_trash = !self.config.confirm_trash;
-        self.remember(Setting::ConfirmTrash, self.config.confirm_trash);
-    }
-
     pub fn open_header_menu(&mut self, at: rune::PointerPress) {
         self.header_menu = Some(at);
     }
 
     pub fn close_header_menu(&mut self) {
         self.header_menu = None;
-    }
-
-    pub fn toggle_show_kind(&mut self) {
-        self.config.show_kind = !self.config.show_kind;
-        self.remember(Setting::ShowKind, self.config.show_kind);
-    }
-
-    pub fn toggle_show_size(&mut self) {
-        self.config.show_size = !self.config.show_size;
-        self.remember(Setting::ShowSize, self.config.show_size);
-    }
-
-    pub fn toggle_show_modified(&mut self) {
-        self.config.show_modified = !self.config.show_modified;
-        self.remember(Setting::ShowModified, self.config.show_modified);
-    }
-
-    pub fn toggle_confirm_delete(&mut self) {
-        self.config.confirm_delete = !self.config.confirm_delete;
-        self.remember(Setting::ConfirmDelete, self.config.confirm_delete);
-    }
-
-    pub fn toggle_inspector(&mut self) {
-        self.inspector.toggle();
-        self.remember(Setting::Inspector, self.inspector.is_open());
-    }
-
-    pub fn toggle_scroll_inertia(&mut self) {
-        self.config.scroll_inertia = !self.config.scroll_inertia;
-        if !self.config.scroll_inertia {
-            self.stop_coasting();
-        }
-        self.remember(Setting::ScrollInertia, self.config.scroll_inertia);
-    }
-
-    pub fn toggle_overscroll(&mut self) {
-        self.config.overscroll = !self.config.overscroll;
-        if !self.config.overscroll {
-            self.stop_bouncing();
-        }
-        self.remember(Setting::Overscroll, self.config.overscroll);
-    }
-
-    pub fn toggle_show_thumbnails(&mut self) {
-        self.config.show_thumbnails = !self.config.show_thumbnails;
-        self.remember(Setting::ShowThumbnails, self.config.show_thumbnails);
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn toggle_system_icons(&mut self) {
-        self.config.system_icons = !self.config.system_icons;
-        self.remember(Setting::SystemIcons, self.config.system_icons);
     }
 
     fn remember(&mut self, changed: Setting, on: bool) {
@@ -506,8 +466,8 @@ impl App {
     }
 
     pub fn remember_columns(&mut self) {
-        self.session
-            .remember_columns([self.kind_width, self.size_width, self.date_width]);
+        let columns = [self.kind_width, self.size_width, self.date_width];
+        self.save_session(|session| session.remember_columns(columns));
     }
 
     pub fn phrase_for_count(&self) -> String {

@@ -205,7 +205,7 @@ impl App {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
         };
-        prop.set(&mut edit.draft.props, prop.initial());
+        debug_assert!(prop.set(&mut edit.draft.props, prop.initial()));
         edit.menu = None;
         self.apply_rule_fields();
     }
@@ -214,7 +214,9 @@ impl App {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
         };
-        prop.set(&mut edit.draft.props, value);
+        if !prop.set(&mut edit.draft.props, value) {
+            return;
+        }
         edit.menu = None;
         self.apply_rule_fields();
     }
@@ -223,14 +225,7 @@ impl App {
         let Some(edit) = self.rule_edit.as_mut() else {
             return;
         };
-        let props = &mut edit.draft.props;
-        match prop {
-            RuleProp::Layout => props.layout = Prop::Unset,
-            RuleProp::Sort => props.sort = Prop::Unset,
-            RuleProp::Direction => props.direction = Prop::Unset,
-            RuleProp::ShowHidden => props.show_hidden = Prop::Unset,
-            RuleProp::Hidden => props.hidden = Prop::Unset,
-        }
+        prop.clear(&mut edit.draft.props);
         edit.menu = None;
         self.apply_rule_fields();
     }
@@ -261,9 +256,9 @@ impl App {
             return false;
         };
         let text = edit.draft.to_kdl();
-        let kind = edit.draft.kind;
         if edit.new {
-            return self.append_rule(kind, &text);
+            let rule = edit.draft.clone();
+            return self.append_rule(&rule);
         }
         let index = edit.index;
         let written = self.store.edit(config::CONFIG, |doc| {

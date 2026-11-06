@@ -88,7 +88,7 @@ fn a_ruled_folders_layout_does_not_become_the_global_default() {
     let (mut app, _path) = app_in_config_dir(&dir);
     assert!(app.is_grid() && app.show_hidden, "the rule holds here");
 
-    app.toggle_inspector();
+    app.toggle_setting(crate::settings::Setting::Inspector);
     app.navigate(dir.path().join("alpha"));
     assert!(!app.is_grid(), "the rule's layout stays with its folder");
     assert!(

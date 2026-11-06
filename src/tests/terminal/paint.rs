@@ -86,7 +86,7 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
     pane.open(dir.path().to_path_buf());
     let pump = |pane: &mut Terminal| {
         for _ in 0..40 {
-            if pane.poll(Some(&wake), theme) {
+            if pane.drain(Some(&wake), theme).redraw {
                 return true;
             }
             std::thread::sleep(std::time::Duration::from_millis(25));
@@ -110,7 +110,7 @@ fn a_wheel_moves_the_drawn_rows_before_the_next_poll() {
     let mut scrolled = false;
     for _ in 0..200 {
         pane.scroll_to_bottom();
-        pane.poll(Some(&wake), theme);
+        pane.drain(Some(&wake), theme);
         if pane.wheel(pane.line * 5.0) && pane.scroll_back() == 5 {
             scrolled = true;
             break;

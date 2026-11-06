@@ -3,10 +3,11 @@
 //! terminal window each wire the handlers they have to this.
 
 use crate::PAD;
+use crate::Terminal;
 use crate::grid::CursorShape;
+use crate::pane::MouseAction;
 #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 use crate::rows::line_row;
-use crate::{MouseAction, Terminal};
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "text-renderer")))]
 use rune::SurfaceFit;
 use rune::{Cursor, Drag, El, Phase, Spring, Transition, Tx, col, el, text};
@@ -200,6 +201,63 @@ fn texture(_: &Terminal, _: f32, _: &'static Kit) -> Option<El> {
     None
 }
 
+/// Wires the grid's wheel, hover, drag and layout to the pane's terminal. `at` names the
+/// terminal for the state that holds it: both windows run the same chain, so only that lookup
+/// differs between them.
+pub fn wire<S: 'static>(
+    screen: El,
+    at: impl Fn(&mut S) -> Option<&mut Terminal> + Clone + 'static,
+) -> El {
+    let wheel_at = at.clone();
+    screen
+        .on_wheel(move |s: &mut S, wheel, tx: &mut Tx| {
+            let Some(term) = wheel_at(s) else {
+                return false;
+            };
+            // A program that captured the mouse scrolls its own view; shift takes the mouse
+            // back and scrolls the pane's history, as Ghostty's `mouse-shift-capture` does.
+            let shift = tx.mods().shift;
+            if !shift
+                && let Some(cell) = term.hovered_cell()
+                && term.mouse_wheel(wheel.dy > 0.0, cell, false)
+            {
+                return true;
+            }
+            term.wheel(wheel.dy)
+        })
+        .on_pointer_move_local({
+            let at = at.clone();
+            move |s: &mut S, p, tx: &mut Tx| {
+                if let Some(term) = at(s) {
+                    let cell = terminal_cell(term, (p.x, p.y));
+                    term.hover(cell, tx.mods().shift);
+                }
+            }
+        })
+        .on_hover_change({
+            let at = at.clone();
+            move |s: &mut S, inside: bool, _: &mut Tx| {
+                if !inside && let Some(term) = at(s) {
+                    term.hover(None, false);
+                }
+            }
+        })
+        .on_drag({
+            let at = at.clone();
+            move |s: &mut S, drag: &mut Drag, tx: &mut Tx| {
+                if let Some(term) = at(s) {
+                    terminal_drag(term, drag, tx);
+                }
+            }
+        })
+        .on_layout_tx(move |s: &mut S, rect, tx: &mut Tx| {
+            if let Some(term) = at(s) {
+                layout_screen(term, rect);
+            }
+            tx.live_only();
+        })
+}
+
 /// Sizes the grid from the screen's layout box. Rune reports the border box, so the padding the
 /// screen draws with is still inside the width: the columns are the ones the padded content
 /// holds. Left in, the extra columns start at the content origin and draw over the right padding
@@ -218,21 +276,25 @@ pub fn terminal_cell(t: &Terminal, at: (f32, f32)) -> Option<(u16, u16)> {
     if x < 0.0 || y < 0.0 {
         return None;
     }
-    let col = (x / t.cell.max(1.0)).floor();
-    let row = (y / t.line.max(1.0)).floor();
+    let (col, row) = cell_of(t, x, y);
     if col >= f32::from(t.frame.cols) || row >= f32::from(t.frame.rows) {
         return None;
     }
     Some((col as u16, row as u16))
 }
 
+/// The cell a point names, clamped to the grid's edge rather than rejected: a drag that runs off
+/// the pane still selects to the row or column under its edge.
+fn cell_of(t: &Terminal, x: f32, y: f32) -> (f32, f32) {
+    (
+        (x / t.cell.max(1.0)).floor().clamp(0.0, 4000.0),
+        (y / t.line.max(1.0)).floor().clamp(0.0, 4000.0),
+    )
+}
+
 pub fn terminal_drag(t: &mut Terminal, drag: &Drag, tx: &mut Tx) {
-    let cell = t.cell.max(1.0);
-    let line = t.line.max(1.0);
-    let at = (
-        (drag.x / cell).floor().clamp(0.0, 4000.0) as u16,
-        (drag.y / line).floor().clamp(0.0, 4000.0) as u16,
-    );
+    let (x, y) = cell_of(t, drag.x - PAD, drag.y - t.offset());
+    let at = (x as u16, y as u16);
     let mods = tx.mods();
     // A program that asked for the mouse gets the gesture; otherwise a drag selects text. Shift
     // takes the mouse back for the selection, which is what Ghostty's `mouse-shift-capture`

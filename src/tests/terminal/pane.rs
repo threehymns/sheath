@@ -1,7 +1,7 @@
 //! The pane's own numbers: what a scroll splits into, the height it may take, and what a
 //! drag through the minimum does, all without a running view.
 
-use rune_tty::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, Terminal, split};
+use rune_tty::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, Terminal, layout_screen, split};
 use std::path::PathBuf;
 
 #[test]
@@ -134,7 +134,7 @@ fn the_grid_fits_inside_the_screen_s_padding() {
     let mut pane = Terminal::new();
     pane.cell = 8.0;
     pane.line = 16.0;
-    crate::ui::terminal::layout_screen(&mut pane, [0.0, 0.0, 800.0, 320.0]);
+    layout_screen(&mut pane, [0.0, 0.0, 800.0, 320.0]);
     assert_eq!(
         pane.grid_size(),
         (98, 20),
@@ -291,7 +291,7 @@ fn a_selection_reaches_the_pane_frame_without_new_output() {
     // to drain, or the frame it rebuilds could be the shell's doing rather than the gesture's.
     let mut settled = false;
     for _ in 0..200 {
-        let drew = pane.poll(Some(&wake), theme);
+        let drew = pane.drain(Some(&wake), theme).redraw;
         if !drew && !pane.frame.lines.is_empty() {
             settled = true;
             break;
@@ -303,7 +303,7 @@ fn a_selection_reaches_the_pane_frame_without_new_output() {
         !pane.begin_selection((0, 0), 1, false),
         "one click selects nothing"
     );
-    pane.poll(Some(&wake), theme);
+    pane.drain(Some(&wake), theme);
     assert_eq!(
         pane.frame.lines[0].selection, None,
         "the click left the rows as it found them"
@@ -316,7 +316,7 @@ fn a_selection_reaches_the_pane_frame_without_new_output() {
     // The poll refreshes the rows before the view is built from them, and says so: no output
     // arrived, so a window that only drew what the shell wrote would never draw this frame.
     assert!(
-        pane.poll(Some(&wake), theme),
+        pane.drain(Some(&wake), theme).redraw,
         "the poll asks for the frame the gesture changed"
     );
     assert!(
@@ -345,7 +345,7 @@ fn a_selection_reaches_the_pane_frame_without_new_output() {
         "the clear left rows the view has not drawn"
     );
     assert!(
-        pane.poll(Some(&wake), theme),
+        pane.drain(Some(&wake), theme).redraw,
         "and the clear asks for its frame too"
     );
     assert_eq!(

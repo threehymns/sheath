@@ -21,6 +21,22 @@ impl Layout {
     pub fn is_grid(self) -> bool {
         matches!(self, Layout::Grid)
     }
+
+    /// The value a rule or a remembered view writes.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Layout::List => "list",
+            Layout::Grid => "grid",
+        }
+    }
+
+    pub fn from_str(value: &str) -> Option<Layout> {
+        match value {
+            "list" => Some(Layout::List),
+            "grid" => Some(Layout::Grid),
+            _ => None,
+        }
+    }
 }
 
 impl App {

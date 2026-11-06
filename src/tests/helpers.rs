@@ -35,7 +35,7 @@ pub(super) fn populate(dir: &TempDir) {
 }
 
 pub(super) fn app(dir: &TempDir) -> App {
-    let mut app = App::open_with(dir.path().to_path_buf(), Settings::defaults());
+    let mut app = App::open_with(dir.path().to_path_buf(), Settings::default());
     app.store = crate::config::Store::none();
     app.keybinds = Keybinds::defaults();
     app.recorders = Keybinds::recorders();

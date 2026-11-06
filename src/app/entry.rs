@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-const PREVIEW_LIMIT: u64 = 24 * 1024;
+pub(crate) const PREVIEW_LIMIT: u64 = 24 * 1024;
 
 pub struct Entry {
     pub id: String,

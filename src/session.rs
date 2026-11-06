@@ -5,11 +5,11 @@ use crate::config;
 use kdl::{KdlDocument, KdlEntry, KdlNode};
 use std::path::{Path, PathBuf};
 
-const FILE: &str = "session.kdl";
+pub const FILE: &str = "session.kdl";
 
 #[derive(Default)]
 pub struct Session {
-    path: Option<PathBuf>,
+    state: config::State,
     folder: Option<PathBuf>,
     // Kind, size and date column widths, in points.
     columns: Option<[f32; 3]>,
@@ -19,18 +19,20 @@ pub struct Session {
 
 impl Session {
     pub fn load() -> Session {
-        let Some(dir) = config::state_dir() else {
-            return Session::default();
-        };
-        Session::at(dir.join(FILE))
+        Session::open(config::State::load(FILE))
     }
 
+    #[cfg(test)]
     pub fn at(path: PathBuf) -> Session {
+        Session::open(config::State::at(path))
+    }
+
+    fn open(state: config::State) -> Session {
         let mut session = Session {
-            path: Some(path.clone()),
+            state,
             ..Session::default()
         };
-        let Ok(text) = crate::vfs::read_to_string(&path) else {
+        let Some(text) = session.state.read() else {
             return session;
         };
         let (folder, columns, pane) = parse(&text);
@@ -38,6 +40,10 @@ impl Session {
         session.columns = columns;
         session.pane = pane;
         session
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.state.error()
     }
 
     pub fn folder(&self) -> Option<&Path> {
@@ -80,13 +86,8 @@ impl Session {
     }
 
     fn save(&mut self) {
-        let Some(path) = self.path.clone() else {
-            return;
-        };
-        let _ = config::write_atomic(
-            &path,
-            &render(self.folder.as_deref(), self.columns, self.pane),
-        );
+        self.state
+            .write(&render(self.folder.as_deref(), self.columns, self.pane));
     }
 }
 

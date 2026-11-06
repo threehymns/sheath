@@ -5,7 +5,7 @@
 use actions::Keybinds;
 use rune::{Color, Cursor, Drag, El, Phase, Spring, Tx, col, el, row, text};
 use rune_kit::{ControlSize, IconButton, IconButtonVariant, Kit};
-use rune_tty::{layout_screen, screen_of, terminal_cell, terminal_drag};
+use rune_tty::{screen_of, wire};
 
 use super::{Block, GAP, HEADER, Node, Panes, Side};
 use crate::Window;
@@ -309,46 +309,11 @@ fn header(
 /// One block's grid, with its wheel, pointer, drag and layout wired to that block's shell.
 fn grid(block: &Block, tab: u64, scale: f32, k: &'static Kit) -> El {
     let id = block.id;
-    let screen = screen_of(&block.term, scale, k)
-        .on_wheel(move |s: &mut Window, wheel, tx: &mut Tx| {
-            // The same split the app's pane makes: a program that captured the mouse scrolls
-            // its own view, and shift takes the mouse back for the history.
-            let Some(term) = s.tabs.block_mut(tab, id) else {
-                return false;
-            };
-            let shift = tx.mods().shift;
-            if !shift
-                && let Some(at) = term.hovered_cell()
-                && term.mouse_wheel(wheel.dy > 0.0, at, false)
-            {
-                return true;
-            }
-            term.wheel(wheel.dy)
-        })
-        .on_pointer_move_local(move |s: &mut Window, p, tx: &mut Tx| {
-            if let Some(term) = s.tabs.block_mut(tab, id) {
-                let at = terminal_cell(term, (p.x, p.y));
-                term.hover(at, tx.mods().shift);
-            }
-        })
-        .on_hover_change(move |s: &mut Window, inside: bool, _: &mut Tx| {
-            if !inside && let Some(term) = s.tabs.block_mut(tab, id) {
-                term.hover(None, false);
-            }
-        })
-        .on_drag(move |s: &mut Window, drag: &mut Drag, tx: &mut Tx| {
-            if let Some(term) = s.tabs.block_mut(tab, id) {
-                terminal_drag(term, drag, tx);
-            }
-        })
-        // A press anywhere in the grid gives that block the keyboard, and its tab the window.
-        .on_press(move |s: &mut Window| s.tabs.focus_block(tab, id))
-        .on_layout_tx(move |s: &mut Window, rect, tx: &mut Tx| {
-            if let Some(term) = s.tabs.block_mut(tab, id) {
-                layout_screen(term, rect);
-            }
-            tx.live_only();
-        });
+    let screen = wire(screen_of(&block.term, scale, k), move |s: &mut Window| {
+        s.tabs.block_mut(tab, id)
+    })
+    // A press anywhere in the grid gives that block the keyboard, and its tab the window.
+    .on_press(move |s: &mut Window| s.tabs.focus_block(tab, id));
     el().key(format!("grid-{id}"))
         .w_full()
         .grow(1.0)

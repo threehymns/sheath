@@ -283,7 +283,7 @@ fn toolbar(s: &App, k: &'static Kit) -> Toolbar {
         .help("Toggle Inspector")
         .shortcut(s.keybinds.accelerator(Action::ToggleInspector))
         .expanded(s.inspector.is_open())
-        .on_press(|s: &mut App| s.toggle_inspector())
+        .on_press(|s: &mut App| s.toggle_setting(crate::settings::Setting::Inspector))
         .build(k)
         .key("toggle-inspector");
 

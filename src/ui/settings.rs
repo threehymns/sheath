@@ -189,206 +189,164 @@ fn tab_icon(tab: SettingsTab) -> &'static Icon {
     }
 }
 
-// These switches edit the fallbacks, not what the open folder resolved to, so they read `config`.
+// These switches edit the fallbacks, not what the open folder resolved to, so they read
+// `config`. The order of `Setting::ALL` is the order inside each section.
 fn general_settings(s: &App, k: &Kit) -> El {
-    let hidden = Switch::new(s.config.show_hidden)
-        .label("Show hidden files")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_hidden_setting())
-        .build(k)
-        .key("setting-hidden");
-    let inspector = Switch::new(s.inspector.is_open())
-        .label("Show inspector")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_inspector())
-        .build(k)
-        .key("setting-inspector");
-    let grid = Switch::new(s.config.grid)
-        .label("Grid layout")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_grid_setting())
-        .build(k)
-        .key("setting-grid");
-    let thumbnails = Switch::new(s.config.show_thumbnails)
-        .label("Show thumbnails")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_show_thumbnails())
-        .build(k)
-        .key("setting-thumbnails");
-    // A browser tab has no desktop icon theme, so this switch stays out of the web build.
-    #[cfg(not(target_arch = "wasm32"))]
-    let system_icons = Switch::new(s.config.system_icons)
-        .label("System icons")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_system_icons())
-        .build(k)
-        .key("setting-system-icons");
-    let inertia = Switch::new(s.config.scroll_inertia)
-        .label("Scroll inertia")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_scroll_inertia())
-        .build(k)
-        .key("setting-inertia");
-    let overscroll = Switch::new(s.config.overscroll)
-        .label("Overscroll")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_overscroll())
-        .build(k)
-        .key("setting-overscroll");
-    #[cfg_attr(target_arch = "wasm32", allow(unused_mut))]
-    let mut browser_rows = vec![
-        settings_row(
-            k,
-            k.glyph.eye,
-            "Show hidden files",
-            Some("Also list names that start with a dot."),
-            setting_control(s, k, Setting::ShowHidden, hidden),
-        ),
-        settings_row(
-            k,
-            &icons::INSPECTOR,
-            "Show inspector",
-            Some("The details and preview pane beside the table."),
-            setting_control(s, k, Setting::Inspector, inspector),
-        ),
-        settings_row(
-            k,
-            &icons::GRID,
-            "Grid layout",
-            Some("Show the folder as tiles instead of a table of rows."),
-            setting_control(s, k, Setting::GridLayout, grid),
-        ),
-        settings_row(
-            k,
-            &icons::PICTURES,
-            "Show thumbnails",
-            Some("Show a small picture for each image, in the list and the grid."),
-            setting_control(s, k, Setting::ShowThumbnails, thumbnails),
-        ),
+    let mut page = col().key("settings-general").w_full().gap(24.0);
+    for group in SettingsGroup::ALL {
+        let rows: Vec<El> = Setting::ALL
+            .iter()
+            .copied()
+            .filter(|setting| SettingsGroup::of(*setting) == group && available(*setting))
+            .map(|setting| setting_row_for(s, k, setting))
+            .collect();
+        if !rows.is_empty() {
+            page = page.child(settings_section(k, group.key(), group.label(), rows));
+        }
+    }
+    page = page.child(files_settings(s, k));
+    if let Some(error) = s.store.error(config::CONFIG) {
+        page = page.child(error_text(k, error));
+    }
+    if let Some(error) = &s.store.write_error {
+        page = page.child(error_text(k, error));
+    }
+    page
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SettingsGroup {
+    Browser,
+    Behavior,
+    Columns,
+    Scrolling,
+}
+
+impl SettingsGroup {
+    const ALL: [SettingsGroup; 4] = [
+        SettingsGroup::Browser,
+        SettingsGroup::Behavior,
+        SettingsGroup::Columns,
+        SettingsGroup::Scrolling,
     ];
-    #[cfg(not(target_arch = "wasm32"))]
-    browser_rows.push(settings_row(
+
+    fn of(setting: Setting) -> SettingsGroup {
+        match setting {
+            Setting::ShowHidden
+            | Setting::Inspector
+            | Setting::GridLayout
+            | Setting::ShowThumbnails
+            | Setting::SystemIcons => SettingsGroup::Browser,
+            Setting::FoldersFirst | Setting::ConfirmTrash | Setting::ConfirmDelete => {
+                SettingsGroup::Behavior
+            }
+            Setting::ShowKind | Setting::ShowSize | Setting::ShowModified => SettingsGroup::Columns,
+            Setting::ScrollInertia | Setting::Overscroll => SettingsGroup::Scrolling,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            SettingsGroup::Browser => "Browser",
+            SettingsGroup::Behavior => "Behavior",
+            SettingsGroup::Columns => "Columns",
+            SettingsGroup::Scrolling => "Scrolling",
+        }
+    }
+
+    fn key(self) -> &'static str {
+        match self {
+            SettingsGroup::Browser => "settings-browser",
+            SettingsGroup::Behavior => "settings-behavior",
+            SettingsGroup::Columns => "settings-columns",
+            SettingsGroup::Scrolling => "settings-scrolling",
+        }
+    }
+}
+
+fn setting_row_for(s: &App, k: &Kit, setting: Setting) -> El {
+    let switch = Switch::new(setting.value(&s.config))
+        .label(setting_label(setting))
+        .hide_label()
+        .on_toggle(move |s: &mut App| s.toggle_setting(setting))
+        .build(k)
+        .key(format!("setting-{}", setting.id()));
+    settings_row(
         k,
-        &glyphs::FOLDER,
-        "System icons",
-        Some("Use your desktop’s icons for folders and files."),
-        setting_control(s, k, Setting::SystemIcons, system_icons),
-    ));
-    let browser = settings_section(k, "settings-browser", "Browser", browser_rows);
-    let folders_first = Switch::new(s.config.folders_first)
-        .label("Folders first")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_folders_first())
-        .build(k)
-        .key("setting-folders-first");
-    let confirm_trash = Switch::new(s.config.confirm_trash)
-        .label("Confirm before trashing")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_confirm_trash())
-        .build(k)
-        .key("setting-confirm-trash");
-    let confirm_delete = Switch::new(s.config.confirm_delete)
-        .label("Confirm before deleting")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_confirm_delete())
-        .build(k)
-        .key("setting-confirm-delete");
-    let behavior = settings_section(
-        k,
-        "settings-behavior",
-        "Behavior",
-        vec![
-            settings_row(
-                k,
-                &icons::LIST,
-                "Folders first",
-                Some("Keep folders above files in the list and the grid."),
-                setting_control(s, k, Setting::FoldersFirst, folders_first),
-            ),
-            settings_row(
-                k,
-                &theme::icons::TRASH,
-                "Confirm before trashing",
-                Some("Ask before moving items to the Trash."),
-                setting_control(s, k, Setting::ConfirmTrash, confirm_trash),
-            ),
-            settings_row(
-                k,
-                &theme::icons::WARNING,
-                "Confirm before deleting",
-                Some("Ask before deleting items for good, since the Trash cannot bring them back."),
-                setting_control(s, k, Setting::ConfirmDelete, confirm_delete),
-            ),
-        ],
-    );
-    let scrolling = settings_section(
-        k,
-        "settings-scrolling",
-        "Scrolling",
-        vec![
-            settings_row(
-                k,
-                &icons::ARROW_UP,
-                "Scroll inertia",
-                Some("Keep the list coasting after the wheel stops."),
-                setting_control(s, k, Setting::ScrollInertia, inertia),
-            ),
-            settings_row(
-                k,
-                &icons::REFRESH,
-                "Overscroll",
-                Some("Pull the list past its first and last row, then let it spring back."),
-                setting_control(s, k, Setting::Overscroll, overscroll),
-            ),
-        ],
-    );
-    let kind_column = Switch::new(s.config.show_kind)
-        .label("Show the Kind column")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_show_kind())
-        .build(k)
-        .key("setting-kind-column");
-    let size_column = Switch::new(s.config.show_size)
-        .label("Show the Size column")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_show_size())
-        .build(k)
-        .key("setting-size-column");
-    let modified_column = Switch::new(s.config.show_modified)
-        .label("Show the Date Modified column")
-        .hide_label()
-        .on_toggle(|s: &mut App| s.toggle_show_modified())
-        .build(k)
-        .key("setting-modified-column");
-    let columns = settings_section(
-        k,
-        "settings-columns",
-        "Columns",
-        vec![
-            settings_row(
-                k,
-                &icons::LIST,
-                "Kind column",
-                Some("Show what each row is beside its name."),
-                setting_control(s, k, Setting::ShowKind, kind_column),
-            ),
-            settings_row(
-                k,
-                &icons::INSPECTOR,
-                "Size column",
-                Some("Show each file's size in the list."),
-                setting_control(s, k, Setting::ShowSize, size_column),
-            ),
-            settings_row(
-                k,
-                &icons::REFRESH,
-                "Date Modified column",
-                Some("Show when each row last changed."),
-                setting_control(s, k, Setting::ShowModified, modified_column),
-            ),
-        ],
-    );
-    let files = settings_section(
+        setting_icon(setting, k),
+        setting_label(setting),
+        setting_help(setting),
+        setting_control(s, k, setting, switch),
+    )
+}
+
+fn setting_label(setting: Setting) -> &'static str {
+    match setting {
+        Setting::ShowHidden => "Show hidden files",
+        Setting::Inspector => "Show inspector",
+        Setting::GridLayout => "Grid layout",
+        Setting::ShowThumbnails => "Show thumbnails",
+        Setting::SystemIcons => "System icons",
+        Setting::FoldersFirst => "Folders first",
+        Setting::ConfirmTrash => "Confirm before trashing",
+        Setting::ConfirmDelete => "Confirm before deleting",
+        Setting::ShowKind => "Kind column",
+        Setting::ShowSize => "Size column",
+        Setting::ShowModified => "Date Modified column",
+        Setting::ScrollInertia => "Scroll inertia",
+        Setting::Overscroll => "Overscroll",
+    }
+}
+
+fn setting_help(setting: Setting) -> Option<&'static str> {
+    match setting {
+        Setting::ShowHidden => Some("Also list names that start with a dot."),
+        Setting::Inspector => Some("The details and preview pane beside the table."),
+        Setting::GridLayout => Some("Show the folder as tiles instead of a table of rows."),
+        Setting::ShowThumbnails => {
+            Some("Show a small picture for each image, in the list and the grid.")
+        }
+        Setting::SystemIcons => Some("Use your desktop’s icons for folders and files."),
+        Setting::FoldersFirst => Some("Keep folders above files in the list and the grid."),
+        Setting::ConfirmTrash => Some("Ask before moving items to the Trash."),
+        Setting::ConfirmDelete => {
+            Some("Ask before deleting items for good, since the Trash cannot bring them back.")
+        }
+        Setting::ShowKind => Some("Show what each row is beside its name."),
+        Setting::ShowSize => Some("Show each file's size in the list."),
+        Setting::ShowModified => Some("Show when each row last changed."),
+        Setting::ScrollInertia => Some("Keep the list coasting after the wheel stops."),
+        Setting::Overscroll => {
+            Some("Pull the list past its first and last row, then let it spring back.")
+        }
+    }
+}
+
+fn setting_icon(setting: Setting, k: &Kit) -> &'static Icon {
+    match setting {
+        Setting::ShowHidden => k.glyph.eye,
+        Setting::Inspector => &icons::INSPECTOR,
+        Setting::GridLayout => &icons::GRID,
+        Setting::ShowThumbnails => &icons::PICTURES,
+        Setting::SystemIcons => &glyphs::FOLDER,
+        Setting::FoldersFirst => &icons::LIST,
+        Setting::ConfirmTrash => &theme::icons::TRASH,
+        Setting::ConfirmDelete => &theme::icons::WARNING,
+        Setting::ShowKind => &icons::LIST,
+        Setting::ShowSize => &icons::INSPECTOR,
+        Setting::ShowModified => &icons::REFRESH,
+        Setting::ScrollInertia => &icons::ARROW_UP,
+        Setting::Overscroll => &icons::REFRESH,
+    }
+}
+
+/// A browser tab has no desktop icon theme, so that switch stays out of the web build.
+fn available(setting: Setting) -> bool {
+    !(cfg!(target_arch = "wasm32") && setting == Setting::SystemIcons)
+}
+
+fn files_settings(s: &App, k: &Kit) -> El {
+    settings_section(
         k,
         "settings-files",
         "Files",
@@ -408,23 +366,7 @@ fn general_settings(s: &App, k: &Kit) -> El {
                 "copy-settings-path",
             ),
         ],
-    );
-    let mut page = col()
-        .key("settings-general")
-        .w_full()
-        .gap(24.0)
-        .child(browser)
-        .child(behavior)
-        .child(columns)
-        .child(scrolling)
-        .child(files);
-    if let Some(error) = s.store.error(config::CONFIG) {
-        page = page.child(error_text(k, error));
-    }
-    if let Some(error) = &s.store.write_error {
-        page = page.child(error_text(k, error));
-    }
-    page
+    )
 }
 
 fn keybinds_settings(s: &App, k: &Kit) -> El {

@@ -6,7 +6,6 @@ mod icons;
 mod keybinds;
 mod notice;
 mod places;
-mod recorder;
 mod rules;
 mod session;
 mod settings;

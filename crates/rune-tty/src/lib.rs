@@ -25,7 +25,7 @@ pub mod engine;
 pub mod raster;
 pub mod surface;
 
-pub use surface::{layout_screen, screen_of, terminal_cell, terminal_drag};
+pub use surface::{layout_screen, screen_of, terminal_cell, terminal_drag, wire};
 
 #[cfg(any(feature = "text-renderer", target_arch = "wasm32"))]
 mod rows;
@@ -36,8 +36,7 @@ use std::process::Command;
 #[cfg(not(target_arch = "wasm32"))]
 use ghostty_vt::style::RgbColor;
 
-pub use pane::{COLLAPSE_DRAG, MAX_HEIGHT, MIN_HEIGHT, Terminal, split};
-pub use pane::{LINE_HEIGHT, MouseAction};
+pub use pane::{COLLAPSE_DRAG, Drain, MAX_HEIGHT, MIN_HEIGHT, Terminal, split};
 
 /// The faces the pane draws with: Inter (variable, so every weight) and IBM Plex Mono Regular
 /// for the grid, at the weight the theme's `mono` style asks for. The theme also ships Plex Mono
@@ -45,7 +44,7 @@ pub use pane::{LINE_HEIGHT, MouseAction};
 /// compressed. The order is `rune_theme_opencode::FONTS`: Inter, Plex Mono Regular, Plex Mono
 /// Medium, pinned by the Rune revision in Cargo.toml. A Nerd Font installed on the system joins
 /// this list at launch as the terminal's fallback for the icons only it draws; see [`fonts`].
-pub const FONTS: &[&[u8]] = &[rune_theme_opencode::FONTS[0], rune_theme_opencode::FONTS[2]];
+pub const FONTS: &[&[u8]] = &[rune_theme_opencode::FONTS[0], rune_theme_opencode::FONTS[1]];
 
 /// The screen's horizontal padding: the pointer's local points include it, a cell does not.
 /// Kept small: a terminal wants its columns, and the pane's own edge already separates it.
@@ -114,12 +113,12 @@ fn rgb(color: rune::Color) -> RgbColor {
 /// written, but only for the schemes a terminal's links actually use: a program must not be able
 /// to talk the viewer into launching an arbitrary handler.
 #[cfg(target_arch = "wasm32")]
-pub fn open_url(_url: &str) -> Result<(), String> {
+pub(crate) fn open_url(_url: &str) -> Result<(), String> {
     Err("A browser tab can’t open links from the demo folder.".into())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn open_url(url: &str) -> Result<(), String> {
+pub(crate) fn open_url(url: &str) -> Result<(), String> {
     if !["http://", "https://", "mailto:", "file://"]
         .iter()
         .any(|scheme| url.starts_with(scheme))

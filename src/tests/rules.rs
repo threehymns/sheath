@@ -214,7 +214,7 @@ fn saving_a_setting_keeps_comments_and_the_rest_of_the_file() {
     .unwrap();
 
     let mut store = Store::at(dir.path().to_path_buf());
-    let mut settings = Settings::defaults();
+    let mut settings = Settings::default();
     settings.show_hidden = true;
     store
         .edit(config::CONFIG, |doc| {

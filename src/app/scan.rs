@@ -83,11 +83,12 @@ pub(super) struct Found {
     pub(super) truncated: bool,
 }
 
-/// Every entry named like `query`, from `root` and the folders below it. Hidden names stay out of
-/// the walk unless asked for, so a search does not crawl through a dot directory's contents.
-/// The desktop build hands the walk to fff instead; a browser tab has no filesystem to index.
+/// Every entry named like `query`, from `root` and the folders below it. Hidden names are
+/// collected like any other; the caller filters the rows by the folder's `show_hidden`, the same
+/// way it filters a plain listing. The desktop build hands the walk to fff instead; a browser tab
+/// has no filesystem to index.
 #[cfg(target_arch = "wasm32")]
-pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: usize) -> Found {
+pub(super) fn search_below(root: &Path, query: &str, limit: usize) -> Found {
     let mut entries = Vec::new();
     let mut truncated = false;
     let mut stack = vec![root.to_path_buf()];
@@ -99,9 +100,6 @@ pub(super) fn search_below(root: &Path, query: &str, show_hidden: bool, limit: u
             let Some(mut entry) = Entry::read(&item) else {
                 continue;
             };
-            if !show_hidden && entry.hidden() {
-                continue;
-            }
             if entry.is_dir {
                 stack.push(entry.path.clone());
             }

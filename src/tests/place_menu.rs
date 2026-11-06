@@ -1,6 +1,8 @@
 use super::helpers::*;
-use crate::app::SheetKind;
+use crate::app::{Layout, SheetKind};
 use crate::places::Places;
+use crate::rules::Resolved;
+use crate::views::Views;
 use rune::{Key, KeyEvent, Mods};
 use std::fs;
 
@@ -164,6 +166,14 @@ fn the_place_menu_renames_the_folder_on_disk_and_follows_it() {
 
     let mut app = app(&dir);
     app.places = Places::at(file.clone());
+    app.views = Views::at(state.path().join("views.kdl"));
+    app.views.set(
+        &alpha,
+        Resolved {
+            layout: Some(Layout::Grid),
+            ..Resolved::default()
+        },
+    );
     let mut rt = runtime(app);
     rt.frame(0.0);
 
@@ -214,6 +224,13 @@ fn the_place_menu_renames_the_folder_on_disk_and_follows_it() {
     assert!(
         text.contains(&crate::rules::quote(&new_id)),
         "the file holds the new path: {text}"
+    );
+    assert_eq!(
+        Views::at(state.path().join("views.kdl"))
+            .get(&renamed)
+            .layout,
+        Some(Layout::Grid),
+        "what the folder was showing follows the rename"
     );
 }
 

@@ -26,7 +26,7 @@ use rune_kit::glyphs;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-const FILE: &str = "places.kdl";
+pub const FILE: &str = "places.kdl";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Section {
@@ -110,43 +110,45 @@ fn icon_for(id: &str) -> &'static Icon {
 
 #[derive(Default)]
 pub struct Places {
+    state: config::State,
     favourites: Vec<Place>,
     locations: Vec<Place>,
-    path: Option<PathBuf>,
     extra: Vec<KdlNode>,
-    pub error: Option<String>,
 }
 
 impl Places {
     pub fn load() -> Places {
-        let Some(dir) = config::state_dir() else {
-            return Places::default();
-        };
-        Places::at(dir.join(FILE))
+        Places::open(config::State::load(FILE))
     }
 
+    #[cfg(test)]
     pub fn at(path: PathBuf) -> Places {
-        match crate::vfs::read_to_string(&path) {
-            Ok(text) => match parse(&text) {
-                Ok(parsed) => Places::build(Some(path), parsed),
+        Places::open(config::State::at(path))
+    }
+
+    fn open(state: config::State) -> Places {
+        let mut places = Places {
+            state,
+            ..Places::default()
+        };
+        let parsed = match places.state.read() {
+            Some(text) => match parse(&text) {
+                Ok(parsed) => parsed,
                 Err(err) => {
-                    let mut places = Places::build(Some(path.clone()), Parsed::default());
-                    places.error = Some(format!(
-                        "Couldn’t read {}: {err}. The sidebar shows its default places.",
-                        path.display()
-                    ));
                     places
+                        .state
+                        .fail(&format!("{err}. The sidebar shows its default places."));
+                    Parsed::default()
                 }
             },
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                Places::build(Some(path), Parsed::default())
-            }
-            Err(err) => {
-                let mut places = Places::build(Some(path.clone()), Parsed::default());
-                places.error = Some(format!("Couldn’t read {}: {err}", path.display()));
-                places
-            }
-        }
+            None => Parsed::default(),
+        };
+        places.adopt(parsed);
+        places
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.state.error()
     }
 
     pub fn places(&self, section: Section) -> &[Place] {
@@ -300,26 +302,16 @@ impl Places {
     }
 
     pub fn save(&mut self) {
-        let Some(path) = self.path.clone() else {
-            return;
-        };
-        match config::write_atomic(&path, &render(self)) {
-            Ok(()) => self.error = None,
-            Err(err) => self.error = Some(err),
-        }
+        self.state.write(&render(self));
     }
 
-    fn build(path: Option<PathBuf>, parsed: Parsed) -> Places {
-        let mut places = Places {
-            path,
-            ..Places::default()
-        };
+    fn adopt(&mut self, parsed: Parsed) {
         let Parsed {
             mut favourites,
             mut locations,
             extra,
         } = parsed;
-        places.extra = extra;
+        self.extra = extra;
         for section in Section::ALL {
             let stored = match section {
                 Section::Favourites => &mut favourites,
@@ -336,16 +328,14 @@ impl Places {
                 }
             }
             for builtin in BUILTINS.iter().filter(|builtin| builtin.section == section) {
-                if seen.contains(builtin.id) || !builtin.exists() {
-                    continue;
-                }
-                if let Some(place) = builtin.place() {
+                if !seen.contains(builtin.id)
+                    && let Some(place) = builtin.place()
+                {
                     list.push(place);
                 }
             }
-            *section.list_mut(&mut places) = list;
+            *section.list_mut(self) = list;
         }
-        places
     }
 }
 

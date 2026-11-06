@@ -26,7 +26,7 @@ fn app_with_image() -> (tempfile::TempDir, crate::app::App) {
 
 #[test]
 fn thumbnails_are_on_by_default_and_name_their_setting() {
-    assert!(Settings::defaults().show_thumbnails, "thumbnails start on");
+    assert!(Settings::default().show_thumbnails, "thumbnails start on");
     assert!(Setting::ShowThumbnails.default_on());
     assert_eq!(Setting::ShowThumbnails.name(), "show-thumbnails");
     assert_eq!(Setting::ShowThumbnails.id(), "thumbnails");

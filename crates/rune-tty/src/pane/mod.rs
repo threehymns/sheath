@@ -10,7 +10,7 @@ mod protocol;
 mod search;
 mod select;
 
-pub use mouse::MouseAction;
+pub(crate) use mouse::MouseAction;
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -42,7 +42,7 @@ pub const COLLAPSE_DRAG: f32 = MIN_HEIGHT / 2.0;
 
 /// A row's height before the mono font has been measured (see [`Terminal::measure`]): the font's
 /// own line box replaces it on the first frame.
-pub const LINE_HEIGHT: f32 = 16.5;
+const LINE_HEIGHT: f32 = 16.5;
 
 /// A row's place in the scroll: whole rows back from the bottom, and the fraction of a row the
 /// content is shifted by. Keeping the fraction out of libghostty's viewport is what makes a
@@ -51,6 +51,38 @@ pub fn split(scroll: f32) -> (usize, f32) {
     let scroll = scroll.max(0.0);
     let whole = scroll.floor();
     (whole as usize, scroll - whole)
+}
+
+/// Everything one frame's [`Terminal::drain`] produced. The app turns the copies into clipboard
+/// writes and the notifications into toasts; the standalone window closes a block whose shell
+/// ended. Copies and notifications are empty on the web build.
+#[derive(Default)]
+pub struct Drain {
+    /// Whether the rows the view draws changed, so the frame is worth rebuilding.
+    pub redraw: bool,
+    /// Clipboard writes the shell asked for (OSC 52).
+    pub copies: Vec<String>,
+    /// Desktop notifications the shell sent (OSC 9, OSC 777).
+    pub notifications: Vec<(String, String)>,
+    /// Whether the shell behind the pane ended, so its caller can close it.
+    pub exited: bool,
+    /// How long until the cursor's next half, when it blinks.
+    pub blink: Option<Duration>,
+}
+
+impl Drain {
+    /// Folds another pane's poll into this one, keeping the soonest blink: a tab polls every
+    /// block it holds and reports once.
+    pub fn merge(&mut self, other: Drain) {
+        self.redraw |= other.redraw;
+        self.copies.extend(other.copies);
+        self.notifications.extend(other.notifications);
+        self.exited |= other.exited;
+        self.blink = match (self.blink, other.blink) {
+            (Some(soonest), Some(wait)) => Some(soonest.min(wait)),
+            (soonest, wait) => soonest.or(wait),
+        };
+    }
 }
 
 pub struct Terminal {
@@ -192,7 +224,7 @@ impl Terminal {
 
     /// Reads the PTY, resizes the grid to the rect it was laid out in, and rebuilds the frame
     /// when anything moved.
-    pub fn poll(&mut self, wake: Option<&Waker>, theme: Theme) -> bool {
+    fn poll(&mut self, wake: Option<&Waker>, theme: Theme) -> bool {
         #[cfg(target_arch = "wasm32")]
         {
             let _ = (wake, theme);
@@ -255,6 +287,21 @@ impl Terminal {
             }
             redraw |= stale;
             redraw
+        }
+    }
+
+    /// Reads the PTY and hands back everything one frame's poll produced: the redraw, the
+    /// clipboard and notifications the shell sent, whether its shell ended, and the next blink.
+    /// The app and the standalone window aggregate this instead of repeating the sequence of
+    /// `poll`, `take_copies`, `take_notifications`, `shell_exited` and `blink_wait`.
+    pub fn drain(&mut self, wake: Option<&Waker>, theme: Theme) -> Drain {
+        let redraw = self.poll(wake, theme);
+        Drain {
+            redraw,
+            copies: self.take_copies(),
+            notifications: self.take_notifications(),
+            exited: self.shell_exited(),
+            blink: self.blink_wait(),
         }
     }
 
