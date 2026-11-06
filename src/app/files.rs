@@ -28,6 +28,19 @@ fn free_name(dir: &Path, name: &str) -> String {
     free_name_with(dir, name, "copy")
 }
 
+/// A path as it would be typed in a shell: under the home folder it starts at `~`.
+///
+/// Windows shells don't expand a leading tilde, so there the path stays absolute.
+#[cfg(not(target_os = "windows"))]
+fn copy_path(path: &Path) -> String {
+    App::short_path(path)
+}
+
+#[cfg(target_os = "windows")]
+fn copy_path(path: &Path) -> String {
+    path.display().to_string()
+}
+
 #[cfg(unix)]
 fn make_link(from: &Path, to: &Path) -> io::Result<()> {
     std::os::unix::fs::symlink(from, to)
@@ -113,7 +126,7 @@ impl App {
             .selected_ids()
             .iter()
             .filter_map(|id| self.entry_snapshot(id))
-            .map(|(path, _, _)| path.display().to_string())
+            .map(|(path, _, _)| copy_path(&path))
             .collect();
         if paths.is_empty() {
             return;
@@ -121,7 +134,6 @@ impl App {
         tx.copy(paths.join("\n"));
         self.error = None;
     }
-
     pub fn new_folder(&mut self, _tx: &mut Tx) {
         if self.archive_read_only() {
             return;
@@ -280,5 +292,41 @@ impl App {
                 Some((made.iter().map(|name| format!("f:{name}")).collect(), false));
         }
         self.reload();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_path_under_home_is_copied_with_a_tilde() {
+        let Some(home) = crate::app::home_dir() else {
+            return;
+        };
+        let windows = cfg!(target_os = "windows");
+        let expected = |path: &Path| {
+            if windows {
+                path.display().to_string()
+            } else {
+                "~/Projects/notes.md".to_string()
+            }
+        };
+        let path = home.join("Projects").join("notes.md");
+        assert_eq!(copy_path(&path), expected(&path));
+        assert_eq!(
+            copy_path(&home),
+            if windows {
+                home.display().to_string()
+            } else {
+                "~".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn a_path_outside_home_is_copied_whole() {
+        let path = Path::new("/somewhere/else/notes.md");
+        assert_eq!(copy_path(path), path.display().to_string());
     }
 }

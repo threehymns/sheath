@@ -187,8 +187,8 @@ Its height is remembered in `session.kdl`. The web build has no shell and says s
 | New file | Cmd/Ctrl+Alt+N |
 | Copy, cut, paste, duplicate | Cmd/Ctrl+C, X, V, D |
 | Make an alias | The row menu, or the command bar: `Make Alias` |
-| Copy path | Shift+Cmd/Ctrl+C |
-| Copy name | The row menu, or the command bar: `Copy Name` |
+| Copy path | Shift+Cmd/Ctrl+C, or the row menu; paths under your home folder start with `~` |
+| Copy name | The command bar: `Copy Name` |
 | Command bar | Cmd/Ctrl+P |
 | Show or hide the terminal | Ctrl+Shift+T (Cmd+Shift+T on macOS), the row menu, or the command bar: `Open Terminal Here` |
 | Copy the terminal selection | Ctrl+Shift+C (Cmd+Shift+C on macOS) |

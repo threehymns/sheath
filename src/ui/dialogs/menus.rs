@@ -330,12 +330,13 @@ pub(crate) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
                 }),
         )
         .item(
-            MenuItem::new("Copy Name")
+            MenuItem::new("Copy Path")
                 .icon(&icons::CLIPBOARD)
+                .shortcut(s.keybinds.menu_label(Action::CopyPath))
                 .disabled(count == 0)
                 .on_select_tx(|s: &mut App, tx: &mut rune::Tx| {
                     s.close_menu();
-                    s.copy_names(tx);
+                    s.copy_paths(tx);
                 }),
         )
         .separator()
