@@ -182,7 +182,7 @@ pub struct Problem {
 fn schema(name: &str) -> &'static str {
     match name {
         CONFIG => {
-            "top-level nodes: `settings { show-hidden inspector grid folders-first confirm-trash confirm-delete show-kind show-size show-modified scroll-inertia overscroll system-icons }`,\n\
+            "top-level nodes: `settings { show-hidden inspector grid zebra-stripes folders-first confirm-trash confirm-delete show-kind show-size show-modified scroll-inertia overscroll system-icons }`,\n\
              `folder-rule \"name\" { match path=\"~/x/**\" layout grid sort name direction descending }`,\n\
              and `entry-rule \"name\" { match path=\"~/x/y\" hidden #true }`.\n\
              A rule takes `match` and `exclude` directives plus the properties its kind allows,\n\

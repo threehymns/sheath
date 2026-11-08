@@ -406,7 +406,8 @@ impl App {
             | Setting::ShowSize
             | Setting::ShowModified
             | Setting::ShowThumbnails
-            | Setting::SystemIcons => {}
+            | Setting::SystemIcons
+            | Setting::ZebraStripes => {}
         }
         self.save_setting(setting);
     }

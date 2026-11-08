@@ -528,3 +528,60 @@ fn the_system_icon_setting_is_off_by_default_and_saves_its_switch() {
     assert!(config.contains("system-icons #true"), "{config}");
     assert!(saved_settings(&dir).system_icons);
 }
+
+#[test]
+fn the_zebra_stripes_setting_is_on_by_default_and_toggles_stripes() {
+    assert!(Settings::default().zebra_stripes, "stripes start on");
+    assert!(Setting::ZebraStripes.default_on());
+    assert_eq!(Setting::ZebraStripes.name(), "zebra-stripes");
+    assert_eq!(Setting::ZebraStripes.id(), "zebra-stripes");
+
+    let dir = fixture();
+    let (app, _path) = app_in_config_dir(&dir);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    let first_row_id = rt.state.entries[rt.state.visible[0]].id.clone();
+    let second_row_id = rt.state.entries[rt.state.visible[1]].id.clone();
+    let row_fill = |rt: &rune::Runtime<App>, id: &str| {
+        rt.elements()
+            .into_iter()
+            .find(|e| e.key.as_deref() == Some(id))
+            .map(|e| e.fill)
+            .unwrap()
+    };
+
+    assert_ne!(
+        row_fill(&rt, &first_row_id),
+        row_fill(&rt, &second_row_id),
+        "second row has a stripe fill by default"
+    );
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "setting-zebra-stripes");
+    assert!(
+        !rt.state.config.zebra_stripes,
+        "the switch turns zebra stripes off"
+    );
+
+    let config = fs::read_to_string(dir.path().join("config.kdl")).unwrap();
+    assert!(config.contains("zebra-stripes #false"), "{config}");
+    assert!(!saved_settings(&dir).zebra_stripes);
+
+    click(&mut rt, "close-settings");
+    assert_eq!(
+        row_fill(&rt, &first_row_id),
+        row_fill(&rt, &second_row_id),
+        "rows share the same background after turning off zebra stripes"
+    );
+
+    click(&mut rt, "open-settings");
+    click(&mut rt, "reset-zebra-stripes");
+    assert!(rt.state.config.zebra_stripes);
+    click(&mut rt, "close-settings");
+    assert_ne!(
+        row_fill(&rt, &first_row_id),
+        row_fill(&rt, &second_row_id),
+        "stripes return after resetting the setting"
+    );
+}

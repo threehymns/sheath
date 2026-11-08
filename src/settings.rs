@@ -78,6 +78,7 @@ settings! {
         ShowHidden => show_hidden: "show-hidden", "hidden", false;
         Inspector => inspector: "inspector", "inspector", true;
         GridLayout => grid: "grid", "grid", false;
+        ZebraStripes => zebra_stripes: "zebra-stripes", "zebra-stripes", true;
         FoldersFirst => folders_first: "folders-first", "folders-first", true;
         ConfirmTrash => confirm_trash: "confirm-trash", "confirm-trash", true;
         ConfirmDelete => confirm_delete: "confirm-delete", "confirm-delete", true;

@@ -235,6 +235,7 @@ impl SettingsGroup {
             Setting::ShowHidden
             | Setting::Inspector
             | Setting::GridLayout
+            | Setting::ZebraStripes
             | Setting::ShowThumbnails
             | Setting::SystemIcons => SettingsGroup::Browser,
             Setting::FoldersFirst | Setting::ConfirmTrash | Setting::ConfirmDelete => {
@@ -285,6 +286,7 @@ fn setting_label(setting: Setting) -> &'static str {
         Setting::ShowHidden => "Show hidden files",
         Setting::Inspector => "Show inspector",
         Setting::GridLayout => "Grid layout",
+        Setting::ZebraStripes => "Zebra stripes",
         Setting::ShowThumbnails => "Show thumbnails",
         Setting::SystemIcons => "System icons",
         Setting::FoldersFirst => "Folders first",
@@ -303,6 +305,7 @@ fn setting_help(setting: Setting) -> Option<&'static str> {
         Setting::ShowHidden => Some("Also list names that start with a dot."),
         Setting::Inspector => Some("The details and preview pane beside the table."),
         Setting::GridLayout => Some("Show the folder as tiles instead of a table of rows."),
+        Setting::ZebraStripes => Some("Alternate row backgrounds in the list layout."),
         Setting::ShowThumbnails => {
             Some("Show a small picture for each image, in the list and the grid.")
         }
@@ -327,6 +330,7 @@ fn setting_icon(setting: Setting, k: &Kit) -> &'static Icon {
         Setting::ShowHidden => k.glyph.eye,
         Setting::Inspector => &icons::INSPECTOR,
         Setting::GridLayout => &icons::GRID,
+        Setting::ZebraStripes => &icons::LIST,
         Setting::ShowThumbnails => &icons::PICTURES,
         Setting::SystemIcons => &glyphs::FOLDER,
         Setting::FoldersFirst => &icons::LIST,

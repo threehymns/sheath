@@ -312,7 +312,7 @@ fn row_version<'a>(
             s.size_width.to_bits(),
             s.date_width.to_bits(),
         ),
-        stripe: i % 2 == 1,
+        stripe: s.config.zebra_stripes && i % 2 == 1,
         drop: s.drop_row() == Some(i),
         selected: s.is_selected(&entry.id),
         cut: s.is_cut(&entry.path),
@@ -355,7 +355,7 @@ fn file_row_body(
             .outline(1.0, -1.0, k.c.border_focus)
     } else if s.is_selected(&entry.id) {
         line.fill(style.selected)
-    } else if i % 2 == 1 {
+    } else if s.config.zebra_stripes && i % 2 == 1 {
         line.fill(style.stripe)
             .hover(style.stripe.mix(style.selected, 0.5))
     } else {

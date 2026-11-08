@@ -16,6 +16,7 @@ settings {
     show-hidden #false
     inspector #true
     grid #false
+    zebra-stripes #true
     folders-first #true
     confirm-trash #true
     confirm-delete #true
@@ -30,7 +31,8 @@ settings {
 ```
 
 `grid` shows the folder as tiles instead of a table of rows, with the same sort controls in a
-bar of the header's height, and is also the toolbar's layout button. `show-thumbnails` draws a
+bar of the header's height, and is also the toolbar's layout button. `zebra-stripes` alternates
+row backgrounds in the list layout. `show-thumbnails` draws a
 picture for each image, falling back to the file icon. `system-icons` draws folders and files
 with the desktop's own icons.
 `folders-first` keeps folders
