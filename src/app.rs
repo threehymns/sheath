@@ -444,6 +444,7 @@ impl App {
         }
         self.rule_delete_ask = None;
         self.config = Settings::from_doc(self.store.doc(config::CONFIG));
+        crate::material::apply(self.config.material);
         self.keybinds = actions_kdl::keybinds::read(self.store.doc(config::KEYBINDS));
         self.recorders = Keybinds::recorders();
         self.inspector.set_open(self.config.inspector);
@@ -539,4 +540,5 @@ pub fn setup(s: &mut App, wake: Waker) {
     s.finder.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);
+    crate::material::apply(s.config.material);
 }

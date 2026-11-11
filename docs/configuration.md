@@ -27,6 +27,7 @@ settings {
     system-icons #false
     scroll-inertia #true
     overscroll #true
+    window-material "off"
 }
 ```
 
@@ -41,6 +42,14 @@ before deleting something for good. `show-kind`, `show-size` and `show-modified`
 those columns. `scroll-inertia` lets every
 scroll area coast after the wheel stops; `overscroll` lets it pull past its first or last row and
 spring back.
+
+`window-material` chooses the backdrop the desktop draws behind the window: `off` keeps the
+app's own solid background, `mica` asks for Windows 11's Mica (on macOS, the system's vibrancy
+material) and `acrylic` for its Acrylic (on macOS, Liquid Glass, or the popover material before
+macOS 26). While one is on, the sidebar and the frame around the content card turn translucent so
+the material shows through; the content card stays solid, so text keeps its contrast. The
+settings panel offers the choice only on Windows and macOS, where the desktop has an equivalent;
+Linux and the web have none, and a value in the file leaves their windows as they were.
 
 `config.kdl` also holds folder and entry rules, as top-level nodes beside `settings`, in file
 order:

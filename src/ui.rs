@@ -17,6 +17,7 @@ use rune_theme_opencode as theme;
 use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
+use crate::material;
 
 use dialogs::{empty_menu, header_menu, place_menu, row_menu, sheet_layer};
 use settings::settings_layer;
@@ -41,7 +42,7 @@ pub(super) fn entry_icon(
 }
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
-    let k = theme::kit(cx.system_dark());
+    let k = material::kit(cx.system_dark(), s.config.material);
     s.dark.set(cx.system_dark());
     s.scale.set(cx.env().scale.max(1.0));
     s.begin_view();
@@ -174,7 +175,16 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         }
         layers.push(region.build(k));
     }
-    rune_kit::root(shell, layers)
+    let root = rune_kit::root(shell, layers);
+    match material::backdrop(s.config.material) {
+        Some(backdrop) => el()
+            .key("window")
+            .w_full()
+            .h_full()
+            .child(backdrop)
+            .child(root),
+        None => root,
+    }
 }
 
 /// The 1pt line two panes meet on. Panes sit flush against it, so the seam is one element the
