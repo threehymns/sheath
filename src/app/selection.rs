@@ -458,6 +458,7 @@ impl App {
     pub fn open_row_menu(&mut self, index: usize, at: PointerPress) {
         let Some(id) = self.row_id(index) else {
             self.menu = None;
+            self.menu_rules = false;
             return;
         };
         if !(self.selection.len() > 1 && self.selection.contains(&id)) {
@@ -467,6 +468,7 @@ impl App {
         self.anchor = Some(id.clone());
         self.focus_id(&id);
         self.menu = Some(at);
+        self.menu_rules = false;
     }
 
     pub fn row_menu_at(&mut self, at: PointerPress) {
@@ -483,10 +485,12 @@ impl App {
             // The space past the last row belongs to the folder, not to a row.
             None if inside => {
                 self.menu = None;
+                self.menu_rules = false;
                 self.empty_menu = Some(at);
             }
             None => {
                 self.menu = None;
+                self.menu_rules = false;
                 self.empty_menu = None;
             }
         }
@@ -494,6 +498,11 @@ impl App {
 
     pub fn close_menu(&mut self) {
         self.menu = None;
+        self.menu_rules = false;
+    }
+
+    pub fn toggle_menu_rules(&mut self) {
+        self.menu_rules = !self.menu_rules;
     }
 
     pub fn close_empty_menu(&mut self) {

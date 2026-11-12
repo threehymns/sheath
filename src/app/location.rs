@@ -154,6 +154,7 @@ impl App {
         };
         self.stop_scrolling();
         self.menu = None;
+        self.menu_rules = false;
         self.empty_menu = None;
         self.header_menu = None;
         self.place_menu = None;

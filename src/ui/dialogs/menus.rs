@@ -2,7 +2,7 @@ use crate::app::App;
 use crate::icons;
 use crate::keybinds::Action;
 use rune::{El, PointerPress, el};
-use rune_kit::{Kit, MenuItem, context_menu, glyphs};
+use rune_kit::{Kit, MenuEntry, MenuItem, context_menu, glyphs};
 use rune_theme_opencode as theme;
 
 pub(crate) fn place_menu(s: &App, k: &Kit, layers: &mut Vec<El>) {
@@ -341,33 +341,45 @@ pub(crate) fn row_menu(s: &App, k: &Kit, at: PointerPress, layers: &mut Vec<El>)
         )
         .separator()
         .item(
-            MenuItem::new("Save This Layout as a Rule")
+            MenuItem::new("Rules")
                 .icon(&theme::icons::EDIT)
+                .submenu(
+                    vec![
+                        MenuEntry::item(
+                            MenuItem::new("Save This Layout as a Rule")
+                                .icon(&theme::icons::EDIT)
+                                .on_select(|s: &mut App| {
+                                    s.close_menu();
+                                    s.save_layout_rule();
+                                }),
+                        ),
+                        MenuEntry::item(
+                            MenuItem::new("Show All Rules")
+                                .icon(&glyphs::KEYBOARD)
+                                .on_select(|s: &mut App| {
+                                    s.close_menu();
+                                    s.open_rule_picker();
+                                }),
+                        ),
+                        MenuEntry::item(
+                            MenuItem::new(if hidden {
+                                "Always Show This Entry"
+                            } else {
+                                "Always Hide This Entry"
+                            })
+                            .icon(k.glyph.eye)
+                            .disabled(many)
+                            .on_select(move |s: &mut App| {
+                                s.close_menu();
+                                s.pin_entry(!hidden);
+                            }),
+                        ),
+                    ],
+                    s.menu_rules,
+                )
                 .on_select(|s: &mut App| {
-                    s.close_menu();
-                    s.save_layout_rule();
+                    s.toggle_menu_rules();
                 }),
-        )
-        .item(
-            MenuItem::new("Show All Rules")
-                .icon(&glyphs::KEYBOARD)
-                .on_select(|s: &mut App| {
-                    s.close_menu();
-                    s.open_rule_picker();
-                }),
-        )
-        .item(
-            MenuItem::new(if hidden {
-                "Always Show This Entry"
-            } else {
-                "Always Hide This Entry"
-            })
-            .icon(k.glyph.eye)
-            .disabled(many)
-            .on_select(move |s: &mut App| {
-                s.close_menu();
-                s.pin_entry(!hidden);
-            }),
         )
         .on_close(|s: &mut App| s.close_menu())
         .build(k, layers);

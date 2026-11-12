@@ -128,6 +128,7 @@ fn the_row_menu_offers_to_hide_an_entry_a_rule_revealed() {
     );
 
     right_click(&mut rt, "f:.secret");
+    click(&mut rt, "row-menu-item16");
     let elements = rt.elements();
     let labels: Vec<&str> = elements
         .iter()
@@ -136,6 +137,45 @@ fn the_row_menu_offers_to_hide_an_entry_a_rule_revealed() {
     assert!(
         labels.contains(&"Always Hide This Entry"),
         "the menu reads the row as shown: {labels:?}"
+    );
+}
+
+#[test]
+fn the_row_menu_rules_submenu_opens_and_picks_a_rule() {
+    let dir = fixture();
+    let mut rt = runtime(app(&dir));
+    rt.frame(0.0);
+
+    right_click(&mut rt, "f:notes.md");
+    assert!(
+        rt.find("row-menu-item16").is_some(),
+        "Rules is in the row menu"
+    );
+    assert!(
+        rt.find("row-menu-item16-sub-item1").is_none(),
+        "submenu is not open yet"
+    );
+
+    click(&mut rt, "row-menu-item16");
+    assert!(
+        rt.find("row-menu-item16-sub-item0").is_some(),
+        "Save This Layout as a Rule is in the submenu"
+    );
+    assert!(
+        rt.find("row-menu-item16-sub-item1").is_some(),
+        "Show All Rules is in the submenu"
+    );
+    assert!(
+        rt.find("row-menu-item16-sub-item2").is_some(),
+        "Always Hide This Entry is in the submenu"
+    );
+
+    click(&mut rt, "row-menu-item16-sub-item1");
+    assert!(rt.state.menu.is_none(), "picking closes the menu");
+    assert!(!rt.state.menu_rules, "picking resets menu_rules");
+    assert!(
+        rt.state.rule_picker.is_some(),
+        "Show All Rules opens the rule picker"
     );
 }
 
