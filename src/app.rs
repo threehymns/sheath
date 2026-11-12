@@ -542,6 +542,7 @@ pub fn setup(s: &mut App, wake: Waker) {
     s.system_icons.attach(cache);
     s.scan.set_waker(wake.clone());
     s.finder.set_waker(wake.clone());
+    s.drives.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);
 }
