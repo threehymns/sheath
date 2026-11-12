@@ -1,8 +1,12 @@
 //! macOS drives through `/Volumes` and `diskutil`.
 //!
-//! Every volume macOS mounts outside the boot disk is a drive in the sidebar. An external disk
-//! the user has unmounted no longer has an entry under `/Volumes`, so `diskutil list external`
-//! finds it and `diskutil info` says which of those are volumes rather than EFI partitions.
+//! A mounted volume is only a drive when `diskutil info` says it is a local, non-virtual
+//! external disk. That keeps internal partitions, mounted disk images and network shares out of
+//! the sidebar, and gives the row the disk identifier the unmount command wants.
+//!
+//! An external disk the user has unmounted no longer has an entry under `/Volumes`, so
+//! `diskutil list external` finds it and `diskutil info` says which entries are volumes rather
+//! than EFI partitions or APFS snapshots.
 
 use super::Drive;
 use std::collections::BTreeSet;
@@ -81,20 +85,43 @@ fn mounted() -> Vec<Drive> {
         if is_boot {
             continue;
         }
-        let Some(name) = path
+        let Some(fallback_name) = path
             .file_name()
             .map(|name| name.to_string_lossy().into_owned())
         else {
             continue;
         };
         // `.timemachine` and the like are bookkeeping folders, not disks a user mounts.
-        if name.starts_with('.') {
+        if fallback_name.starts_with('.') {
             continue;
         }
+        let Some(info) = info(&path) else {
+            // Network shares do not answer `diskutil info`; they are not local drives.
+            continue;
+        };
+        if field(&info, "Internal").is_some_and(|internal| internal.eq_ignore_ascii_case("yes")) {
+            continue;
+        }
+        // A mounted disk image is ejectable, but it is not an external disk.
+        if field(&info, "Virtual")
+            .is_some_and(|virtual_disk| virtual_disk.eq_ignore_ascii_case("yes"))
+        {
+            continue;
+        }
+        if field(&info, "Mounted").is_some_and(|mounted| mounted.eq_ignore_ascii_case("no")) {
+            continue;
+        }
+        let Some(device) = field(&info, "Device Identifier").filter(|device| !device.is_empty())
+        else {
+            continue;
+        };
+        let name = field(&info, "Volume Name")
+            .filter(|name| !name.is_empty() && !name.eq_ignore_ascii_case("not applicable"))
+            .unwrap_or(fallback_name);
         drives.push(Drive {
-            id: format!("volume:{}", path.display()),
+            id: format!("volume:{device}"),
             name,
-            device: path.display().to_string(),
+            device,
             mountpoint: Some(path),
         });
     }
@@ -122,8 +149,9 @@ fn unmounted() -> Vec<(String, String)> {
         let Some(rest) = identifier.strip_prefix("disk") else {
             continue;
         };
-        // A volume is `diskN sM`; the whole disk and the EFI partition are not places to mount.
-        if rest.is_empty() || !rest.contains('s') {
+        // A volume is `diskN sM`: one `s`. The whole disk, an EFI partition and an APFS
+        // snapshot (`diskN sMsN`) are not places to mount.
+        if rest.is_empty() || rest.matches('s').count() != 1 {
             continue;
         }
         if rest.chars().all(|ch| ch.is_ascii_digit() || ch == 's') {
@@ -132,38 +160,52 @@ fn unmounted() -> Vec<(String, String)> {
     }
     let mut found = Vec::new();
     for identifier in identifiers {
-        let Ok(info) = Command::new("diskutil")
-            .arg("info")
-            .arg(&identifier)
-            .output()
-        else {
+        let Some(info) = info(Path::new(&identifier)) else {
             continue;
         };
-        if !info.status.success() {
+        if field(&info, "Mounted").is_some_and(|mounted| mounted.eq_ignore_ascii_case("yes")) {
             continue;
         }
-        let info = String::from_utf8_lossy(&info.stdout);
-        let field = |key: &str| {
-            info.lines().find_map(|line| {
-                let (name, value) = line.split_once(':')?;
-                (name.trim() == key).then(|| value.trim().to_owned())
-            })
-        };
-        if field("Mounted").is_some_and(|mounted| mounted.eq_ignore_ascii_case("yes")) {
+        if is_efi(&info) {
             continue;
         }
-        let Some(name) = field("Volume Name")
+        let Some(name) = field(&info, "Volume Name")
             .filter(|name| !name.is_empty() && !name.eq_ignore_ascii_case("not applicable"))
         else {
             continue;
         };
         // A container or partition table has a name but no filesystem to browse.
-        if field("File System Personality").is_none_or(|kind| kind.is_empty()) {
+        if field(&info, "File System Personality").is_none_or(|kind| kind.is_empty()) {
             continue;
         }
         found.push((identifier, name));
     }
     found
+}
+
+fn is_efi(info: &str) -> bool {
+    ["Partition Type", "Content (IOContent)"]
+        .iter()
+        .any(|key| field(info, key).is_some_and(|kind| kind.eq_ignore_ascii_case("efi")))
+}
+
+fn info(target: &Path) -> Option<String> {
+    let output = Command::new("diskutil")
+        .arg("info")
+        .arg(target)
+        .output()
+        .ok()?;
+    output
+        .status
+        .success()
+        .then(|| String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn field(info: &str, key: &str) -> Option<String> {
+    info.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        (name.trim() == key).then(|| value.trim().to_owned())
+    })
 }
 
 fn detail(output: &std::process::Output) -> String {
