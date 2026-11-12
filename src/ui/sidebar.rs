@@ -1,7 +1,8 @@
 use crate::app::App;
+use crate::drives::Drive;
 use crate::keybinds::Action;
 use crate::places::{Place, Section};
-use rune::{El, Tx};
+use rune::{El, Tx, el, icon};
 use rune_kit::shell::Reorder;
 use rune_kit::{
     ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, SidebarRow, SidebarSection,
@@ -9,14 +10,16 @@ use rune_kit::{
 use rune_theme_opencode as theme;
 
 pub(super) fn sidebar(s: &App, k: &'static Kit) -> El {
-    Sidebar::new()
+    let mut sidebar = Sidebar::new()
         .label("Places")
         .inset(10.0)
         .row_gap(1.0)
         .child(place_section(s, k, Section::Favourites))
-        .child(place_section(s, k, Section::Locations))
-        .footer(settings_button(s, k))
-        .build(k)
+        .child(place_section(s, k, Section::Locations));
+    if !s.drives.is_empty() {
+        sidebar = sidebar.child(drives_section(s, k));
+    }
+    sidebar.footer(settings_button(s, k)).build(k)
 }
 
 /// The window's one way into settings, in the footer so it sits in the sidebar's bottom corner.
@@ -52,6 +55,52 @@ fn place_section(s: &App, k: &'static Kit, section: Section) -> El {
                 tx.live_only();
             }
         })
+}
+
+/// The drives the machine reports, mounted or not. They are not places, so this section has no
+/// reorder and no entry in `places.kdl`.
+fn drives_section(s: &App, k: &'static Kit) -> El {
+    let mut rows = SidebarSection::new("Drives");
+    for drive in s.drives.drives() {
+        rows = rows.row(drive_row(s, k, drive));
+    }
+    rows.build(k).key("places-drives")
+}
+
+fn drive_row(s: &App, k: &'static Kit, drive: &Drive) -> El {
+    let id = drive.id.clone();
+    let open = id.clone();
+    let selected = drive.path().is_some_and(|path| s.cwd == path);
+    let mut row = SidebarRow::new(drive.name.clone());
+    row = if drive.is_mounted() {
+        // The unmount button takes the row's leading slot, so a mounted drive's row has it on
+        // the left as asked; an unmounted one keeps the drive icon.
+        row.avatar(unmount_button(k, id.clone(), drive.name.clone()))
+    } else {
+        row.icon(&crate::icons::DRIVE)
+    };
+    row.selected(selected)
+        .on_select(move |s: &mut App, _| s.open_drive(&open))
+        .build(k)
+        .key(format!("drive-{id}"))
+}
+
+fn unmount_button(k: &'static Kit, id: String, name: String) -> El {
+    let key = format!("drive-unmount-{id}");
+    let tip = format!("Unmount “{name}”");
+    k.interactive(
+        el().size(16.0, 16.0).center().child(
+            icon(&crate::icons::EJECT, 14.0)
+                .color(k.c.icon_muted)
+                .a11y_hidden(),
+        ),
+    )
+    .role("button")
+    .label(tip.clone())
+    .help(tip)
+    .focusable(false)
+    .on_press(move |s: &mut App| s.unmount_drive(&id))
+    .key(key)
 }
 
 fn place_row(

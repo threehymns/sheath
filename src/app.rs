@@ -3,6 +3,7 @@ mod archive;
 mod browse;
 mod commands;
 mod drag;
+mod drives;
 mod drop;
 mod entry;
 mod files;
@@ -55,6 +56,7 @@ use rune_kit::shell::Reorder;
 use rune_kit::{PaneState, SortDir};
 
 use crate::config::{self, Store};
+use crate::drives::Drives;
 use crate::keybinds::{Action, Keybinds};
 use crate::notice::Notice;
 use crate::places::{Places, Section};
@@ -148,6 +150,7 @@ pub struct App {
     pub visit: Resolved,
     pub views: Views,
     pub places: Places,
+    pub drives: Drives,
     pub favourites_drag: Reorder,
     pub locations_drag: Reorder,
     pub place_dragged: bool,
@@ -216,6 +219,7 @@ impl App {
         }
         app.views = Views::load();
         app.places = Places::load();
+        app.drives = Drives::load();
         app.reload_rules();
         app.history.push(Location::Folder(path.clone()));
         app.at = 0;
@@ -306,6 +310,7 @@ impl App {
             visit: Resolved::default(),
             views: Views::default(),
             places: Places::default(),
+            drives: Drives::default(),
             favourites_drag: Reorder::new().gap(PLACE_ROW_GAP),
             locations_drag: Reorder::new().gap(PLACE_ROW_GAP),
             place_dragged: false,
