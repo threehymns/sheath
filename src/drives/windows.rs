@@ -1,13 +1,17 @@
 //! Windows removable drives through PowerShell.
 //!
 //! Windows gives a removable volume its drive letter when it is plugged in, so the list is the
-//! mounted volumes themselves; unmounting is the shell's Eject verb.
+//! mounted volumes themselves; unmounting is the shell's Eject verb. The verb returns before the
+//! device is gone, so the worker waits for `Get-Volume` to stop reporting the letter.
 
 use super::Drive;
 use std::path::PathBuf;
 use std::process::Command;
 
 const PROBE: &str = "Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | ForEach-Object { '{0}|{1}|{2}' -f $_.DriveLetter, $_.FileSystemLabel, $_.UniqueId }";
+
+/// How long an Eject may take to remove the volume before the worker reports a failure.
+const EJECT_TIMEOUT_SECONDS: u64 = 30;
 
 pub(super) fn probe() -> Result<Vec<Drive>, String> {
     let output = powershell(PROBE).map_err(|err| format!("Could not list drives: {err}"))?;
@@ -26,10 +30,25 @@ pub(super) fn unmount(drive: &Drive) -> Result<(), String> {
         return Err(format!("“{}” is not mounted.", drive.name));
     };
     let root = path.display().to_string().replace('\'', "''");
+    let letter = drive.device.trim_end_matches(':');
+    if letter.is_empty() {
+        return Err(format!("“{}” is not mounted.", drive.name));
+    }
+    // Eject is asynchronous: the verb starts the removal and returns. Keep the worker (and
+    // therefore the row's spinner) alive until Windows stops listing the drive letter. The
+    // timeout turns a stuck eject into an error instead of a spinner that never ends.
     let script = format!(
         "$shell = New-Object -ComObject Shell.Application; \
          $item = $shell.Namespace(17).ParseName('{root}'); \
-         if ($item) {{ $item.InvokeVerb('Eject') }} else {{ exit 1 }}"
+         if (-not $item) {{ Write-Error 'The drive is no longer available.'; exit 1 }}; \
+         $item.InvokeVerb('Eject'); \
+         $deadline = (Get-Date).AddSeconds({EJECT_TIMEOUT_SECONDS}); \
+         while ((Get-Date) -lt $deadline) {{ \
+             Start-Sleep -Milliseconds 200; \
+             if (-not (Get-Volume -DriveLetter '{letter}' -ErrorAction SilentlyContinue)) {{ exit 0 }} \
+         }}; \
+         Write-Error 'The drive did not disappear after ejecting.'; \
+         exit 1"
     );
     powershell(&script)
         .map(|_| ())
