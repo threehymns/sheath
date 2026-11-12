@@ -1,11 +1,11 @@
 use crate::app::App;
-use crate::drives::Drive;
+use crate::drives::{Drive, DriveAction};
 use crate::keybinds::Action;
 use crate::places::{Place, Section};
 use rune::{El, Tx, el, icon};
 use rune_kit::shell::Reorder;
 use rune_kit::{
-    ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, SidebarRow, SidebarSection,
+    ControlSize, IconButton, IconButtonVariant, Kit, Sidebar, SidebarRow, SidebarSection, Spinner,
 };
 use rune_theme_opencode as theme;
 
@@ -71,8 +71,14 @@ fn drive_row(s: &App, k: &'static Kit, drive: &Drive) -> El {
     let id = drive.id.clone();
     let open = id.clone();
     let selected = drive.path().is_some_and(|path| s.cwd == path);
+    let busy = s.drives.busy(&drive.id);
     let mut row = SidebarRow::new(drive.name.clone());
-    row = if drive.is_mounted() {
+    row = if let Some(action) = busy {
+        // The spinner replaces whatever the row could do until the worker lands. The detail
+        // says which command it is, and the row's press is a no-op in `Drives`.
+        row.avatar(busy_indicator(k, &drive.id, action, &drive.name))
+            .detail(format!("{}…", action.verb()))
+    } else if drive.is_mounted() {
         // The unmount button takes the row's leading slot, so a mounted drive's row has it on
         // the left as asked; an unmounted one keeps the drive icon.
         row.avatar(unmount_button(k, id.clone(), drive.name.clone()))
@@ -83,6 +89,15 @@ fn drive_row(s: &App, k: &'static Kit, drive: &Drive) -> El {
         .on_select(move |s: &mut App, _| s.open_drive(&open))
         .build(k)
         .key(format!("drive-{id}"))
+}
+
+fn busy_indicator(k: &'static Kit, id: &str, action: DriveAction, name: &str) -> El {
+    let tip = format!("{} “{name}”…", action.verb());
+    el().key(format!("drive-busy-{id}"))
+        .size(16.0, 16.0)
+        .center()
+        .help(tip)
+        .child(Spinner::new().size(12.0).color(k.c.icon_muted).build(k))
 }
 
 fn unmount_button(k: &'static Kit, id: String, name: String) -> El {

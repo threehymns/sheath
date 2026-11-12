@@ -1,5 +1,5 @@
 use super::helpers::*;
-use crate::drives::{Drive, Drives};
+use crate::drives::{Drive, DriveAction, Drives};
 use std::path::PathBuf;
 
 fn mounted(name: &str, path: PathBuf) -> Drive {
@@ -48,6 +48,47 @@ fn the_sidebar_lists_mounted_and_unmounted_drives() {
     assert!(
         rt.find("drive-unmount-volume:stick").is_none(),
         "only a mounted drive offers unmount"
+    );
+}
+
+#[test]
+fn a_busy_drive_shows_a_spinner_instead_of_its_action() {
+    let dir = fixture();
+    let mut app = app(&dir);
+    app.drives = Drives::fixed(vec![
+        mounted("mounted", dir.path().join("alpha")),
+        unmounted("stick"),
+    ])
+    .fixed_busy("volume:mounted", DriveAction::Unmount)
+    .fixed_busy("volume:stick", DriveAction::Mount);
+    let mut rt = runtime(app);
+    rt.frame(0.0);
+
+    assert!(
+        rt.find("drive-busy-volume:mounted").is_some(),
+        "a mounted drive being unmounted shows a spinner"
+    );
+    assert!(
+        rt.find("drive-unmount-volume:mounted").is_none(),
+        "the eject button gives way to the spinner"
+    );
+    assert!(
+        rt.find("drive-busy-volume:stick").is_some(),
+        "an unmounted drive being mounted shows a spinner"
+    );
+
+    click(&mut rt, "drive-volume:stick");
+    assert_eq!(
+        rt.state.drives.busy("volume:stick"),
+        Some(DriveAction::Mount),
+        "a press while busy starts no second mount"
+    );
+    assert!(
+        rt.state
+            .drives
+            .find("volume:stick")
+            .is_some_and(|drive| !drive.is_mounted()),
+        "the busy unmounted drive stays put"
     );
 }
 

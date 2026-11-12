@@ -91,7 +91,12 @@ impl App {
         redraw |= self.land_thumbs();
         self.request_thumbs();
         redraw |= self.land_folder_size();
-        redraw |= self.drives.poll();
+        let drive_poll = self.drives.poll();
+        redraw |= drive_poll.changed;
+        for finished in drive_poll.finished {
+            self.finish_drive(finished);
+            redraw = true;
+        }
         if let Some(id) = self.pending_reveal.take() {
             tx.scroll_into_view_in(FILES, id);
         }
