@@ -5,8 +5,9 @@
 //! its folder. The platform modules do the probing and the mounting; this module owns the list
 //! the sidebar reads and the rules the buttons follow.
 //!
-//! Mounting and unmounting run on a worker thread: `udisksctl` and `diskutil` can take a while
-//! on a sleeping drive, and the window must keep painting its spinner meanwhile.
+//! Both probing and mounting run on worker threads: `diskutil` can take a while on a sleeping
+//! drive, and a macOS refresh makes several calls, so the window must keep painting its spinner
+//! meanwhile.
 //!
 //! The web build has no drives: a browser tab cannot mount one.
 
@@ -107,6 +108,11 @@ struct Job {
     result: Receiver<Result<Option<PathBuf>, String>>,
 }
 
+/// A list of drives being read on a worker.
+struct Probe {
+    result: Receiver<Result<Vec<Drive>, String>>,
+}
+
 /// The sidebar's drives.
 ///
 /// A window starts with [`Drives::load`], which probes the machine once. `poll` refreshes it
@@ -114,11 +120,14 @@ struct Job {
 #[derive(Default)]
 pub struct Drives {
     drives: Vec<Drive>,
+    /// When the last probe finished, so the next one waits out [`REFRESH_EVERY`].
     checked: Option<Instant>,
     // A blank app (tests, the settings preview) has no machine to probe until it loads.
     active: bool,
     // Mount and unmount commands in flight, by drive id. One at a time per drive.
     jobs: HashMap<String, Job>,
+    // At most one probe runs at a time, and none runs while a command is in flight.
+    probe: Option<Probe>,
     wake: Option<Waker>,
     #[cfg(test)]
     fixed: bool,
@@ -128,12 +137,19 @@ pub struct Drives {
 
 impl Drives {
     pub fn load() -> Drives {
-        let mut drives = Drives {
-            active: true,
-            ..Drives::default()
-        };
-        drives.refresh();
-        drives
+        // The first frame starts the probe, once `setup` has attached its waker. A browser tab
+        // has no drives, so it never probes and never starts a worker.
+        #[cfg(target_arch = "wasm32")]
+        {
+            Drives::default()
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            Drives {
+                active: true,
+                ..Drives::default()
+            }
+        }
     }
 
     /// A list that never probes or runs a command; the sidebar tests set this.
@@ -155,7 +171,7 @@ impl Drives {
         self
     }
 
-    /// The window's waker, so a command that finishes wakes the frame that clears the busy row.
+    /// The window's waker, so a probe or command that finishes wakes the frame that lands it.
     pub fn set_waker(&mut self, wake: Waker) {
         self.wake = Some(wake);
     }
@@ -181,9 +197,8 @@ impl Drives {
         self.jobs.get(id).map(|job| job.action)
     }
 
-    /// Looks for drives again when the interval has passed, and lands every finished command.
-    /// Says whether the sidebar's list changed, so a frame that found the same drives can skip
-    /// rebuilding the view.
+    /// Lands a finished probe or command, starts the next probe when one is due, and says
+    /// whether the sidebar's list changed.
     pub fn poll(&mut self) -> DrivesPoll {
         #[cfg(test)]
         if self.fixed {
@@ -193,6 +208,27 @@ impl Drives {
             return DrivesPoll::default();
         }
         let mut poll = DrivesPoll::default();
+
+        if let Some(probe) = self.probe.as_ref() {
+            match probe.result.try_recv() {
+                Ok(result) => {
+                    self.probe = None;
+                    self.checked = Some(Instant::now());
+                    if let Ok(found) = result
+                        && found != self.drives
+                    {
+                        self.drives = found;
+                        poll.changed = true;
+                    }
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => {
+                    self.probe = None;
+                    self.checked = Some(Instant::now());
+                }
+            }
+        }
+
         let mut landed = Vec::new();
         if !self.jobs.is_empty() {
             let ids: Vec<String> = self.jobs.keys().cloned().collect();
@@ -209,16 +245,11 @@ impl Drives {
                 landed.push((id, job, answer));
             }
         }
-        let due = self
-            .checked
-            .is_none_or(|checked| checked.elapsed() >= REFRESH_EVERY);
-        if !landed.is_empty() || due {
-            poll.changed = self.refresh();
-        }
         for (id, job, answer) in landed {
             // The row's spinner goes whether the command worked or not, so the next frame
             // paints the result either way.
             poll.changed = true;
+            self.checked = Some(Instant::now());
             let result = answer.unwrap_or_else(|| {
                 Err(format!(
                     "Could not {} “{}”: the command stopped unexpectedly.",
@@ -228,14 +259,21 @@ impl Drives {
             });
             let (path, error) = match (job.action, result) {
                 (DriveAction::Mount, Ok(path)) => {
-                    // `udisksctl` names the folder it mounted; a platform that only says
-                    // "mounted" leaves the refreshed list to find it.
+                    // `udisksctl` names the folder it mounted; macOS asks `diskutil info`
+                    // in the same worker. A platform that only says "mounted" leaves the
+                    // next probe to find it.
                     let path = self
                         .find(&id)
                         .and_then(|drive| drive.mountpoint.clone())
                         .or(path);
                     match path {
-                        Some(path) => (Some(path), None),
+                        Some(path) => {
+                            if let Some(drive) = self.drives.iter_mut().find(|drive| drive.id == id)
+                            {
+                                drive.mountpoint = Some(path.clone());
+                            }
+                            (Some(path), None)
+                        }
                         None => (
                             None,
                             Some(format!(
@@ -247,7 +285,12 @@ impl Drives {
                 }
                 (DriveAction::Mount, Err(error)) => (None, Some(error)),
                 // The command succeeded; leave the folder the drive was mounted at.
-                (DriveAction::Unmount, Ok(_)) => (job.mountpoint, None),
+                (DriveAction::Unmount, Ok(_)) => {
+                    if let Some(drive) = self.drives.iter_mut().find(|drive| drive.id == id) {
+                        drive.mountpoint = None;
+                    }
+                    (job.mountpoint, None)
+                }
                 (DriveAction::Unmount, Err(error)) => (None, Some(error)),
             };
             poll.finished.push(Finished {
@@ -256,21 +299,14 @@ impl Drives {
                 error,
             });
         }
-        poll
-    }
 
-    fn refresh(&mut self) -> bool {
-        self.checked = Some(Instant::now());
-        let Ok(drives) = platform::probe() else {
-            // A probe that cannot run (no `lsblk`, no `diskutil`) is not worth a toast on
-            // every try; the list keeps what it last knew.
-            return false;
-        };
-        if drives == self.drives {
-            return false;
+        let due = self
+            .checked
+            .is_none_or(|checked| checked.elapsed() >= REFRESH_EVERY);
+        if due && self.probe.is_none() && self.jobs.is_empty() {
+            self.start_probe();
         }
-        self.drives = drives;
-        true
+        poll
     }
 
     /// Mounts a drive if it is not mounted. A mounted drive answers with its folder at once;
@@ -327,17 +363,35 @@ impl Drives {
     /// Runs the platform command off the UI thread. The answer lands in `poll`, which is where
     /// the list and the app's navigation change.
     fn start(&mut self, id: &str, drive: Drive, action: DriveAction) -> Result<(), String> {
+        self.start_with(id, drive, action, move |worker| match action {
+            DriveAction::Mount => platform::mount(&worker),
+            DriveAction::Unmount => platform::unmount(&worker).map(|()| None),
+        })
+    }
+
+    /// The worker plumbing, with the platform call passed in so a test can hold a real thread
+    /// open and then release it.
+    fn start_with<F>(
+        &mut self,
+        id: &str,
+        drive: Drive,
+        action: DriveAction,
+        work: F,
+    ) -> Result<(), String>
+    where
+        F: FnOnce(Drive) -> Result<Option<PathBuf>, String> + Send + 'static,
+    {
+        // A probe that started before this command could land after it and put the old state
+        // back, so the command's own result is the newest word on this drive.
+        self.probe = None;
         let (tx, rx) = mpsc::channel();
         let wake = self.wake.clone();
-        let worker = drive.clone();
         let name = drive.name.clone();
+        let mountpoint = drive.mountpoint.clone();
         let spawned = std::thread::Builder::new()
             .name("sheath-drive".to_owned())
             .spawn(move || {
-                let answer = match action {
-                    DriveAction::Mount => platform::mount(&worker),
-                    DriveAction::Unmount => platform::unmount(&worker).map(|()| None),
-                };
+                let answer = work(drive);
                 let _ = tx.send(answer);
                 if let Some(wake) = wake {
                     wake();
@@ -355,10 +409,103 @@ impl Drives {
             Job {
                 action,
                 name,
-                mountpoint: drive.mountpoint,
+                mountpoint,
                 result: rx,
             },
         );
         Ok(())
+    }
+
+    /// Reads the machine's drives on a worker. The frame that asks for it never waits.
+    fn start_probe(&mut self) {
+        if self.probe.is_some() {
+            return;
+        }
+        let (tx, rx) = mpsc::channel();
+        let wake = self.wake.clone();
+        let spawned = std::thread::Builder::new()
+            .name("sheath-drive-probe".to_owned())
+            .spawn(move || {
+                let answer = platform::probe();
+                let _ = tx.send(answer);
+                if let Some(wake) = wake {
+                    wake();
+                }
+            });
+        if spawned.is_ok() {
+            self.probe = Some(Probe { result: rx });
+        } else {
+            // Do not retry a machine that cannot start a thread on every frame.
+            self.checked = Some(Instant::now());
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_mount_worker_round_trip_clears_the_busy_row() {
+        let path = PathBuf::from("/tmp/sheath-worker-stick");
+        let drive = Drive {
+            id: "volume:stick".to_owned(),
+            name: "Stick".to_owned(),
+            device: "/dev/sdb1".to_owned(),
+            mountpoint: None,
+        };
+        let mut drives = Drives {
+            drives: vec![drive.clone()],
+            checked: Some(Instant::now()),
+            active: true,
+            ..Drives::default()
+        };
+
+        let (release_tx, release_rx) = mpsc::channel();
+        let (started_tx, started_rx) = mpsc::channel();
+        let worker_path = path.clone();
+        drives
+            .start_with("volume:stick", drive, DriveAction::Mount, move |_| {
+                started_tx.send(()).expect("the test is still waiting");
+                release_rx.recv().expect("the test releases the worker");
+                Ok(Some(worker_path))
+            })
+            .expect("the worker starts");
+
+        assert_eq!(
+            drives.busy("volume:stick"),
+            Some(DriveAction::Mount),
+            "the row is busy while the worker is held"
+        );
+        started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("the worker reaches its gate");
+        release_tx.send(()).expect("the worker waits for this");
+
+        let polled = (0..400)
+            .find_map(|_| {
+                let polled = drives.poll();
+                if polled.finished.is_empty() {
+                    std::thread::sleep(Duration::from_millis(5));
+                    None
+                } else {
+                    Some(polled)
+                }
+            })
+            .expect("the worker's answer lands in a poll");
+
+        assert!(
+            drives.busy("volume:stick").is_none(),
+            "landing the answer clears the busy row"
+        );
+        assert_eq!(
+            drives.find("volume:stick").and_then(Drive::path),
+            Some(path.as_path()),
+            "the mounted folder is in the list"
+        );
+        assert_eq!(polled.finished.len(), 1);
+        assert_eq!(polled.finished[0].action, DriveAction::Mount);
+        assert_eq!(polled.finished[0].path.as_deref(), Some(path.as_path()));
+        assert!(polled.finished[0].error.is_none());
     }
 }

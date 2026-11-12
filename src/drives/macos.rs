@@ -42,7 +42,19 @@ pub(super) fn mount(drive: &Drive) -> Result<Option<PathBuf>, String> {
             detail(&output)
         ));
     }
-    Ok(None)
+    // `diskutil mount` does not reliably print where the volume landed, so ask for the mount
+    // point here while the work is still off the UI thread. The next probe can confirm the list.
+    let Some(info) = info(Path::new(&drive.device)) else {
+        return Err(format!(
+            "Mounted “{}” but could not read its folder.",
+            drive.name
+        ));
+    };
+    let path = field(&info, "Mount Point")
+        .filter(|path| path.starts_with('/'))
+        .map(PathBuf::from)
+        .ok_or_else(|| format!("Mounted “{}” but could not find its folder.", drive.name))?;
+    Ok(Some(path))
 }
 
 pub(super) fn unmount(drive: &Drive) -> Result<(), String> {
