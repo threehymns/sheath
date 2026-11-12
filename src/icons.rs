@@ -36,6 +36,12 @@ pub static DRIVE: Icon = Icon {
     body: r#"<rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor"/><path d="M2 9.5h12" stroke="currentColor"/><circle cx="11.25" cy="6.25" r=".75" fill="currentColor"/>"#,
 };
 
+pub static EJECT: Icon = Icon {
+    name: "sheath-eject",
+    view: 16.0,
+    body: r#"<path d="M8 2.75 12.25 8.5H3.75L8 2.75Z" stroke="currentColor" stroke-linejoin="round"/><path d="M3.5 11.5h9" stroke="currentColor" stroke-linecap="round"/>"#,
+};
+
 pub static GRIP: Icon = Icon {
     name: "sheath-grip",
     view: 16.0,

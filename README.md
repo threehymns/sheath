@@ -198,6 +198,7 @@ Its height is remembered in `session.kdl`. The web build has no shell and says s
 | Reorder places | Drag a place in the sidebar |
 | Add to the sidebar | Drag a folder or file from the list between sidebar places, or the folder menu's `Add This Folder to the Sidebar` |
 | Place menu | Right-click a place in the sidebar |
+| Mount or unmount a drive | Click a drive in the sidebar; the button at the left of a mounted row unmounts it |
 | The folder's own menu | Right-click the empty space below the rows |
 | Settings | Cmd/Ctrl+, |
 | Rules | The command bar: `Show All Rules`, `Save This Layout as a Rule`, `View Rules for This Folder` / `Entry` |

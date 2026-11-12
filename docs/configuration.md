@@ -156,9 +156,9 @@ A place is its `id`, never its position: `home`, `desktop`, `documents`, `downlo
 its folder with the file selected. `name` overrides the label; a missing one is the folder's or
 file's own name. Dragging a folder or file from the list onto a place moves it inside that
 folder; dropping it between places inserts it there in the section, without moving anything
-and with a preview of the landing spot. `volume:<id>` is left for drives a later release
-detects, and a place whose folder is not there — an unmounted drive, a deleted folder — keeps
-its row in the file and comes back with the folder. Right-clicking a place opens its menu: open
+and with a preview of the landing spot. `volume:<id>` names a drive the sidebar detected, and a
+place whose folder is not there — an unmounted drive, a deleted folder — keeps its row in the
+file and comes back with the folder. Right-clicking a place opens its menu: open
 it, show it in its folder, edit the name it shows, rename the folder or file on disk, or remove
 it. The sidebar's name belongs to the sidebar alone; renaming on disk moves both the item and
 the place that points at it. A removed place keeps its row in the
@@ -166,3 +166,9 @@ file with `hidden #true`, and dragging its folder back restores that same row. B
 section, and top-level nodes the app does not know are written back untouched. Like
 `views.kdl`, the file is machine-owned and safe to delete: the sidebar goes back to its
 built-in places.
+
+The sidebar also shows a **Drives** section of its own, after the places. It is never written to
+`places.kdl`: it lists the external drives the machine reports, mounted or not. Clicking an
+unmounted drive mounts it and opens it, and a mounted drive carries an unmount button at the
+left of its row. The list refreshes every few seconds, so a drive plugged in later appears
+without a restart.
