@@ -6,8 +6,13 @@
 //! while a material is chosen. The tint is the kit's `bg_deep`, which paints the sidebar and
 //! the frame around the content card; the card itself stays solid, so text keeps its contrast.
 //!
-//! Linux and the web have no equivalent, so the setting is not offered there and a value
-//! written into `config.kdl` by hand leaves the window exactly as it was.
+//! On Linux only a KDE Plasma Wayland session has an equivalent: KWin blurs the window when the
+//! app asks it to, which `kwin` does. Every other Linux session and the web have none, so the
+//! setting is not offered there and a value written into `config.kdl` by hand leaves the window
+//! exactly as it was.
+
+#[cfg(target_os = "linux")]
+mod kwin;
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 use rune::WindowHandle;
@@ -38,6 +43,8 @@ impl Material {
     /// What the settings row says under its label.
     pub const HELP: &'static str = if cfg!(target_os = "macos") {
         "The system's own vibrancy behind the window. Off keeps the solid background."
+    } else if cfg!(target_os = "linux") {
+        "KWin's blur behind the window, in a Plasma Wayland session. Off keeps the solid background."
     } else {
         "Windows 11's Mica and Acrylic backdrops behind the window. Off keeps the solid background."
     };
@@ -57,10 +64,39 @@ impl Material {
             .find(|material| material.name() == name)
     }
 
-    /// Whether this platform draws a material behind its windows at all. The web and Linux have
-    /// no equivalent, so the settings page leaves the row out there.
+    /// Whether this session draws a material behind its windows at all. Windows and macOS do;
+    /// elsewhere the settings page leaves the row out.
+    #[cfg(not(target_os = "linux"))]
     pub fn supported() -> bool {
         cfg!(any(target_os = "windows", target_os = "macos"))
+    }
+
+    /// A Plasma Wayland session has KWin blur on request; every other Linux session, and the
+    /// web, has no material.
+    #[cfg(target_os = "linux")]
+    pub fn supported() -> bool {
+        kwin::detected()
+    }
+
+    /// The choices the settings panel offers. Windows and macOS each ask their system for two
+    /// materials; KWin has a single blur, so Linux names only that.
+    #[cfg(not(target_os = "linux"))]
+    pub fn choices() -> &'static [Material] {
+        Material::ALL
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn choices() -> &'static [Material] {
+        &[Material::Off, Material::Acrylic]
+    }
+
+    /// The choice to show for this value where the platform names fewer of them, so a value
+    /// written by hand for Windows or macOS still reads as KWin's single blur.
+    pub fn choice(self) -> Material {
+        if cfg!(target_os = "linux") && self != Material::Off {
+            return Material::Acrylic;
+        }
+        self
     }
 
     /// The label the settings page shows for this choice.
@@ -70,6 +106,11 @@ impl Material {
                 Material::Off => "Off",
                 Material::Mica => "Vibrancy",
                 Material::Acrylic => "Glass",
+            }
+        } else if cfg!(target_os = "linux") {
+            match self {
+                Material::Off => "Off",
+                _ => "Blur",
             }
         } else {
             match self {
@@ -142,7 +183,22 @@ pub fn configure<S: 'static>(app: rune::App<S>) -> rune::App<S> {
     .on_window(|window| remember(window.clone()))
 }
 
-#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+/// A Plasma Wayland session draws its blur behind a transparent window, so the window is
+/// created transparent and handed to `kwin` as soon as it exists. Other Linux sessions are
+/// left alone, as the web is.
+#[cfg(target_os = "linux")]
+pub fn configure<S: 'static>(app: rune::App<S>) -> rune::App<S> {
+    if !kwin::detected() {
+        return app;
+    }
+    app.window_options(rune::WindowOptions {
+        transparent: true,
+        ..Default::default()
+    })
+    .on_window(kwin::attach)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
 pub fn configure<S: 'static>(app: rune::App<S>) -> rune::App<S> {
     app
 }
@@ -163,7 +219,19 @@ static NATIVE: AtomicU8 = AtomicU8::new(0);
 #[cfg(any(target_os = "windows", target_os = "macos"))]
 pub fn remember(window: WindowHandle) {
     *WINDOW.get_or_init(Default::default).lock().unwrap() = Some(window);
-    apply(from_index(CURRENT.load(Ordering::Relaxed)));
+    apply(remembered());
+}
+
+/// The material the app last chose, for a window created after the choice was made.
+pub(super) fn remembered() -> Material {
+    from_index(CURRENT.load(Ordering::Relaxed))
+}
+
+/// Records whether the desktop drew what was asked, so the shell keeps its solid background
+/// where it did not.
+#[cfg(target_os = "linux")]
+pub(super) fn remember_native(drawn: bool) {
+    NATIVE.store(if drawn { 1 } else { 2 }, Ordering::Relaxed);
 }
 
 /// Applies a material to the window. A window that does not exist yet keeps the choice for the
@@ -177,7 +245,13 @@ pub fn apply(material: Material) {
         let _ = material;
         NATIVE.store(1, Ordering::Relaxed);
     }
-    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(drawn) = kwin::set(material) {
+            remember_native(drawn);
+        }
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
     {
         let _ = material;
         NATIVE.store(2, Ordering::Relaxed);
@@ -195,7 +269,6 @@ fn effective(material: Material) -> Material {
     material
 }
 
-#[cfg(any(target_os = "windows", target_os = "macos"))]
 fn from_index(index: u8) -> Material {
     match index {
         1 => Material::Mica,

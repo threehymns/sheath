@@ -46,10 +46,12 @@ spring back.
 `window-material` chooses the backdrop the desktop draws behind the window: `off` keeps the
 app's own solid background, `mica` asks for Windows 11's Mica (on macOS, the system's vibrancy
 material) and `acrylic` for its Acrylic (on macOS, Liquid Glass, or the popover material before
-macOS 26). While one is on, the sidebar and the frame around the content card turn translucent so
-the material shows through; the content card stays solid, so text keeps its contrast. The
-settings panel offers the choice only on Windows and macOS, where the desktop has an equivalent;
-Linux and the web have none, and a value in the file leaves their windows as they were.
+macOS 26; in a KDE Plasma Wayland session, KWin's blur, offered as `Blur`). While one is on, the
+sidebar and the frame around the content card turn translucent so the material shows through;
+the content card stays solid, so text keeps its contrast. The settings panel offers the choice
+only where the desktop has an equivalent: Windows, macOS, and a Plasma Wayland session. Every
+other Linux session — a Plasma X11 session, another desktop's — and the web have none, and a
+value in the file leaves their windows as they were.
 
 `config.kdl` also holds folder and entry rules, as top-level nodes beside `settings`, in file
 order:

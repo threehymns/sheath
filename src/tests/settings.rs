@@ -200,6 +200,17 @@ fn the_window_material_round_trips_through_config_kdl() {
     assert!(!config.contains("window-material"), "{config}");
 }
 
+/// KWin has one blur where Windows and macOS name two materials, so the panel offers it alone
+/// and reads a hand-written Windows or macOS value as that one blur.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_offers_a_single_blur_for_the_window_material() {
+    assert_eq!(Material::choices(), [Material::Off, Material::Acrylic]);
+    assert_eq!(Material::Acrylic.label(), "Blur");
+    assert_eq!(Material::Off.choice(), Material::Off);
+    assert_eq!(Material::Mica.choice(), Material::Acrylic);
+}
+
 #[test]
 fn saved_settings_load_at_launch() {
     let dir = fixture();

@@ -282,18 +282,19 @@ impl SettingsGroup {
 
 /// The window's backdrop: one of the system's materials, or its own solid background.
 fn window_material_row(s: &App, k: &Kit) -> El {
-    let labels: Vec<&str> = Material::ALL
+    let labels: Vec<&str> = Material::choices()
         .iter()
         .map(|material| material.label())
         .collect();
-    let selected = Material::ALL
+    let chosen = s.config.material.choice();
+    let selected = Material::choices()
         .iter()
-        .position(|material| *material == s.config.material);
+        .position(|material| *material == chosen);
     let control = SegmentedControl::new(&labels, selected)
         .label("Window material")
         .fit()
         .on_pick(|s: &mut App, index, _: &mut Tx| {
-            if let Some(material) = Material::ALL.get(index) {
+            if let Some(material) = Material::choices().get(index) {
                 s.set_material(*material);
             }
         })

@@ -3958,7 +3958,7 @@ checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 [[package]]
 name = "rune"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 dependencies = [
  "accesskit",
  "accesskit_macos",
@@ -4031,7 +4031,7 @@ dependencies = [
 [[package]]
 name = "rune-kit"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 dependencies = [
  "rune",
  "rune-motion",
@@ -4041,12 +4041,12 @@ dependencies = [
 [[package]]
 name = "rune-motion"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 
 [[package]]
 name = "rune-staging"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 dependencies = [
  "wgpu",
 ]
@@ -4054,7 +4054,7 @@ dependencies = [
 [[package]]
 name = "rune-taffy"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 dependencies = [
  "taffy",
 ]
@@ -4062,7 +4062,7 @@ dependencies = [
 [[package]]
 name = "rune-theme-opencode"
 version = "0.0.1"
-source = "git+https://github.com/anomalyco/rune?rev=396a9af15ed63a9aede6b60871668f7f4c0665db#396a9af15ed63a9aede6b60871668f7f4c0665db"
+source = "git+https://github.com/threehymns/rune?rev=0c754804359a8aa6d7b3e4c4ec1c55f054488f5a#0c754804359a8aa6d7b3e4c4ec1c55f054488f5a"
 dependencies = [
  "rune",
  "rune-kit",
@@ -4399,6 +4399,10 @@ dependencies = [
  "trash",
  "wasm-bindgen",
  "wasm-bindgen-futures",
+ "wayland-backend",
+ "wayland-client",
+ "wayland-protocols",
+ "wayland-protocols-plasma",
  "windows-sys 0.61.2",
  "zip",
 ]
