@@ -35,9 +35,9 @@ scroll = { path = "crates/scroll", version = "0.1.0" }
 # window's own display, and `WindowHandle::with_display_handle` is the one method upstream does
 # not have yet. One pin for the whole workspace, so the pane and the app are never built against
 # two different Runes.
-rune = { git = "https://github.com/threehymns/rune", rev = "0c754804359a8aa6d7b3e4c4ec1c55f054488f5a", default-features = false }
-rune-kit = { git = "https://github.com/threehymns/rune", rev = "0c754804359a8aa6d7b3e4c4ec1c55f054488f5a" }
-rune-theme-opencode = { git = "https://github.com/threehymns/rune", rev = "0c754804359a8aa6d7b3e4c4ec1c55f054488f5a" }
+rune = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa", default-features = false }
+rune-kit = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa" }
+rune-theme-opencode = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa" }
 # The config files the app and its codecs read and write.
 kdl = { version = "6.7.1", default-features = false }
 # The desktop's own icons: AppKit's workspace on macOS, the shell's file-type icons on Windows.
