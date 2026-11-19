@@ -36,7 +36,10 @@ pub(super) fn mount(drive: &Drive) -> Result<Option<PathBuf>, String> {
             detail(&output)
         ));
     }
-    Ok(mount_point(&String::from_utf8_lossy(&output.stdout)))
+    Ok(mount_point(
+        &String::from_utf8_lossy(&output.stdout),
+        &drive.device,
+    ))
 }
 
 pub(super) fn unmount(drive: &Drive) -> Result<(), String> {
@@ -71,9 +74,14 @@ fn detail(output: &std::process::Output) -> String {
 
 /// `udisksctl mount` ends with `Mounted /dev/sdb1 at /run/media/me/Backup.`; a locale that
 /// translates it leaves the refresh in `Drives` to find the folder instead.
-fn mount_point(text: &str) -> Option<PathBuf> {
-    let (_, tail) = text.rsplit_once(" at ")?;
-    let path = tail.trim().trim_end_matches('.').trim();
+fn mount_point(text: &str, device: &str) -> Option<PathBuf> {
+    // Taking the prefix from the device name keeps a folder called "Look at Me" whole, where
+    // the last " at " in the line would cut it in two.
+    let prefix = format!("Mounted {device} at ");
+    let path = text.trim_end().strip_prefix(&prefix)?;
+    // One full stop closes the sentence. A folder may end in its own stop, which the message
+    // then prints twice, so only the last one goes.
+    let path = path.strip_suffix('.').unwrap_or(path);
     (!path.is_empty()).then(|| PathBuf::from(path))
 }
 
@@ -140,7 +148,10 @@ fn fields(line: &str) -> Vec<(&str, String)> {
         let Some(after_quote) = after_key.strip_prefix('"') else {
             break;
         };
-        let mut value = String::new();
+        // A label is UTF-8 and `lsblk` escapes its bytes one at a time, so a character such as
+        // `é` arrives as `\xC3\xA9`. Decoding into a buffer of bytes keeps those halves
+        // together; the finished buffer is the only place the text is UTF-8.
+        let mut value: Vec<u8> = Vec::new();
         let mut ended = None;
         let mut chars = after_quote.char_indices();
         while let Some((at, ch)) = chars.next() {
@@ -157,26 +168,29 @@ fn fields(line: &str) -> Vec<(&str, String)> {
                         // `lsblk` writes a space in a label or mount point as `\x20`.
                         let high = chars.next().and_then(|(_, ch)| ch.to_digit(16));
                         let low = chars.next().and_then(|(_, ch)| ch.to_digit(16));
-                        if let (Some(high), Some(low)) = (high, low)
-                            && let Some(decoded) = char::from_u32(high * 16 + low)
-                        {
-                            value.push(decoded);
+                        if let (Some(high), Some(low)) = (high, low) {
+                            value.push((high * 16 + low) as u8);
                         }
                     } else {
-                        value.push(match escaped {
+                        let decoded = match escaped {
                             'n' => '\n',
                             't' => '\t',
                             other => other,
-                        });
+                        };
+                        let mut buffer = [0; 4];
+                        value.extend_from_slice(decoded.encode_utf8(&mut buffer).as_bytes());
                     }
                 }
-                _ => value.push(ch),
+                _ => {
+                    let mut buffer = [0; 4];
+                    value.extend_from_slice(ch.encode_utf8(&mut buffer).as_bytes());
+                }
             }
         }
         let Some(end) = ended else {
             break;
         };
-        fields.push((key, value));
+        fields.push((key, String::from_utf8_lossy(&value).into_owned()));
         rest = &after_quote[end..];
     }
     fields
@@ -222,9 +236,37 @@ mod tests {
     #[test]
     fn a_mount_point_is_read_from_udisks_output() {
         assert_eq!(
-            mount_point("Mounted /dev/sdb1 at /run/media/me/Backup.\n"),
+            mount_point("Mounted /dev/sdb1 at /run/media/me/Backup.\n", "/dev/sdb1"),
             Some(PathBuf::from("/run/media/me/Backup"))
         );
-        assert_eq!(mount_point("something else\n"), None);
+        // A folder named with " at " in it is one path, not the tail of a sentence.
+        assert_eq!(
+            mount_point(
+                "Mounted /dev/sdb1 at /run/media/me/Look at Me.\n",
+                "/dev/sdb1"
+            ),
+            Some(PathBuf::from("/run/media/me/Look at Me"))
+        );
+        // A folder whose own name ends in a stop keeps it: only the sentence's stop goes.
+        assert_eq!(
+            mount_point("Mounted /dev/sdb1 at /run/media/me/Backup..\n", "/dev/sdb1"),
+            Some(PathBuf::from("/run/media/me/Backup."))
+        );
+        assert_eq!(mount_point("something else\n", "/dev/sdb1"), None);
+    }
+
+    #[test]
+    fn an_escaped_character_that_takes_two_bytes_comes_back_whole() {
+        let text = concat!(
+            "NAME=\"sdb1\" LABEL=\"Caf\\xC3\\xA9\" UUID=\"\" ",
+            "MOUNTPOINT=\"/run/media/me/Caf\\xC3\\xA9\" RM=\"1\" TRAN=\"usb\" ",
+            "TYPE=\"part\" FSTYPE=\"exfat\"\n",
+        );
+        let drives = parse(text);
+        assert_eq!(drives[0].name, "Café");
+        assert_eq!(
+            drives[0].path(),
+            Some(std::path::Path::new("/run/media/me/Café"))
+        );
     }
 }
