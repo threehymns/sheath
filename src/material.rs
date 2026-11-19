@@ -297,13 +297,19 @@ fn from_index(index: u8) -> Material {
     }
 }
 
-/// DWMWA_SYSTEMBACKDROP_TYPE: Mica, Acrylic, or none. Windows 10 and older answer with an error
-/// and keep the solid shell.
+/// Gives the window a DWM backdrop that the app's own translucent pixels let through: Mica,
+/// Acrylic, or none. Windows 10 and older answer with an error and keep the solid shell.
 #[cfg(target_os = "windows")]
 fn apply_windows(material: Material) {
     use rune::raw_window_handle::RawWindowHandle;
     use windows_sys::Win32::Graphics::Dwm::{
-        DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
+        DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmExtendFrameIntoClientArea,
+        DwmSetWindowAttribute,
+    };
+    use windows_sys::Win32::UI::Controls::MARGINS;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
+        SetWindowPos,
     };
 
     // DWMSBT_NONE, DWMSBT_MAINWINDOW and DWMSBT_TRANSIENTWINDOW.
@@ -311,6 +317,20 @@ fn apply_windows(material: Material) {
         Material::Off => 1,
         Material::Mica => 2,
         Material::Acrylic => 3,
+    };
+    // DWM glazes the window's frame, and -1 on every side is its "sheet of glass": the client
+    // area becomes part of the frame, which is what carries the backdrop behind the app's own
+    // translucent pixels. Without it only the title bar has a material, and the shell blends
+    // with the desktop instead, which reads as a flat, lighter grey.
+    let margins = if backdrop == 1 {
+        MARGINS::default()
+    } else {
+        MARGINS {
+            cxLeftWidth: -1,
+            cxRightWidth: -1,
+            cyTopHeight: -1,
+            cyBottomHeight: -1,
+        }
     };
     let Some(window) = WINDOW
         .get()
@@ -324,6 +344,23 @@ fn apply_windows(material: Material) {
             let dark = i32::from(DARK.load(Ordering::Relaxed));
             // SAFETY: `hwnd` is the live window this handle came from, read on the UI thread.
             unsafe {
+                DwmExtendFrameIntoClientArea(hwnd, &margins);
+                // The margins only apply as a frame change, so ask for one without moving,
+                // resizing, reordering or activating the window.
+                SetWindowPos(
+                    hwnd,
+                    core::ptr::null_mut(),
+                    0,
+                    0,
+                    0,
+                    0,
+                    SWP_FRAMECHANGED
+                        | SWP_NOMOVE
+                        | SWP_NOSIZE
+                        | SWP_NOZORDER
+                        | SWP_NOOWNERZORDER
+                        | SWP_NOACTIVATE,
+                );
                 // The title bar and the material's own variant follow this flag, and DWM
                 // defaults it off: a dark app would get the light Mica behind its chrome.
                 DwmSetWindowAttribute(
