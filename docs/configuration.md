@@ -168,7 +168,9 @@ section, and top-level nodes the app does not know are written back untouched. L
 built-in places.
 
 The sidebar also shows a **Drives** section of its own, after the places. It is never written to
-`places.kdl`: it lists the external drives the machine reports, mounted or not. Clicking an
-unmounted drive mounts it and opens it, and a mounted drive carries an unmount button at the
-left of its row. The list refreshes every few seconds, so a drive plugged in later appears
-without a restart.
+`places.kdl`: it lists the external drives the machine reports. A mounted drive carries an
+unmount button at the left of its row. On Linux and macOS a drive that is plugged in but not
+mounted is listed too, and clicking it mounts it and opens it. Windows mounts a removable
+volume itself and gives it a drive letter as soon as it is plugged in, so there every row is
+already mounted and its button is the drive's Eject. The list refreshes every few seconds, so a
+drive plugged in later appears without a restart.
