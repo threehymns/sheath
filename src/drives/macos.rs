@@ -111,7 +111,12 @@ fn mounted() -> Vec<Drive> {
             // Network shares do not answer `diskutil info`; they are not local drives.
             continue;
         };
-        if field(&info, "Internal").is_some_and(|internal| internal.eq_ignore_ascii_case("yes")) {
+        // Older `diskutil` prints `Internal: Yes`; newer versions name the connection instead.
+        let internal = field(&info, "Internal")
+            .is_some_and(|internal| internal.eq_ignore_ascii_case("yes"))
+            || field(&info, "Device Location")
+                .is_some_and(|location| location.eq_ignore_ascii_case("internal"));
+        if internal {
             continue;
         }
         // A mounted disk image is ejectable, but it is not an external disk.
