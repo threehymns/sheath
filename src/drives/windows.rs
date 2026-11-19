@@ -8,7 +8,10 @@ use super::Drive;
 use std::path::PathBuf;
 use std::process::Command;
 
-const PROBE: &str = "Get-Volume | Where-Object { $_.DriveType -eq 'Removable' -and $_.DriveLetter } | ForEach-Object { '{0}|{1}|{2}' -f $_.DriveLetter, $_.FileSystemLabel, $_.UniqueId }";
+/// The disks on a connection that leaves the machine, then the volumes Windows gave them. A
+/// volume's own `DriveType` says `Fixed` for an external enclosure's disk, so the bus is what
+/// tells it from the internal one; a USB stick and a card reader land in the same query.
+const PROBE: &str = "Get-Disk | Where-Object { -not $_.IsBoot -and -not $_.IsSystem -and $_.BusType -in 'USB','SD','MMC','IEEE1394','iSCSI','FibreChannel' } | Get-Partition | Get-Volume | Where-Object { $_.DriveLetter } | ForEach-Object { '{0}|{1}|{2}' -f $_.DriveLetter, $_.FileSystemLabel, $_.UniqueId }";
 
 /// How long an Eject may take to remove the volume before the worker reports a failure.
 const EJECT_TIMEOUT_SECONDS: u64 = 30;
