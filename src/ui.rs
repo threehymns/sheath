@@ -42,8 +42,10 @@ pub(super) fn entry_icon(
 }
 
 pub fn view(s: &App, cx: &mut Cx<App>) -> El {
-    let k = material::kit(cx.system_dark(), s.config.material);
-    s.dark.set(cx.system_dark());
+    let dark = cx.system_dark();
+    material::appearance(dark);
+    let k = material::kit(dark, s.config.material);
+    s.dark.set(dark);
     s.scale.set(cx.env().scale.max(1.0));
     s.begin_view();
     let mut content = col()

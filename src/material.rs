@@ -121,14 +121,15 @@ impl Material {
         }
     }
 
-    /// The alpha the shell's background takes while this material is on. A material needs the
-    /// window behind it to show through the chrome, so the tint stays fairly solid; the content
-    /// card is not tinted, so rows and text keep the background they were designed against.
+    /// The alpha the shell's background takes while this material is on. The material is what
+    /// the sidebar and the frame around the content card are made of, so the tint stays light
+    /// enough to show it; the card itself is not tinted, so rows and text keep the background
+    /// they were designed against.
     fn tint_alpha(self) -> Option<f32> {
         match self {
             Material::Off => None,
-            Material::Mica => Some(0.86),
-            Material::Acrylic => Some(0.72),
+            Material::Mica => Some(0.35),
+            Material::Acrylic => Some(0.25),
         }
     }
 }
@@ -211,6 +212,12 @@ static WINDOW: OnceLock<std::sync::Mutex<Option<WindowHandle>>> = OnceLock::new(
 /// The chosen material, for a window created after the choice was made.
 static CURRENT: AtomicU8 = AtomicU8::new(0);
 
+/// The appearance the app draws in. Windows asks DWM for the light or dark variant of its
+/// material by this flag, and its own default is the light one, which paints a pale backdrop
+/// under a dark app.
+#[cfg(target_os = "windows")]
+static DARK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
 /// Whether the desktop actually draws a material: 0 before the window exists, 1 when it does,
 /// 2 when the platform refused the request (Windows 10, say).
 static NATIVE: AtomicU8 = AtomicU8::new(0);
@@ -225,6 +232,19 @@ pub fn remember(window: WindowHandle) {
 /// The material the app last chose, for a window created after the choice was made.
 pub(super) fn remembered() -> Material {
     from_index(CURRENT.load(Ordering::Relaxed))
+}
+
+/// Tells the material which appearance the app draws in, so the window's material is the same
+/// light or dark variant as its content and title bar. Only Windows keeps the two apart.
+pub fn appearance(dark: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        if DARK.swap(dark, Ordering::Relaxed) != dark {
+            apply_windows(remembered());
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = dark;
 }
 
 /// Records whether the desktop drew what was asked, so the shell keeps its solid background
@@ -282,7 +302,9 @@ fn from_index(index: u8) -> Material {
 #[cfg(target_os = "windows")]
 fn apply_windows(material: Material) {
     use rune::raw_window_handle::RawWindowHandle;
-    use windows_sys::Win32::Graphics::Dwm::{DWMWA_SYSTEMBACKDROP_TYPE, DwmSetWindowAttribute};
+    use windows_sys::Win32::Graphics::Dwm::{
+        DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmSetWindowAttribute,
+    };
 
     // DWMSBT_NONE, DWMSBT_MAINWINDOW and DWMSBT_TRANSIENTWINDOW.
     let backdrop = match material {
@@ -299,8 +321,17 @@ fn apply_windows(material: Material) {
     let result = window.with_raw_handle(|handle| match handle.as_raw() {
         RawWindowHandle::Win32(handle) => {
             let hwnd = handle.hwnd.get() as *mut core::ffi::c_void;
+            let dark = i32::from(DARK.load(Ordering::Relaxed));
             // SAFETY: `hwnd` is the live window this handle came from, read on the UI thread.
             unsafe {
+                // The title bar and the material's own variant follow this flag, and DWM
+                // defaults it off: a dark app would get the light Mica behind its chrome.
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_USE_IMMERSIVE_DARK_MODE as u32,
+                    &dark as *const i32 as *const core::ffi::c_void,
+                    std::mem::size_of::<i32>() as u32,
+                );
                 DwmSetWindowAttribute(
                     hwnd,
                     DWMWA_SYSTEMBACKDROP_TYPE as u32,
