@@ -97,6 +97,11 @@ impl App {
             self.finish_drive(finished);
             redraw = true;
         }
+        // A window resting between probes draws nothing, so the next refresh has to be asked
+        // for here or a drive plugged in later waits for whatever wakes the window next.
+        if let Some(wait) = self.drives.next_refresh() {
+            tx.wake_after(wait);
+        }
         if let Some(id) = self.pending_reveal.take() {
             tx.scroll_into_view_in(FILES, id);
         }

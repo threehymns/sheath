@@ -309,6 +309,24 @@ impl Drives {
         poll
     }
 
+    /// How long until the next probe should run, or `None` when this list never probes or a
+    /// worker in flight will wake the window itself.
+    ///
+    /// A resting window paints nothing, so nothing would call `poll` when a refresh comes due.
+    /// The poll hook passes this to `Tx::wake_after`, and the frame it asks for starts the probe.
+    pub fn next_refresh(&self) -> Option<Duration> {
+        #[cfg(test)]
+        if self.fixed {
+            return None;
+        }
+        if !self.active || self.probe.is_some() || !self.jobs.is_empty() {
+            return None;
+        }
+        Some(self.checked.map_or(Duration::ZERO, |checked| {
+            REFRESH_EVERY.saturating_sub(checked.elapsed())
+        }))
+    }
+
     /// Mounts a drive if it is not mounted. A mounted drive answers with its folder at once;
     /// an unmounted one starts a worker and answers `None` while the row shows its spinner.
     pub fn mount(&mut self, id: &str) -> Result<Option<PathBuf>, String> {
@@ -444,6 +462,29 @@ impl Drives {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_resting_list_asks_for_the_frame_its_next_probe_needs() {
+        // A live list keeps the window awake for the rest of its interval, and a worker in
+        // flight asks for its own frame instead.
+        let mut live = Drives {
+            active: true,
+            checked: Some(Instant::now()),
+            ..Drives::default()
+        };
+        let wait = live
+            .next_refresh()
+            .expect("a list that just probed waits for the next one");
+        assert!(wait <= REFRESH_EVERY && wait > Duration::ZERO, "{wait:?}");
+        live.probe = Some(Probe {
+            result: mpsc::channel().1,
+        });
+        assert_eq!(
+            live.next_refresh(),
+            None,
+            "the probe's waker asks for the frame"
+        );
+    }
 
     #[test]
     fn a_mount_worker_round_trip_clears_the_busy_row() {
