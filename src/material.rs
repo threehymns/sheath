@@ -303,18 +303,14 @@ fn from_index(index: u8) -> Material {
 const DWMWA_REDIRECTIONBITMAP_ALPHA: i32 = 39;
 
 /// Gives the window a DWM backdrop that the app's own translucent pixels let through: Mica,
-/// Acrylic, or none. Windows 10 and older answer with an error and keep the solid shell.
+/// Acrylic, or none. Windows 10 and older answer with an error, and so does a window DWM decides
+/// not to draw a material for; both keep the solid shell.
 #[cfg(target_os = "windows")]
 fn apply_windows(material: Material) {
     use rune::raw_window_handle::RawWindowHandle;
     use windows_sys::Win32::Graphics::Dwm::{
         DWM_BB_ENABLE, DWM_BLURBEHIND, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE,
-        DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
-    };
-    use windows_sys::Win32::UI::Controls::MARGINS;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-        SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_NOZORDER,
-        SetWindowPos,
+        DwmEnableBlurBehindWindow, DwmGetWindowAttribute, DwmSetWindowAttribute,
     };
 
     // DWMSBT_NONE, DWMSBT_MAINWINDOW and DWMSBT_TRANSIENTWINDOW.
@@ -322,20 +318,6 @@ fn apply_windows(material: Material) {
         Material::Off => 1,
         Material::Mica => 2,
         Material::Acrylic => 3,
-    };
-    // DWM glazes the window's frame, and -1 on every side is its "sheet of glass": the client
-    // area becomes part of the frame, which is what carries the backdrop behind the app's own
-    // translucent pixels. Without it only the title bar has a material, and the shell blends
-    // with the desktop instead, which reads as a flat, lighter grey.
-    let margins = if backdrop == 1 {
-        MARGINS::default()
-    } else {
-        MARGINS {
-            cxLeftWidth: -1,
-            cxRightWidth: -1,
-            cyTopHeight: -1,
-            cyBottomHeight: -1,
-        }
     };
     let Some(window) = WINDOW
         .get()
@@ -349,23 +331,6 @@ fn apply_windows(material: Material) {
             let dark = i32::from(DARK.load(Ordering::Relaxed));
             // SAFETY: `hwnd` is the live window this handle came from, read on the UI thread.
             unsafe {
-                DwmExtendFrameIntoClientArea(hwnd, &margins);
-                // The margins only apply as a frame change, so ask for one without moving,
-                // resizing, reordering or activating the window.
-                SetWindowPos(
-                    hwnd,
-                    core::ptr::null_mut(),
-                    0,
-                    0,
-                    0,
-                    0,
-                    SWP_FRAMECHANGED
-                        | SWP_NOMOVE
-                        | SWP_NOSIZE
-                        | SWP_NOZORDER
-                        | SWP_NOOWNERZORDER
-                        | SWP_NOACTIVATE,
-                );
                 // The window is created transparent, which asks DWM for per-pixel alpha through
                 // the legacy blur-behind. That path leaves a glass tint of its own over the
                 // client area, which reads as a flat grey veil in front of the material. 24H2
@@ -397,12 +362,28 @@ fn apply_windows(material: Material) {
                     &dark as *const i32 as *const core::ffi::c_void,
                     std::mem::size_of::<i32>() as u32,
                 );
-                DwmSetWindowAttribute(
+                let set = DwmSetWindowAttribute(
                     hwnd,
                     DWMWA_SYSTEMBACKDROP_TYPE as u32,
                     &backdrop as *const i32 as *const core::ffi::c_void,
                     std::mem::size_of::<i32>() as u32,
-                )
+                );
+                // DWM accepts attributes it does not go on to honour, so read back what it will
+                // draw. Anything but the backdrop that was asked for leaves the window without a
+                // material, and the shell keeps its solid background rather than tinting itself
+                // over a layer that is not there.
+                let mut drawing = 1;
+                let read = DwmGetWindowAttribute(
+                    hwnd,
+                    DWMWA_SYSTEMBACKDROP_TYPE as u32,
+                    &mut drawing as *mut i32 as *mut core::ffi::c_void,
+                    std::mem::size_of::<i32>() as u32,
+                );
+                if set == 0 && read == 0 && drawing == backdrop {
+                    0
+                } else {
+                    -1
+                }
             }
         }
         _ => -1,
