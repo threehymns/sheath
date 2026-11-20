@@ -168,6 +168,31 @@ fn a_small_folder_switch_has_its_rows_at_once() {
 }
 
 #[test]
+fn a_folder_on_a_listed_drive_reads_off_the_main_thread() {
+    // The drive can be asleep, so the frame that opens its folder must not read it.
+    let dir = fixture();
+    let mut app = app(&dir);
+    let sub = dir.path().join("sub");
+    fs::create_dir(&sub).unwrap();
+    fs::write(sub.join("one.txt"), "1").unwrap();
+    app.drives = crate::drives::Drives::fixed(vec![crate::drives::Drive {
+        id: "volume:stick".to_owned(),
+        name: "Stick".to_owned(),
+        device: "/dev/sdb1".to_owned(),
+        mountpoint: Some(dir.path().to_path_buf()),
+    }]);
+
+    app.navigate(sub);
+    assert!(
+        app.is_scanning(),
+        "the read is on a worker, not in the frame"
+    );
+
+    app.settle_scan();
+    assert_eq!(names(&app), ["one.txt"], "the read lands its rows");
+}
+
+#[test]
 fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
     let dir = long_folder(SYNC_SCAN_LIMIT + 1);
     let mut app = app(&dir);

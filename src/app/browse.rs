@@ -119,13 +119,18 @@ impl App {
             return;
         }
         let path = self.cwd.clone();
-        if let Some(scan) = Scan::try_read(
-            path.clone(),
-            keep.clone(),
-            sort.clone(),
-            SYNC_SCAN_LIMIT,
-            folders_first,
-        ) {
+        // A folder on a drive the machine may have let spin down takes seconds to list, and the
+        // frame that opens it would paint nothing meanwhile, so it is read on the pool like a
+        // big folder. Everything else keeps its rows in the frame that opens it.
+        if !self.drives.may_be_asleep(&path)
+            && let Some(scan) = Scan::try_read(
+                path.clone(),
+                keep.clone(),
+                sort.clone(),
+                SYNC_SCAN_LIMIT,
+                folders_first,
+            )
+        {
             self.scan.cancel();
             self.apply_scan(scan);
             return;
@@ -212,6 +217,9 @@ impl App {
         }
         self.land_scan();
         self.pending_reveal = None;
+        // A folder switch also opens its watcher on a worker; the tests that count the handles
+        // the app holds wait for that too.
+        self.watch.settle();
     }
 
     // A search-index walk runs on the pool too, so a test waits for it the same way.

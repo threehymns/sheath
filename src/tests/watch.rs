@@ -186,6 +186,27 @@ fn switching_folders_leaves_no_watcher_behind() {
     );
 }
 
+#[test]
+fn a_folder_switch_opens_its_watcher_off_the_main_thread() {
+    // Opening a watcher reads the folder, so a slow drive must not hold up the frame.
+    let dir = fixture();
+    let mut app = app(&dir);
+    let wake: rune::Waker = std::sync::Arc::new(|| {});
+    app.watch(wake);
+    app.settle_scan();
+    assert_eq!(app.watchers(), 1, "the folder starts watched");
+
+    app.navigate(dir.path().join("alpha"));
+    assert_eq!(
+        app.watchers(),
+        0,
+        "the new folder's watcher is still opening"
+    );
+
+    app.settle_scan();
+    assert_eq!(app.watchers(), 1, "the switch leaves one watcher");
+}
+
 // A preview opens its picture, and listing a folder reads it: neither may count as a change,
 // or the reload that follows would open the same file again, in a loop.
 #[test]
