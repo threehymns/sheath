@@ -297,14 +297,19 @@ fn from_index(index: u8) -> Material {
     }
 }
 
+/// DWMWA_REDIRECTIONBITMAP_ALPHA: honour the alpha channel of the window's redirection bitmap.
+/// Windows 11 24H2 and newer; older builds answer with an error. `windows-sys` 0.61 predates it.
+#[cfg(target_os = "windows")]
+const DWMWA_REDIRECTIONBITMAP_ALPHA: i32 = 39;
+
 /// Gives the window a DWM backdrop that the app's own translucent pixels let through: Mica,
 /// Acrylic, or none. Windows 10 and older answer with an error and keep the solid shell.
 #[cfg(target_os = "windows")]
 fn apply_windows(material: Material) {
     use rune::raw_window_handle::RawWindowHandle;
     use windows_sys::Win32::Graphics::Dwm::{
-        DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE, DwmExtendFrameIntoClientArea,
-        DwmSetWindowAttribute,
+        DWM_BB_ENABLE, DWM_BLURBEHIND, DWMWA_SYSTEMBACKDROP_TYPE, DWMWA_USE_IMMERSIVE_DARK_MODE,
+        DwmEnableBlurBehindWindow, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
     };
     use windows_sys::Win32::UI::Controls::MARGINS;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -361,6 +366,29 @@ fn apply_windows(material: Material) {
                         | SWP_NOOWNERZORDER
                         | SWP_NOACTIVATE,
                 );
+                // The window is created transparent, which asks DWM for per-pixel alpha through
+                // the legacy blur-behind. That path leaves a glass tint of its own over the
+                // client area, which reads as a flat grey veil in front of the material. 24H2
+                // honours the alpha without it, so the veil is dropped where it can be; older
+                // builds refuse the attribute and keep the blur-behind they were given.
+                let alpha = i32::from(backdrop != 1);
+                let honoured = DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_REDIRECTIONBITMAP_ALPHA as u32,
+                    &alpha as *const i32 as *const core::ffi::c_void,
+                    std::mem::size_of::<i32>() as u32,
+                ) == 0;
+                if honoured {
+                    DwmEnableBlurBehindWindow(
+                        hwnd,
+                        &DWM_BLURBEHIND {
+                            dwFlags: DWM_BB_ENABLE,
+                            fEnable: 0,
+                            hRgnBlur: core::ptr::null_mut(),
+                            fTransitionOnMaximized: 0,
+                        },
+                    );
+                }
                 // The title bar and the material's own variant follow this flag, and DWM
                 // defaults it off: a dark app would get the light Mica behind its chrome.
                 DwmSetWindowAttribute(
