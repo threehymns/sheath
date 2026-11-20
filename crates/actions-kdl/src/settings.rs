@@ -34,3 +34,26 @@ pub fn write<S: Setting>(doc: &mut KdlDocument, setting: S, on: bool) {
 pub fn remove<S: Setting>(doc: &mut KdlDocument, setting: S) {
     remove_child(doc, "settings", setting.name());
 }
+
+/// The value of a setting that names a choice rather than flipping a switch, such as
+/// `window-material "mica"`. The host decides what the names mean.
+pub fn read_string(doc: &KdlDocument, name: &str) -> Option<String> {
+    doc.nodes()
+        .iter()
+        .filter(|node| node.name().value() == "settings")
+        .filter_map(|node| node.children())
+        .flat_map(|kids| kids.nodes())
+        .find(|child| child.name().value() == name)
+        .and_then(|child| child.get(0))
+        .and_then(|entry| entry.as_string())
+        .map(str::to_owned)
+}
+
+pub fn write_string(doc: &mut KdlDocument, name: &str, value: &str) {
+    let body = format!("{name} \"{value}\"");
+    write_child(doc, "settings", name, &body);
+}
+
+pub fn remove_string(doc: &mut KdlDocument, name: &str) {
+    remove_child(doc, "settings", name);
+}

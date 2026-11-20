@@ -440,6 +440,24 @@ impl App {
         self.save_setting(changed);
     }
 
+    /// Chooses the window's backdrop material and applies it to the open window.
+    pub fn set_material(&mut self, material: crate::material::Material) {
+        self.config.set_material(material);
+        let _ = self.store.edit(config::CONFIG, |doc| {
+            crate::settings::Settings::write_material(doc, material)
+        });
+        crate::material::apply(material);
+    }
+
+    /// Back to no material, taking the key out of `config.kdl`.
+    pub fn reset_material(&mut self) {
+        self.config.reset_material();
+        let _ = self
+            .store
+            .edit(config::CONFIG, crate::settings::Settings::clear_material);
+        crate::material::apply(self.config.material);
+    }
+
     pub fn reset_setting(&mut self, setting: Setting) {
         self.config.reset(setting);
         let _ = self.store.edit(crate::config::CONFIG, |doc| {

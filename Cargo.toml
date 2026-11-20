@@ -31,11 +31,13 @@ actions-kdl = { path = "crates/actions-kdl", version = "0.1.0" }
 actions-ui = { path = "crates/actions-ui", version = "0.1.0" }
 chrome = { path = "crates/chrome", version = "0.1.0" }
 scroll = { path = "crates/scroll", version = "0.1.0" }
-# Pinned to Rune's dev head: apps pin dev revs, as the framework's guidance recommends. One pin
-# for the whole workspace, so the pane and the app are never built against two different Runes.
-rune = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db", default-features = false }
-rune-kit = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db" }
-rune-theme-opencode = { git = "https://github.com/anomalyco/rune", rev = "396a9af15ed63a9aede6b60871668f7f4c0665db" }
+# Pinned to a fork of Rune's dev head: the Linux window material asks KWin for blur on the
+# window's own display, and `WindowHandle::with_display_handle` is the one method upstream does
+# not have yet. One pin for the whole workspace, so the pane and the app are never built against
+# two different Runes.
+rune = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa", default-features = false }
+rune-kit = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa" }
+rune-theme-opencode = { git = "https://github.com/threehymns/rune", rev = "a991a408b6a166915951df91686fb8d3d7680efa" }
 # The config files the app and its codecs read and write.
 kdl = { version = "6.7.1", default-features = false }
 # The desktop's own icons: AppKit's workspace on macOS, the shell's file-type icons on Windows.
@@ -53,6 +55,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = [
 ] }
 windows-sys = { version = "0.61", default-features = false, features = [
     "Win32_Foundation",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",
     "Win32_Storage_FileSystem",
     "Win32_UI_Shell",
@@ -117,6 +120,22 @@ zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 # people open in a file manager, and `flate2` unwraps the `.tar.gz` most of those ship as.
 tar = "0.4"
 flate2 = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# KWin's blur for the window material is asked for on winit's own Wayland connection, which
+# these crates reach. The versions are the ones winit already builds, so the app adds no second
+# copy of the Wayland stack.
+wayland-backend = { version = "0.3.17", default-features = false, features = [
+    "client_system",
+] }
+wayland-client = { version = "0.31.15", default-features = false }
+wayland-protocols = { version = "0.32.13", default-features = false, features = [
+    "client",
+    "staging",
+] }
+wayland-protocols-plasma = { version = "0.3.12", default-features = false, features = [
+    "client",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2.workspace = true

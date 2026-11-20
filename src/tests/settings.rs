@@ -1,6 +1,7 @@
 use super::helpers::*;
 use crate::app::{App, SettingsTab};
 use crate::keybinds::{Action, Keybinds};
+use crate::material::Material;
 use crate::settings::{Setting, Settings};
 use rune::{Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode};
 use std::fs;
@@ -174,6 +175,40 @@ fn the_grid_switch_writes_the_global_setting() {
         !dir.path().join("views.kdl").exists(),
         "the setting is global, not this folder's"
     );
+}
+
+#[test]
+fn the_window_material_round_trips_through_config_kdl() {
+    let dir = fixture();
+    fs::write(
+        dir.path().join("config.kdl"),
+        "settings {\n    window-material \"acrylic\"\n}\n",
+    )
+    .unwrap();
+    let (mut app, _path) = app_in_config_dir(&dir);
+    let path = dir.path().join("config.kdl");
+    assert_eq!(app.config.material, Material::Acrylic);
+    assert!(app.config.material_set, "the file named a material");
+
+    app.set_material(Material::Mica);
+    let config = fs::read_to_string(&path).unwrap();
+    assert!(config.contains("window-material \"mica\""), "{config}");
+
+    app.reset_material();
+    assert_eq!(app.config.material, Material::Off);
+    let config = fs::read_to_string(&path).unwrap();
+    assert!(!config.contains("window-material"), "{config}");
+}
+
+/// KWin has one blur where Windows and macOS name two materials, so the panel offers it alone
+/// and reads a hand-written Windows or macOS value as that one blur.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_offers_a_single_blur_for_the_window_material() {
+    assert_eq!(Material::choices(), [Material::Off, Material::Acrylic]);
+    assert_eq!(Material::Acrylic.label(), "Blur");
+    assert_eq!(Material::Off.choice(), Material::Off);
+    assert_eq!(Material::Mica.choice(), Material::Acrylic);
 }
 
 #[test]

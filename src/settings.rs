@@ -9,6 +9,9 @@ macro_rules! settings {
             $(
                 $variant:ident => $field:ident : $name:literal, $id:literal, $default:literal;
             )*
+            $(
+                ! $extra:ident : $extra_type:ty = $extra_default:expr;
+            )*
         }
     ) => {
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -59,6 +62,7 @@ macro_rules! settings {
         #[derive(Clone, Debug, PartialEq, Eq)]
         pub struct $settings {
             $(pub $field: bool,)*
+            $(pub $extra: $extra_type,)*
             present: [bool; Setting::ALL.len()],
         }
 
@@ -66,6 +70,7 @@ macro_rules! settings {
             fn default() -> Self {
                 $settings {
                     $($field: $default,)*
+                    $($extra: $extra_default,)*
                     present: [false; Setting::ALL.len()],
                 }
             }
@@ -89,6 +94,10 @@ settings! {
         Overscroll => overscroll: "overscroll", "overscroll", true;
         ShowThumbnails => show_thumbnails: "show-thumbnails", "thumbnails", true;
         SystemIcons => system_icons: "system-icons", "system-icons", false;
+        // Not a switch: the window's material is a choice between named backdrops, written as
+        // `window-material "mica"`, so it has its own value, presence flag and file helpers.
+        ! material: crate::material::Material = crate::material::Material::Off;
+        ! material_set: bool = false;
     }
 }
 
@@ -100,7 +109,40 @@ impl Settings {
             settings.present[setting.index()] = true;
             setting.set(&mut settings, on);
         }
+        if let Some(material) = doc
+            .and_then(|doc| {
+                actions_kdl::settings::read_string(doc, crate::material::Material::FILE_NAME)
+            })
+            .and_then(|value| crate::material::Material::from_name(&value))
+        {
+            settings.material = material;
+            settings.material_set = true;
+        }
         settings
+    }
+
+    /// Records a window material the settings panel chose.
+    pub fn set_material(&mut self, material: crate::material::Material) {
+        self.material = material;
+        self.material_set = true;
+    }
+
+    /// Back to the default, so the key leaves `config.kdl`.
+    pub fn reset_material(&mut self) {
+        self.material = crate::material::Material::Off;
+        self.material_set = false;
+    }
+
+    pub fn write_material(doc: &mut KdlDocument, material: crate::material::Material) {
+        actions_kdl::settings::write_string(
+            doc,
+            crate::material::Material::FILE_NAME,
+            material.name(),
+        );
+    }
+
+    pub fn clear_material(doc: &mut KdlDocument) {
+        actions_kdl::settings::remove_string(doc, crate::material::Material::FILE_NAME);
     }
 
     pub fn is_set(&self, setting: Setting) -> bool {

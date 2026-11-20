@@ -2,11 +2,13 @@ use crate::app::{App, SettingsTab};
 use crate::config;
 use crate::icons;
 use crate::keybinds::Action;
+use crate::material::Material;
 use crate::settings::Setting;
 use chrome::{Corner, CornerControl};
 use rune::{El, Icon, Tx, col, icon, row, text};
 use rune_kit::{
-    Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, Switch, glyphs, scrim,
+    Button, ButtonVariant, ControlSize, IconButton, IconButtonVariant, Kit, SegmentedControl,
+    Switch, glyphs, scrim,
 };
 
 use rune_theme_opencode as theme;
@@ -194,12 +196,21 @@ fn tab_icon(tab: SettingsTab) -> &'static Icon {
 fn general_settings(s: &App, k: &Kit) -> El {
     let mut page = col().key("settings-general").w_full().gap(24.0);
     for group in SettingsGroup::ALL {
-        let rows: Vec<El> = Setting::ALL
-            .iter()
-            .copied()
-            .filter(|setting| SettingsGroup::of(*setting) == group && available(*setting))
-            .map(|setting| setting_row_for(s, k, setting))
-            .collect();
+        let rows: Vec<El> = if group == SettingsGroup::Window {
+            // Linux and the web have no window material, so the section is not there at all.
+            if Material::supported() {
+                vec![window_material_row(s, k)]
+            } else {
+                Vec::new()
+            }
+        } else {
+            Setting::ALL
+                .iter()
+                .copied()
+                .filter(|setting| SettingsGroup::of(*setting) == group && available(*setting))
+                .map(|setting| setting_row_for(s, k, setting))
+                .collect()
+        };
         if !rows.is_empty() {
             page = page.child(settings_section(k, group.key(), group.label(), rows));
         }
@@ -217,14 +228,16 @@ fn general_settings(s: &App, k: &Kit) -> El {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsGroup {
     Browser,
+    Window,
     Behavior,
     Columns,
     Scrolling,
 }
 
 impl SettingsGroup {
-    const ALL: [SettingsGroup; 4] = [
+    const ALL: [SettingsGroup; 5] = [
         SettingsGroup::Browser,
+        SettingsGroup::Window,
         SettingsGroup::Behavior,
         SettingsGroup::Columns,
         SettingsGroup::Scrolling,
@@ -249,6 +262,7 @@ impl SettingsGroup {
     fn label(self) -> &'static str {
         match self {
             SettingsGroup::Browser => "Browser",
+            SettingsGroup::Window => "Window",
             SettingsGroup::Behavior => "Behavior",
             SettingsGroup::Columns => "Columns",
             SettingsGroup::Scrolling => "Scrolling",
@@ -258,11 +272,55 @@ impl SettingsGroup {
     fn key(self) -> &'static str {
         match self {
             SettingsGroup::Browser => "settings-browser",
+            SettingsGroup::Window => "settings-window",
             SettingsGroup::Behavior => "settings-behavior",
             SettingsGroup::Columns => "settings-columns",
             SettingsGroup::Scrolling => "settings-scrolling",
         }
     }
+}
+
+/// The window's backdrop: one of the system's materials, or its own solid background.
+fn window_material_row(s: &App, k: &Kit) -> El {
+    let labels: Vec<&str> = Material::choices()
+        .iter()
+        .map(|material| material.label())
+        .collect();
+    let chosen = s.config.material.choice();
+    let selected = Material::choices()
+        .iter()
+        .position(|material| *material == chosen);
+    let control = SegmentedControl::new(&labels, selected)
+        .label("Window material")
+        .fit()
+        .on_pick(|s: &mut App, index, _: &mut Tx| {
+            if let Some(material) = Material::choices().get(index) {
+                s.set_material(*material);
+            }
+        })
+        .build(k)
+        .key("window-material");
+    let mut choice = row().gap(6.0).center_y();
+    if s.config.material_set {
+        choice = choice.child(
+            IconButton::new(&icons::UNDO)
+                .variant(IconButtonVariant::GhostMuted)
+                .control_size(ControlSize::Small)
+                .label("Reset window material")
+                .help("Reset to the default, taking the key out of config.kdl")
+                .on_press(|s: &mut App| s.reset_material())
+                .build(k)
+                .key("reset-window-material"),
+        );
+    }
+    choice = choice.child(control);
+    settings_row(
+        k,
+        &icons::INSPECTOR,
+        "Window material",
+        Some(Material::HELP),
+        choice,
+    )
 }
 
 fn setting_row_for(s: &App, k: &Kit, setting: Setting) -> El {
