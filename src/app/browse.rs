@@ -5,7 +5,7 @@ use rune_kit::SortDir;
 use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::scan::{SEARCH_LIMIT, SYNC_SCAN_LIMIT, Scan, contains_folded, sort_rows};
+use super::scan::{SEARCH_LIMIT, Scan, contains_folded, sort_rows};
 
 use super::*;
 
@@ -119,22 +119,9 @@ impl App {
             return;
         }
         let path = self.cwd.clone();
-        // A folder on a drive the machine may have let spin down takes seconds to list, and the
-        // frame that opens it would paint nothing meanwhile, so it is read on the pool like a
-        // big folder. Everything else keeps its rows in the frame that opens it.
-        if !self.drives.may_be_asleep(&path)
-            && let Some(scan) = Scan::try_read(
-                path.clone(),
-                keep.clone(),
-                sort.clone(),
-                SYNC_SCAN_LIMIT,
-                folders_first,
-            )
-        {
-            self.scan.cancel();
-            self.apply_scan(scan);
-            return;
-        }
+        // Every folder is read on the pool. A folder can sit on a drive that has gone to sleep,
+        // or on a network share, and either takes seconds to answer: the frame that opens it
+        // keeps painting and the rows land in a later poll, with the count saying "Reading…".
         self.scan.request(path, move |path| {
             Scan::read(path, keep, sort, folders_first)
         });

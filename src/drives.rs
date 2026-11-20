@@ -188,25 +188,6 @@ impl Drives {
         self.drives.iter().find(|drive| drive.id == id)
     }
 
-    /// Whether listing `path` may wait on a disk that has gone to sleep: the folder sits on a
-    /// drive this list knows is external, or the machine has not been probed yet, so no folder
-    /// is ruled out.
-    ///
-    /// An external drive that was left to spin down takes seconds to answer, and the frame that
-    /// opens such a folder would paint nothing meanwhile, so the caller reads it on a worker.
-    /// A folder on a disk that is always spinning keeps its rows in the frame that opens it.
-    pub fn may_be_asleep(&self, path: &Path) -> bool {
-        if !self.active {
-            return false;
-        }
-        if self.checked.is_none() {
-            return true;
-        }
-        self.drives
-            .iter()
-            .any(|drive| drive.path().is_some_and(|mount| path.starts_with(mount)))
-    }
-
     /// The work in flight for a drive, so its row can show a spinner instead of its action.
     pub fn busy(&self, id: &str) -> Option<DriveAction> {
         #[cfg(test)]
@@ -481,35 +462,6 @@ impl Drives {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_folder_on_a_listed_drive_may_wait_for_the_disk_to_wake() {
-        let listed = Drives {
-            drives: vec![Drive {
-                id: "volume:stick".to_owned(),
-                name: "Stick".to_owned(),
-                device: "/dev/sdb1".to_owned(),
-                mountpoint: Some(PathBuf::from("/media/Stick")),
-            }],
-            checked: Some(Instant::now()),
-            active: true,
-            ..Drives::default()
-        };
-        assert!(listed.may_be_asleep(Path::new("/media/Stick")));
-        assert!(listed.may_be_asleep(Path::new("/media/Stick/Photos")));
-        assert!(!listed.may_be_asleep(Path::new("/media/Sticks")));
-        assert!(!listed.may_be_asleep(Path::new("/home/reader")));
-
-        // A machine that has not been probed yet rules nothing out.
-        let unprobed = Drives {
-            active: true,
-            ..Drives::default()
-        };
-        assert!(unprobed.may_be_asleep(Path::new("/home/reader")));
-        // A list with no machine behind it never waits on a disk, so tests keep reading in the
-        // frame that opens a folder.
-        assert!(!Drives::fixed(Vec::new()).may_be_asleep(Path::new("/home/reader")));
-    }
 
     #[test]
     fn a_resting_list_asks_for_the_frame_its_next_probe_needs() {

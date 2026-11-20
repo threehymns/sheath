@@ -174,7 +174,10 @@ pub fn view(s: &App, cx: &mut Cx<App>) -> El {
         }
         layers.push(region.build(k));
     }
-    rune_kit::root(shell, layers)
+    let root = rune_kit::root(shell, layers);
+    // The frame is built: a frame that took far longer than one should is written to the log.
+    s.frame_built();
+    root
 }
 
 /// The 1pt line two panes meet on. Panes sit flush against it, so the seam is one element the

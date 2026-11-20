@@ -10,6 +10,7 @@ mod places;
 mod rules;
 mod session;
 mod settings;
+mod stall;
 mod system_icons;
 mod ui;
 mod vfs;

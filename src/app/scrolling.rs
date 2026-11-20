@@ -85,6 +85,8 @@ impl App {
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
         #[cfg(test)]
         self.settle_scan();
+        // Everything this frame does on the main thread is timed from here to the view's end.
+        self.frame_begins();
         let mut redraw = self.land_scan();
         redraw |= self.land_find();
         redraw |= self.land_preview();

@@ -64,6 +64,9 @@ fn a_zip_opens_as_a_folder_and_navigates_like_one() {
     assert_eq!(names(&app), ["src", "readme.txt"]);
     app.up();
     assert!(!app.in_archive(), "Up at the archive's root leaves it");
+    // The folder around the archive is read on the pool, and the row chosen with it lands
+    // once that read does.
+    app.settle_scan();
     assert_eq!(
         app.selected.as_deref(),
         Some("f:bundle.zip"),

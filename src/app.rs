@@ -63,13 +63,12 @@ use crate::places::{Places, Section};
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::session::Session;
 use crate::settings::Settings;
+use crate::stall::Stalls;
 use crate::system_icons::SystemIcons;
 use crate::views::Views;
 use actions::Recorder;
 
 use paths::{default_location, start_location};
-#[cfg(test)]
-pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
 use watch::Watch;
 
@@ -178,6 +177,8 @@ pub struct App {
     pub date_width: f32,
     scan: Latest<Scan>,
     watch: Watch,
+    // The frames that took far too long, so the next freeze leaves a line in the log.
+    stalls: Stalls,
     pending_select: Option<(Vec<String>, bool)>,
     pending_reveal: Option<String>,
 }
@@ -333,6 +334,7 @@ impl App {
             date_width: 158.0,
             scan: Latest::default(),
             watch: Watch::default(),
+            stalls: Stalls::default(),
             pending_select: None,
             pending_reveal: None,
         }
@@ -500,6 +502,17 @@ impl App {
 
     pub fn watch(&mut self, wake: Waker) {
         self.watch.start(&self.cwd, wake);
+    }
+
+    /// Marks the start of a frame for the stall log. The poll hook runs before the frame's input,
+    /// its handlers and its view, so a freeze anywhere in them is timed.
+    pub fn frame_begins(&self) {
+        self.stalls.begin();
+    }
+
+    /// Reports the frame that just built, when it took far longer than a frame should.
+    pub fn frame_built(&self) {
+        self.stalls.end(&self.cwd);
     }
 
     /// Whether a folder's size is still being walked, so the inspector can say so.
