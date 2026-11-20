@@ -3,6 +3,7 @@ mod archive;
 mod browse;
 mod commands;
 mod drag;
+mod drives;
 mod drop;
 mod entry;
 mod files;
@@ -55,19 +56,19 @@ use rune_kit::shell::Reorder;
 use rune_kit::{PaneState, SortDir};
 
 use crate::config::{self, Store};
+use crate::drives::Drives;
 use crate::keybinds::{Action, Keybinds};
 use crate::notice::Notice;
 use crate::places::{Places, Section};
 use crate::rules::{Resolved, Rules, SortKey};
 use crate::session::Session;
 use crate::settings::Settings;
+use crate::stall::Stalls;
 use crate::system_icons::SystemIcons;
 use crate::views::Views;
 use actions::Recorder;
 
 use paths::{default_location, start_location};
-#[cfg(test)]
-pub(crate) use scan::SYNC_SCAN_LIMIT;
 use scan::Scan;
 use watch::Watch;
 
@@ -149,6 +150,7 @@ pub struct App {
     pub visit: Resolved,
     pub views: Views,
     pub places: Places,
+    pub drives: Drives,
     pub favourites_drag: Reorder,
     pub locations_drag: Reorder,
     pub place_dragged: bool,
@@ -176,6 +178,8 @@ pub struct App {
     pub date_width: f32,
     scan: Latest<Scan>,
     watch: Watch,
+    // The frames that took far too long, so the next freeze leaves a line in the log.
+    stalls: Stalls,
     pending_select: Option<(Vec<String>, bool)>,
     pending_reveal: Option<String>,
 }
@@ -217,6 +221,7 @@ impl App {
         }
         app.views = Views::load();
         app.places = Places::load();
+        app.drives = Drives::load();
         app.reload_rules();
         app.history.push(Location::Folder(path.clone()));
         app.at = 0;
@@ -308,6 +313,7 @@ impl App {
             visit: Resolved::default(),
             views: Views::default(),
             places: Places::default(),
+            drives: Drives::default(),
             favourites_drag: Reorder::new().gap(PLACE_ROW_GAP),
             locations_drag: Reorder::new().gap(PLACE_ROW_GAP),
             place_dragged: false,
@@ -330,6 +336,7 @@ impl App {
             date_width: 158.0,
             scan: Latest::default(),
             watch: Watch::default(),
+            stalls: Stalls::default(),
             pending_select: None,
             pending_reveal: None,
         }
@@ -499,6 +506,17 @@ impl App {
         self.watch.start(&self.cwd, wake);
     }
 
+    /// Marks the start of a frame for the stall log. The poll hook runs before the frame's input,
+    /// its handlers and its view, so a freeze anywhere in them is timed.
+    pub fn frame_begins(&self) {
+        self.stalls.begin();
+    }
+
+    /// Reports the frame that just built, when it took far longer than a frame should.
+    pub fn frame_built(&self) {
+        self.stalls.end(&self.cwd);
+    }
+
     /// Whether a folder's size is still being walked, so the inspector can say so.
     pub fn folder_size_pending(&self) -> bool {
         self.sizer.is_pending()
@@ -539,6 +557,7 @@ pub fn setup(s: &mut App, wake: Waker) {
     s.system_icons.attach(cache);
     s.scan.set_waker(wake.clone());
     s.finder.set_waker(wake.clone());
+    s.drives.set_waker(wake.clone());
     s.store.watch(wake.clone());
     s.watch(wake);
 }

@@ -74,9 +74,6 @@ pub(super) fn sort_rows(
     });
 }
 
-// A folder bigger than this is read on the worker pool, not in the frame that opens it.
-pub(crate) const SYNC_SCAN_LIMIT: usize = 2_000;
-
 // How many matches a search below the folder collects before it stops walking.
 pub(super) const SEARCH_LIMIT: usize = 5_000;
 
@@ -177,41 +174,5 @@ impl Scan {
             sort,
             folders_first,
         }
-    }
-
-    pub(super) fn try_read(
-        path: PathBuf,
-        keep: Option<String>,
-        sort: (String, SortDir),
-        limit: usize,
-        folders_first: bool,
-    ) -> Option<Scan> {
-        let read = fs::read_dir(&path).ok()?;
-        let mut items = Vec::with_capacity(limit + 1);
-        for item in read {
-            let Ok(item) = item else {
-                continue;
-            };
-            items.push(item);
-            if items.len() > limit {
-                return None;
-            }
-        }
-        let mut entries = Vec::with_capacity(items.len());
-        for item in &items {
-            if let Some(entry) = Entry::read(item) {
-                entries.push(entry);
-            }
-        }
-        sort_rows(&mut entries, &sort.0, sort.1, folders_first);
-        Some(Scan {
-            path,
-            entries,
-            error: None,
-            archived: false,
-            keep,
-            sort,
-            folders_first,
-        })
     }
 }

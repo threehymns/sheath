@@ -1,5 +1,5 @@
 use super::helpers::*;
-use crate::app::{Preview, SYNC_SCAN_LIMIT};
+use crate::app::Preview;
 use rune::{Key, KeyEvent, Mods};
 use rune_kit::SortDir;
 use std::fs;
@@ -137,8 +137,8 @@ fn refreshing_keeps_a_selection_of_several_rows() {
 }
 
 #[test]
-fn a_reload_reads_a_big_folder_off_the_main_thread() {
-    let dir = long_folder(SYNC_SCAN_LIMIT + 1);
+fn a_reload_reads_the_folder_off_the_main_thread() {
+    let dir = fixture();
     let mut app = app(&dir);
     fs::write(dir.path().join("late.txt"), "late").unwrap();
 
@@ -154,7 +154,9 @@ fn a_reload_reads_a_big_folder_off_the_main_thread() {
 }
 
 #[test]
-fn a_small_folder_switch_has_its_rows_at_once() {
+fn a_folder_switch_reads_off_the_main_thread() {
+    // Any folder can sit on a drive that has gone to sleep or on a network share, so the frame
+    // that opens one never reads it: the read runs on the pool and lands in a later poll.
     let dir = fixture();
     let mut app = app(&dir);
     let sub = dir.path().join("sub");
@@ -162,20 +164,26 @@ fn a_small_folder_switch_has_its_rows_at_once() {
     fs::write(sub.join("one.txt"), "1").unwrap();
 
     app.navigate(sub);
-    assert!(!app.is_scanning());
-    assert_eq!(names(&app), ["one.txt"]);
+    assert!(app.is_scanning(), "the read is still in flight");
+    assert!(
+        names(&app).is_empty(),
+        "the frame that opened it read nothing"
+    );
+
+    app.settle_scan();
+    assert_eq!(names(&app), ["one.txt"], "the read lands its rows");
     assert_eq!(app.phrase_for_count(), "1 item");
 }
 
 #[test]
 fn a_sort_changed_while_the_read_runs_applies_when_it_lands() {
-    let dir = long_folder(SYNC_SCAN_LIMIT + 1);
+    let dir = long_folder(30);
     let mut app = app(&dir);
     app.reload();
     app.sort_by("name");
     app.settle_scan();
     let names = names(&app);
-    assert_eq!(names.first().copied(), Some("file2000.txt"));
+    assert_eq!(names.first().copied(), Some("file29.txt"));
     assert_eq!(names.last().copied(), Some("file00.txt"));
 }
 

@@ -85,12 +85,25 @@ impl App {
     pub fn poll(&mut self, t: f64, tx: &mut Tx) -> bool {
         #[cfg(test)]
         self.settle_scan();
+        // Everything this frame does on the main thread is timed from here to the view's end.
+        self.frame_begins();
         let mut redraw = self.land_scan();
         redraw |= self.land_find();
         redraw |= self.land_preview();
         redraw |= self.land_thumbs();
         self.request_thumbs();
         redraw |= self.land_folder_size();
+        let drive_poll = self.drives.poll();
+        redraw |= drive_poll.changed;
+        for finished in drive_poll.finished {
+            self.finish_drive(finished);
+            redraw = true;
+        }
+        // A window resting between probes draws nothing, so the next refresh has to be asked
+        // for here or a drive plugged in later waits for whatever wakes the window next.
+        if let Some(wait) = self.drives.next_refresh() {
+            tx.wake_after(wait);
+        }
         if let Some(id) = self.pending_reveal.take() {
             tx.scroll_into_view_in(FILES, id);
         }

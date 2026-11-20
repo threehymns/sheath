@@ -1,6 +1,7 @@
 mod app;
 mod clock;
 mod config;
+mod drives;
 mod format;
 mod icons;
 mod keybinds;
@@ -9,6 +10,7 @@ mod places;
 mod rules;
 mod session;
 mod settings;
+mod stall;
 mod system_icons;
 mod ui;
 mod vfs;

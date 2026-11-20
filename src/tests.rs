@@ -3,6 +3,7 @@ mod archive;
 mod browse;
 mod commands;
 mod drag;
+mod drives;
 mod files;
 mod grid;
 mod helpers;
